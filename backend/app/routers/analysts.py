@@ -75,7 +75,7 @@ def get_analyst(analyst_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])
-def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
+async def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
     """ФТ-CR-6: ручной запуск парсинга всех страниц аналитика."""
     get_analyst_or_404(analyst_id, db)
     from app.services import tasks
