@@ -112,6 +112,8 @@ class ValidationReport(Base):
     ai_findings: Mapped[str | None] = mapped_column(Text, nullable=True)
     overall_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Когда замечания этого отчёта были опубликованы комментарием в Confluence (ФТ-CR-17)
+    comment_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     document: Mapped[ConfluenceDocument] = relationship(back_populates="reports")
 

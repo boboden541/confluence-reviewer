@@ -6,11 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.confluence import ConfluenceError
 from app.database import get_db
 from app.models import Analyst, ConfluenceDocument, TriggerType
 from app.schemas import DocumentOut, DocumentPage, DocumentListItem, ValidationReportOut
 from app.services import tasks
-from app.services.validation import latest_report
+from app.services.comments import (
+    CommentError,
+    NoReportError,
+    publish_report_comment,
+)
+from app.services.validation import DocumentNotFound, latest_report
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
@@ -113,5 +119,26 @@ def get_report(document_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Отчёт валидации ещё не сформирован",
+        )
+    return ValidationReportOut.model_validate(report)
+
+
+@router.post("/documents/{document_id}/comment", response_model=ValidationReportOut)
+async def post_comment(document_id: int, db: Session = Depends(get_db)):
+    """ФТ-CR-17: опубликовать замечания отчёта комментарием на страницу Confluence."""
+    get_document_or_404(document_id, db)
+    try:
+        report = await publish_report_comment(document_id)
+    except (DocumentNotFound, NoReportError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Отчёт валидации ещё не сформирован",
+        )
+    except CommentError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ConfluenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Не удалось опубликовать комментарий: {exc}",
         )
     return ValidationReportOut.model_validate(report)
