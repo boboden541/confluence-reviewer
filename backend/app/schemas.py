@@ -85,3 +85,4 @@ class ValidationReportOut(BaseModel):
     ai_findings: str | None = None
     overall_passed: bool
     error_message: str | None = None
+    comment_sent_at: datetime | None = None
