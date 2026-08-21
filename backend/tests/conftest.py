@@ -14,6 +14,9 @@ os.environ["AUTH_ENABLED"] = "false"
 os.environ["CONFLUENCE_BASE_URL"] = "https://confluence.test"
 os.environ["CONFLUENCE_TOKEN"] = "test-token"
 os.environ["AI_API_KEY"] = "test-ai-key"
+# В docker тесты выполняются с env из .env (env_file в compose) — отключаем
+# побочные эффекты startup: первичное наполнение аналитиков ломает подсчёты в тестах.
+os.environ.pop("SEED_ANALYSTS", None)
 
 import pytest  # noqa: E402
 
