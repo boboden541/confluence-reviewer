@@ -27,6 +27,17 @@ engine = create_engine(
     connect_args=connect_args,
 )
 
+if settings.database_url.startswith("sqlite"):
+    # SQLite lower()/LIKE сворачивают только ASCII — кириллица ломает поиск.
+    # Переопределяем lower на unicode-aware (в postgres работает из коробки).
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _register_unicode_lower(dbapi_conn, _record):  # pragma: no cover - тестовая БД
+        dbapi_conn.create_function(
+            "lower", 1, lambda value: value.lower() if isinstance(value, str) else value
+        )
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
