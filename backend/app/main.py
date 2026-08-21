@@ -75,11 +75,13 @@ def create_app() -> FastAPI:
     )
 
     from app.routers.analysts import router as analysts_router
+    from app.routers.documents import router as documents_router
     from app.routers.health import router as health_router
     from app.routers.sync import router as sync_router
 
     app.include_router(health_router)
     app.include_router(analysts_router)
+    app.include_router(documents_router)
     app.include_router(sync_router)
 
     return app
