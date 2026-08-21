@@ -11,7 +11,7 @@ import asyncio
 import html
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -56,13 +56,16 @@ class PageContent:
 
 
 def parse_confluence_dt(value: str | None) -> datetime | None:
-    """'2026-08-21T13:42:13.323+03:00' -> datetime (с TZ); None при отсутствии."""
+    """'2026-08-21T13:42:13.323+03:00' -> наивный UTC datetime; None при отсутствии."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def creator_candidates(email: str, override_username: str | None, mode: str) -> list[str]:

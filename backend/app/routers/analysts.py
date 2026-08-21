@@ -33,17 +33,12 @@ def list_analysts(db: Session = Depends(get_db)):
         .outerjoin(count_sq, count_sq.c.analyst_id == Analyst.id)
         .order_by(Analyst.full_name)
     ).all()
-    return [
-        AnalystOut(
-            id=analyst.id,
-            full_name=analyst.full_name,
-            email=analyst.email,
-            confluence_username=analyst.confluence_username,
-            created_at=analyst.created_at,
-            documents_count=count,
-        )
-        for analyst, count in rows
-    ]
+    result = []
+    for analyst, count in rows:
+        item = AnalystOut.model_validate(analyst)
+        item.documents_count = count
+        result.append(item)
+    return result
 
 
 @router.post("", response_model=AnalystOut, status_code=status.HTTP_201_CREATED)
@@ -63,14 +58,7 @@ def create_analyst(payload: AnalystCreate, db: Session = Depends(get_db)):
     db.add(analyst)
     db.commit()
     db.refresh(analyst)
-    return AnalystOut(
-        id=analyst.id,
-        full_name=analyst.full_name,
-        email=analyst.email,
-        confluence_username=analyst.confluence_username,
-        created_at=analyst.created_at,
-        documents_count=0,
-    )
+    return AnalystOut.model_validate(analyst)
 
 
 @router.get("/{analyst_id}", response_model=AnalystOut)
@@ -81,11 +69,18 @@ def get_analyst(analyst_id: int, db: Session = Depends(get_db)):
             ConfluenceDocument.analyst_id == analyst.id
         )
     )
-    return AnalystOut(
-        id=analyst.id,
-        full_name=analyst.full_name,
-        email=analyst.email,
-        confluence_username=analyst.confluence_username,
-        created_at=analyst.created_at,
-        documents_count=count or 0,
-    )
+    item = AnalystOut.model_validate(analyst)
+    item.documents_count = count or 0
+    return item
+
+
+@router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])
+def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
+    """ФТ-CR-6: ручной запуск парсинга всех страниц аналитика."""
+    get_analyst_or_404(analyst_id, db)
+    from app.services import tasks
+
+    started, message = tasks.start_sync(analyst_id)
+    if not started:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
+    return {"status": "started", "message": message}

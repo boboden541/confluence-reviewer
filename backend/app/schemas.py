@@ -26,3 +26,5 @@ class AnalystOut(BaseModel):
     confluence_username: str | None
     created_at: datetime
     documents_count: int = 0
+    last_synced_at: datetime | None = None
+    sync_error: str | None = None
