@@ -1,0 +1,147 @@
+{
+  "name": "Шаблон системных требований [СТ] (MTSLIVE)",
+  "description": "Восстановлен из https://confluence.mts.ru/pages/templates2/viewpagetemplate.action?entityId=2020704262. Звёздочкой (*) в шаблоне помечены обязательные разделы.",
+  "title_pattern": "\\[СТ\\]",
+  "sections": [
+    {
+      "level": 1,
+      "text": "Введение",
+      "required": true,
+      "order": 1
+    },
+    {
+      "level": 2,
+      "text": "Общая информация",
+      "required": true,
+      "parent": "Введение"
+    },
+    {
+      "level": 2,
+      "text": "История изменений",
+      "required": false,
+      "parent": "Введение"
+    },
+    {
+      "level": 2,
+      "text": "Полезные артефакты",
+      "required": false,
+      "parent": "Введение",
+      "aliases": [
+        "Полезные ресурсы"
+      ]
+    },
+    {
+      "level": 1,
+      "text": "Общее описание",
+      "required": true,
+      "order": 2
+    },
+    {
+      "level": 2,
+      "text": "Назначение документа",
+      "required": true,
+      "parent": "Общее описание"
+    },
+    {
+      "level": 2,
+      "text": "Контекст",
+      "required": true,
+      "parent": "Общее описание"
+    },
+    {
+      "level": 2,
+      "text": "Термины и определения",
+      "required": false,
+      "parent": "Общее описание"
+    },
+    {
+      "level": 1,
+      "text": "Описание текущего поведения",
+      "required": false,
+      "order": 3,
+      "aliases": [
+        "Описание текущего состояния"
+      ]
+    },
+    {
+      "level": 1,
+      "text": "Предлагаемое решение",
+      "required": false,
+      "order": 4
+    },
+    {
+      "level": 1,
+      "text": "Функциональные требования",
+      "required": true,
+      "order": 5
+    },
+    {
+      "level": 1,
+      "text": "Требования к интерфейсам",
+      "required": true,
+      "order": 6
+    },
+    {
+      "level": 2,
+      "text": "Сценарии использования",
+      "required": true,
+      "parent": "Требования к интерфейсам"
+    },
+    {
+      "level": 2,
+      "text": "Риски и ограничения",
+      "required": false,
+      "parent": "Требования к интерфейсам"
+    },
+    {
+      "level": 1,
+      "text": "Приложения",
+      "required": false,
+      "order": 7
+    },
+    {
+      "level": 1,
+      "text": "Ревью требований",
+      "required": true,
+      "order": 8
+    }
+  ],
+  "repeatable_blocks": [
+    {
+      "marker_text": "Функциональные требования",
+      "marker_level": 1,
+      "child_level": 2,
+      "child_prefix": null,
+      "required_children": [
+        "Общее описание",
+        "Описание доработок",
+        "Критерии приёмки",
+        "Документация по функционалу"
+      ],
+      "required_block": true
+    },
+    {
+      "marker_text": "Требования к интерфейсам",
+      "marker_level": 1,
+      "child_level": 2,
+      "child_prefix": "Верстка интерфейса",
+      "required_children": [
+        "Общее описание",
+        "Описание доработок",
+        "Критерии приёмки",
+        "Документация по функционалу"
+      ],
+      "required_block": false
+    },
+    {
+      "marker_text": "Требования к интерфейсам",
+      "marker_level": 1,
+      "child_level": 2,
+      "child_prefix": "Требования к взаимодействию Frontend и Backend",
+      "required_children": [
+        "Документация по функционалу"
+      ],
+      "required_block": false
+    }
+  ]
+}
