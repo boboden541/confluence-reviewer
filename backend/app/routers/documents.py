@@ -8,8 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.confluence import ConfluenceError
 from app.database import get_db
-from app.models import Analyst, ConfluenceDocument, TriggerType
-from app.schemas import DocumentOut, DocumentPage, DocumentListItem, ValidationReportOut
+from app.models import Analyst, ConfluenceDocument, DocumentNote, TriggerType
+from app.schemas import (
+    DocumentOut,
+    DocumentPage,
+    DocumentListItem,
+    NoteOut,
+    NoteUpdate,
+    ValidationReportOut,
+)
 from app.services import tasks
 from app.services.comments import (
     CommentError,
@@ -142,3 +149,34 @@ async def post_comment(document_id: int, db: Session = Depends(get_db)):
             detail=f"Не удалось опубликовать комментарий: {exc}",
         )
     return ValidationReportOut.model_validate(report)
+
+
+def _get_note(db: Session, document_id: int) -> DocumentNote | None:
+    return db.scalar(
+        select(DocumentNote).where(DocumentNote.document_id == document_id)
+    )
+
+
+@router.get("/documents/{document_id}/note", response_model=NoteOut)
+def get_note(document_id: int, db: Session = Depends(get_db)):
+    """Заметка руководителя по документу (ФТ-CR-18); пустая, если ещё не было."""
+    get_document_or_404(document_id, db)
+    note = _get_note(db, document_id)
+    if note is None:
+        return NoteOut(document_id=document_id, content="")
+    return NoteOut.model_validate(note)
+
+
+@router.put("/documents/{document_id}/note", response_model=NoteOut)
+def update_note(document_id: int, payload: NoteUpdate, db: Session = Depends(get_db)):
+    """Создать или перезаписать заметку (Markdown, одна на документ)."""
+    get_document_or_404(document_id, db)
+    note = _get_note(db, document_id)
+    if note is None:
+        note = DocumentNote(document_id=document_id, content=payload.content)
+        db.add(note)
+    else:
+        note.content = payload.content
+    db.commit()
+    db.refresh(note)
+    return NoteOut.model_validate(note)

@@ -86,3 +86,21 @@ class ValidationReportOut(BaseModel):
     overall_passed: bool
     error_message: str | None = None
     comment_sent_at: datetime | None = None
+
+
+# --- Заметки руководителя ---
+
+
+class NoteUpdate(BaseModel):
+    """ФТ-CR-18: заметка — произвольный Markdown, одна на документ."""
+
+    content: str = Field(default="", max_length=100_000)
+
+
+class NoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: int
+    content: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
