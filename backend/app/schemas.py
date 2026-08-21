@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import ValidationStatus
+from app.models import TriggerType, ValidationStatus
 
 
 # --- Аналитики ---
@@ -65,3 +65,23 @@ class DocumentOut(DocumentListItem):
 
     content_html: str
     sync_error: str | None = None
+
+
+# --- Отчёты валидации ---
+
+
+class ValidationReportOut(BaseModel):
+    """Отчёт по двум проверкам: шаблон + ИИ (ФТ-CR-13, ФТ-CR-16)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    triggered_by: TriggerType
+    created_at: datetime
+    template_passed: bool
+    template_findings: str
+    ai_passed: bool | None = None
+    ai_findings: str | None = None
+    overall_passed: bool
+    error_message: str | None = None
