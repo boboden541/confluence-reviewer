@@ -25,7 +25,32 @@ async def lifespan(app: FastAPI):
         created = seed_analysts(settings.seed_analysts)
         if created:
             logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
-    yield
+
+    # ФТ-CR-5: регламентная автосинхронизация раз в N часов
+    scheduler = None
+    if settings.confluence_base_url:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        from app.services.tasks import start_sync
+
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler.add_job(
+            lambda: start_sync(None),
+            trigger="interval",
+            hours=max(settings.sync_interval_hours, 1),
+            id="scheduled_sync",
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        logger.info(
+            "Планировщик запущен: синхронизация каждые %s ч", settings.sync_interval_hours
+        )
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 def create_app() -> FastAPI:

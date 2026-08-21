@@ -1,4 +1,8 @@
-"""Модель данных: аналитики, Confluence-документы, отчёты валидации, заметки."""
+"""Модель данных: аналитики, Confluence-документы, отчёты валидации, заметки.
+
+Время везде — наивный UTC (см. app.utils.now_utc), чтобы сравнения дат
+(ФТ-CR-14) работали одинаково на sqlite и postgres.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +18,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils import now_utc
 
 
 class ValidationStatus(str, enum.Enum):
@@ -47,9 +51,9 @@ class Analyst(Base):
     # Переопределение имени пользователя Confluence, если оно не совпадает
     # с email / локальной частью email (БФТ 3.1 №13)
     confluence_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     documents: Mapped[list[ConfluenceDocument]] = relationship(
         back_populates="analyst", cascade="all, delete-orphan"
@@ -69,21 +73,17 @@ class ConfluenceDocument(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_html: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_in_confluence_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_modified_in_confluence_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    created_in_confluence_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_modified_in_confluence_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     validation_status: Mapped[ValidationStatus] = mapped_column(
         Enum(ValidationStatus), default=ValidationStatus.NOT_CHECKED, nullable=False, index=True
     )
-    last_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
     )
 
     analyst: Mapped[Analyst] = relationship(back_populates="documents")
@@ -105,9 +105,7 @@ class ValidationReport(Base):
         ForeignKey("confluence_documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
     triggered_by: Mapped[TriggerType] = mapped_column(Enum(TriggerType), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     template_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     template_findings: Mapped[str] = mapped_column(Text, nullable=False, default="")
     ai_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
@@ -129,11 +127,9 @@ class DocumentNote(Base):
         ForeignKey("confluence_documents.id", ondelete="CASCADE"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
     )
 
     document: Mapped[ConfluenceDocument] = relationship(back_populates="note")
