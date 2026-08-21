@@ -7,8 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Analyst, ConfluenceDocument
-from app.schemas import DocumentOut, DocumentPage, DocumentListItem
+from app.models import Analyst, ConfluenceDocument, TriggerType
+from app.schemas import DocumentOut, DocumentPage, DocumentListItem, ValidationReportOut
+from app.services import tasks
+from app.services.validation import latest_report
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
@@ -81,3 +83,35 @@ def list_documents(
 def get_document(document_id: int, db: Session = Depends(get_db)):
     """Объект документа (страница просмотра отчёта)."""
     return DocumentOut.model_validate(get_document_or_404(document_id, db))
+
+
+@router.post(
+    "/documents/{document_id}/validate",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def validate_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    force: bool = Query(default=False, description="Перевалидировать безусловно"),
+):
+    """ФТ-CR-16: ручной запуск валидации (в фоне)."""
+    get_document_or_404(document_id, db)
+    started, message = tasks.start_validation(
+        document_id, trigger=TriggerType.MANUAL, force=force
+    )
+    if not started:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
+    return {"detail": message, "document_id": document_id}
+
+
+@router.get("/documents/{document_id}/report", response_model=ValidationReportOut)
+def get_report(document_id: int, db: Session = Depends(get_db)):
+    """Последний отчёт валидации документа (ФТ-CR-13)."""
+    get_document_or_404(document_id, db)
+    report = latest_report(document_id)
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Отчёт валидации ещё не сформирован",
+        )
+    return ValidationReportOut.model_validate(report)

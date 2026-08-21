@@ -28,6 +28,9 @@ class SyncResult:
     updated: int = 0
     error: str | None = None
     details: list[str] = field(default_factory=list)
+    # id документов, которые появились или получили новое содержимое —
+    # их нужно отправить на (пере)валидацию (ФТ-CR-12)
+    changed_document_ids: list[int] = field(default_factory=list)
 
 
 def _needs_content_refresh(doc: ConfluenceDocument | None, summary: PageSummary) -> bool:
@@ -113,6 +116,10 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
                             result.created += 1
                         else:
                             result.updated += 1
+
+                        if is_new or content is not None:
+                            db.flush()  # id для нового документа
+                            result.changed_document_ids.append(doc.id)
                     except ConfluenceError as exc:
                         result.details.append(f"Страница {summary.page_id}: {exc}")
                         logger.warning("Ошибка загрузки страницы %s: %s", summary.page_id, exc)

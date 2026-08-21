@@ -36,8 +36,8 @@ def _wait_finished(client, attempts: int = 50) -> dict:
 def test_trigger_sync_all(client, fake_execute):
     resp = client.post("/api/sync/all")
     assert resp.status_code == 202
-    assert fake_execute == [None]
     status = _wait_finished(client)
+    assert fake_execute == [None]  # проверяем после завершения: задача фоновая
     assert status["last_results"][0]["created"] == 1
 
 
@@ -48,6 +48,7 @@ def test_trigger_analyst_sync(client, fake_execute):
 
     resp = client.post(f"/api/analysts/{analyst_id}/sync")
     assert resp.status_code == 202
+    _wait_finished(client)
     assert fake_execute == [analyst_id]
 
 
