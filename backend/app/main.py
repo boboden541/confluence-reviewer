@@ -53,13 +53,24 @@ async def lifespan(app: FastAPI):
             scheduler.shutdown(wait=False)
 
 
-def create_app() -> FastAPI:
-    settings = get_settings()
+def create_app(settings=None) -> FastAPI:
+    settings = settings or get_settings()
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
         lifespan=lifespan,
     )
+
+    # НФТ-CR-7: basic-auth на всё, кроме /api/health. Добавляется раньше CORS,
+    # чтобы ошибки 401 тоже получали CORS-заголовки (middleware идёт позже — внешне).
+    if settings.auth_enabled:
+        from app.auth import BasicAuthMiddleware
+
+        app.add_middleware(
+            BasicAuthMiddleware,
+            username=settings.app_username,
+            password=settings.app_password,
+        )
 
     # Для локальной разработки frontend (vite) ходит на backend напрямую;
     # в docker-стеке запросы идут через nginx same-origin.
