@@ -3,6 +3,7 @@ import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import {
   clearCredentials,
   hasCredentials,
+  login,
   saveCredentials,
   UNAUTHORIZED_EVENT,
 } from "./api";
@@ -10,22 +11,34 @@ import AnalystsPage from "./pages/AnalystsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
 
-function LoginGate() {
+export function LoginGate() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      // Сначала проверяем учётку, потом сохраняем — иначе цикл перезагрузок.
+      if (await login(username, password)) {
+        saveCredentials(username, password);
+        navigate(0);
+      } else {
+        setError("Неверный логин или пароль");
+      }
+    } catch {
+      setError("Сервис недоступен, попробуйте ещё раз");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <form
-      className="login"
-      onSubmit={(e) => {
-        e.preventDefault();
-        saveCredentials(username, password);
-        setError("");
-        navigate(0); // перезагружаем текущий маршрут с новой учёткой
-      }}
-    >
+    <form className="login" onSubmit={onSubmit}>
       <h1>Confluence Reviewer</h1>
       <p>Введите учётные данные сервиса</p>
       <input
@@ -41,7 +54,9 @@ function LoginGate() {
         onChange={(e) => setPassword(e.target.value)}
       />
       {error && <div className="error">{error}</div>}
-      <button type="submit">Войти</button>
+      <button type="submit" disabled={busy}>
+        {busy ? "Проверка…" : "Войти"}
+      </button>
     </form>
   );
 }

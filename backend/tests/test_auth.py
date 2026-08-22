@@ -36,7 +36,8 @@ def empty_password_client():
 def test_no_credentials_401(auth_client):
     resp = auth_client.get("/api/analysts")
     assert resp.status_code == 401
-    assert resp.headers["WWW-Authenticate"].startswith("Basic")
+    # Без WWW-Authenticate: иначе браузер рисует нативный диалог поверх SPA.
+    assert "WWW-Authenticate" not in resp.headers
 
 
 def test_wrong_password_401(auth_client):
