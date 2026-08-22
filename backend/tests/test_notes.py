@@ -76,3 +76,35 @@ def test_note_too_long_rejected(client):
     doc_id = seed_doc()
     resp = client.put(f"/api/documents/{doc_id}/note", json={"content": "x" * 100_001})
     assert resp.status_code == 422
+
+
+def test_note_delete(client):
+    doc_id = seed_doc()
+    client.put(f"/api/documents/{doc_id}/note", json={"content": "текст"})
+    assert client.delete(f"/api/documents/{doc_id}/note").status_code == 204
+    assert client.get(f"/api/documents/{doc_id}/note").json() == {
+        "document_id": doc_id,
+        "content": "",
+        "created_at": None,
+        "updated_at": None,
+    }
+    # повторное удаление — тоже 204 (идемпотентно)
+    assert client.delete(f"/api/documents/{doc_id}/note").status_code == 204
+
+
+def test_note_delete_document_not_found(client):
+    assert client.delete("/api/documents/99999/note").status_code == 404
+
+
+def test_documents_list_marks_has_note(client):
+    doc_id = seed_doc()
+    with SessionLocal() as db:
+        analyst_id = db.get(ConfluenceDocument, doc_id).analyst_id
+    list_url = f"/api/analysts/{analyst_id}/documents"
+    assert client.get(list_url).json()["items"][0]["has_note"] is False
+
+    client.put(f"/api/documents/{doc_id}/note", json={"content": "важно"})
+    assert client.get(list_url).json()["items"][0]["has_note"] is True
+
+    client.delete(f"/api/documents/{doc_id}/note")
+    assert client.get(list_url).json()["items"][0]["has_note"] is False

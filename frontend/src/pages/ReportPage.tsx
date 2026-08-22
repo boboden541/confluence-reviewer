@@ -133,6 +133,30 @@ export default function ReportPage() {
     }
   };
 
+  const deleteNote = async () => {
+    if (!documentId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/documents/${documentId}/note`, { method: "DELETE" });
+      setNote("");
+      setNoteOriginal("");
+      setInfo("Заметка удалена");
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось удалить заметку");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Несохранённая заметка не должна молча пропасть при закрытии вкладки
+  useEffect(() => {
+    if (note === noteOriginal) return;
+    const handler = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [note, noteOriginal]);
+
   if (!doc) {
     return (
       <section>
@@ -240,9 +264,26 @@ export default function ReportPage() {
           onChange={(e) => setNote(e.target.value)}
           placeholder="Замечания, договорённости, задачи по документу…"
         />
+        {note.trim() && (
+          <div className="note-preview">
+            <div className="muted" style={{ marginBottom: "0.3rem" }}>
+              Предпросмотр:
+            </div>
+            <div className="markdown">
+              <Markdown text={note} />
+            </div>
+          </div>
+        )}
         <div className="actions" style={{ marginTop: "0.7rem" }}>
           <button onClick={saveNote} disabled={busy || note === noteOriginal}>
             Сохранить заметку
+          </button>
+          <button
+            className="secondary"
+            onClick={deleteNote}
+            disabled={busy || (!noteOriginal && !note)}
+          >
+            Удалить заметку
           </button>
           {note !== noteOriginal && <span className="muted">Есть несохранённые изменения</span>}
         </div>

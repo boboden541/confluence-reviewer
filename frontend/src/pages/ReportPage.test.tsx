@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ReportPage from "./ReportPage";
 import { AUTH_STORAGE_KEY } from "../api";
 
 function mockFetch(responses: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const path = String(input).split("?")[0];
     for (const [route, payload] of Object.entries(responses)) {
       if (path === route) {
@@ -30,6 +30,7 @@ const DOCUMENT = {
   last_modified_in_confluence_at: "2026-08-10T00:00:00",
   validation_status: "failed",
   last_validated_at: "2026-08-11T00:00:00",
+  has_note: false,
   content_html: "<h1>Введение</h1>",
   sync_error: null,
 };
@@ -154,5 +155,49 @@ describe("ReportPage", () => {
       name: /Отправлено/,
     });
     expect(button).toBeDisabled();
+  });
+
+  it("renders note preview below the editor", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": {
+        ...NOTE,
+        content: "## Ревью\n- уточнить **критерии приёмки**",
+      },
+    });
+
+    renderPage();
+
+    // предпросмотр отрендерен как markdown, исходник остался в редакторе
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Ревью" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("критерии приёмки").tagName).toBe("STRONG");
+    // исходник остаётся в редакторе
+    const editor = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(editor.value).toBe("## Ревью\n- уточнить **критерии приёмки**");
+  });
+
+  it("deletes the note and clears the editor", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": { ...NOTE, content: "старая заметка" },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить заметку" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/42/note" && init?.method === "DELETE",
+      );
+      expect(call).toBeDefined();
+    });
+    expect(await screen.findByText("Заметка удалена")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("старая заметка")).not.toBeInTheDocument();
   });
 });

@@ -49,6 +49,8 @@ class DocumentListItem(BaseModel):
     last_modified_in_confluence_at: datetime | None
     validation_status: ValidationStatus
     last_validated_at: datetime | None
+    # Есть ли у документа заметка руководителя (ФТ-CR-18) — видно в списке
+    has_note: bool = False
 
 
 class DocumentPage(BaseModel):

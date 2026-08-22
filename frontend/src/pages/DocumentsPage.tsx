@@ -208,6 +208,7 @@ export default function DocumentsPage() {
             <th>Создан</th>
             <th>Изменён</th>
             <th>Проверен</th>
+            <th title="Заметка руководителя">📝</th>
             <th />
           </tr>
         </thead>
@@ -225,6 +226,12 @@ export default function DocumentsPage() {
               <td>{formatDate(doc.created_in_confluence_at)}</td>
               <td>{formatDate(doc.last_modified_in_confluence_at)}</td>
               <td>{formatDate(doc.last_validated_at)}</td>
+              <td
+                className="muted"
+                title={doc.has_note ? "Есть заметка руководителя" : "Заметки нет"}
+              >
+                {doc.has_note ? "📝" : "—"}
+              </td>
               <td>
                 <button
                   className="secondary"
@@ -238,7 +245,7 @@ export default function DocumentsPage() {
           ))}
           {!loading && loaded && items.length === 0 && (
             <tr>
-              <td colSpan={6} className="empty">
+              <td colSpan={7} className="empty">
                 Документы не найдены
               </td>
             </tr>
