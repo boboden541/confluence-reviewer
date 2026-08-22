@@ -12,8 +12,27 @@ export class ApiError extends Error {
   }
 }
 
+// btoa принимает только Latin-1; кодируем UTF-8 вручную, чтобы кириллические
+// логин/пароль корректно доходили до backend (он декодирует base64 → utf-8).
+function toBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
 export function saveCredentials(username: string, password: string): void {
-  localStorage.setItem(AUTH_STORAGE_KEY, btoa(`${username}:${password}`));
+  localStorage.setItem(AUTH_STORAGE_KEY, toBase64(`${username}:${password}`));
+}
+
+// Проверка учётки до сохранения: false — неверный логин или пароль.
+export async function login(username: string, password: string): Promise<boolean> {
+  const resp = await fetch("/api/analysts", {
+    headers: { Authorization: `Basic ${toBase64(`${username}:${password}`)}` },
+  });
+  return resp.status !== 401;
 }
 
 export function clearCredentials(): void {

@@ -42,11 +42,9 @@ class BasicAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        response = PlainTextResponse(
-            "Требуется авторизация",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="confluence-reviewer"'},
-        )
+        # Без WWW-Authenticate: SPA имеет собственную форму входа, а заголовок
+        # заставляет браузер рисовать нативный диалог поверх приложения.
+        response = PlainTextResponse("Требуется авторизация", status_code=401)
         await response(scope, receive, send)
 
     def _check_credentials(self, headers: Headers) -> bool:
