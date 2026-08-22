@@ -164,6 +164,86 @@ describe("DocumentsPage", () => {
     expect(await screen.findByText("Документы не найдены")).toBeInTheDocument();
   });
 
+  it("semantic search calls the AI endpoint after a pause and shows scores", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/analysts/5/documents/semantic": {
+        items: [
+          {
+            id: 31,
+            confluence_page_id: "2380477777",
+            title: "Загрузка кинофонда в каталог",
+            url: "https://confluence.mts.ru/x/31",
+            created_in_confluence_at: "2026-07-01T00:00:00",
+            last_modified_in_confluence_at: "2026-08-10T00:00:00",
+            validation_status: "not_checked",
+            last_validated_at: null,
+            has_note: false,
+            score: 0.87,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText(/по смыслу/));
+    const input = screen.getByPlaceholderText("Поиск по названию…");
+    fireEvent.change(input, { target: { value: "фильмы в каталог" } });
+    await vi.advanceTimersByTimeAsync(900);
+    vi.useRealTimers();
+
+    expect(await screen.findByText("Загрузка кинофонда в каталог")).toBeInTheDocument();
+    expect(screen.getByText("87%")).toBeInTheDocument();
+    const semanticCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/documents/semantic"),
+    );
+    expect(semanticCalls).toHaveLength(1);
+    expect(String(semanticCalls[0][0])).toContain("query=");
+  });
+
+  it("semantic search waits for at least 3 characters", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/analysts/5/documents/semantic": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText(/по смыслу/));
+    fireEvent.change(screen.getByPlaceholderText("Поиск по названию…"), {
+      target: { value: "фи" },
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    vi.useRealTimers();
+
+    expect(
+      screen.getByText("Введите минимум 3 символа — поиск по смыслу через ИИ"),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.every(([url]) => !String(url).includes("/documents/semantic")),
+    ).toBe(true);
+  });
+
   it("runs single validation from the row button", async () => {
     const fetchMock = mockFetch({
       "/api/analysts/5": ANALYST,

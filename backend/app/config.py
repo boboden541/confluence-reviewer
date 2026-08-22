@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     ai_model: str = "glm-4.5"
     ai_max_tokens: int = 4000
     ai_timeout_seconds: float = 180.0
+    # Дешёвая быстрая модель для семантического поиска по заголовкам
+    ai_search_model: str = "glm-4.5-air"
 
     # Шаблон требований
     template_file: str = "app/templates/requirements_template.json"

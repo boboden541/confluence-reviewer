@@ -313,6 +313,14 @@ button.secondary {
   color: var(--muted);
 }
 
+.search .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* Кнопка-ссылка («← Назад») */
 button.link {
   padding: 0;
