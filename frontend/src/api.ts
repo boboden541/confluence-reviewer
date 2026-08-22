@@ -116,6 +116,12 @@ export interface DocumentPage {
   page_size: number;
 }
 
+export interface DocumentDetail extends DocumentListItem {
+  content_html: string;
+  sync_error: string | null;
+  analyst_id: number;
+}
+
 export interface ValidationReport {
   id: number;
   document_id: number;

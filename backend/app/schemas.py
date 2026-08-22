@@ -67,6 +67,8 @@ class DocumentOut(DocumentListItem):
 
     content_html: str
     sync_error: str | None = None
+    # для кнопки «Назад» при прямом открытии страницы документа
+    analyst_id: int
 
 
 # --- Отчёты валидации ---

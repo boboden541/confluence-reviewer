@@ -33,6 +33,7 @@ const DOCUMENT = {
   has_note: false,
   content_html: "<h1>Введение</h1>",
   sync_error: null,
+  analyst_id: 5,
 };
 
 const REPORT = {
@@ -51,11 +52,13 @@ const REPORT = {
 
 const NOTE = { document_id: 42, content: "", created_at: null, updated_at: null };
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/documents/42"]) {
   return render(
-    <MemoryRouter initialEntries={["/documents/42"]}>
+    <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/documents/:documentId" element={<ReportPage />} />
+        <Route path="/" element={<div>Список аналитиков</div>} />
+        <Route path="/analysts/:analystId" element={<div>Список документов</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -199,5 +202,31 @@ describe("ReportPage", () => {
     });
     expect(await screen.findByText("Заметка удалена")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("старая заметка")).not.toBeInTheDocument();
+  });
+
+  it("goes back in history preserving the previous screen", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+    });
+
+    renderPage(["/", "/documents/42"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "← Назад" }));
+    expect(await screen.findByText("Список аналитиков")).toBeInTheDocument();
+  });
+
+  it("falls back to the analyst document list when opened directly", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+    });
+
+    renderPage(["/documents/42"]); // нет истории — начальная загрузка
+
+    fireEvent.click(await screen.findByRole("button", { name: "← Назад" }));
+    expect(await screen.findByText("Список документов")).toBeInTheDocument();
   });
 });

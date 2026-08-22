@@ -123,6 +123,30 @@ describe("DocumentsPage", () => {
     });
   });
 
+  it("restores the search filter from the URL", async () => {
+    // после «Назад» из документа адрес ?q=GDS снова ищет по слову
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5?q=GDS"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const input = await screen.findByPlaceholderText("Поиск по названию…");
+    expect((input as HTMLInputElement).value).toBe("GDS");
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url).includes("query=GDS")),
+      ).toBe(true);
+    });
+  });
+
   it("shows empty state when no documents match", async () => {
     mockFetch({
       "/api/analysts/5": ANALYST,

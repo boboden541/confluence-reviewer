@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Markdown from "../Markdown";
 import {
   api,
   ApiError,
-  type DocumentListItem,
+  type DocumentDetail,
   type ValidationReport,
 } from "../api";
 
@@ -30,7 +30,9 @@ function formatDateTime(value: string | null): string {
 
 export default function ReportPage() {
   const { documentId } = useParams();
-  const [doc, setDoc] = useState<DocumentListItem | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [note, setNote] = useState("");
   const [noteOriginal, setNoteOriginal] = useState("");
@@ -42,9 +44,7 @@ export default function ReportPage() {
   const load = useCallback(async () => {
     if (!documentId) return;
     try {
-      const documentResp = await api<
-        DocumentListItem & { content_html: string; sync_error: string | null }
-      >(`/api/documents/${documentId}`);
+      const documentResp = await api<DocumentDetail>(`/api/documents/${documentId}`);
       setDoc(documentResp);
       setReport(
         await api<ValidationReport>(`/api/documents/${documentId}/report`).catch(
@@ -78,9 +78,7 @@ export default function ReportPage() {
       });
       if (timer.current) clearInterval(timer.current);
       timer.current = setInterval(async () => {
-        const current = await api<
-          DocumentListItem & { content_html: string; sync_error: string | null }
-        >(`/api/documents/${documentId}`);
+        const current = await api<DocumentDetail>(`/api/documents/${documentId}`);
         setDoc(current);
         if (current.validation_status !== "in_progress") {
           if (timer.current) clearInterval(timer.current);
@@ -167,10 +165,23 @@ export default function ReportPage() {
 
   const checking = doc.validation_status === "in_progress";
 
+  // «Назад»: по истории — вернёт к прежнему состоянию списка (поиск в адресе).
+  // Страница открыта напрямую (нет истории) — к списку документов аналитика.
+  const goBack = () => {
+    if (location.key !== "default") navigate(-1);
+    else if (doc.analyst_id) navigate(`/analysts/${doc.analyst_id}`);
+    else navigate("/");
+  };
+
   return (
     <section>
       <div className="page-head">
         <div>
+          <div className="muted">
+            <button className="link" onClick={goBack}>
+              ← Назад
+            </button>
+          </div>
           <h1>{doc.title}</h1>
           <div className="muted">
             <a href={doc.url} target="_blank" rel="noreferrer">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -31,14 +31,17 @@ function formatDate(value: string | null): string {
 export default function DocumentsPage() {
   const { analystId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [items, setItems] = useState<DocumentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
-  const [query, setQuery] = useState("");
-  const [urlFilter, setUrlFilter] = useState("");
+  // фильтры живут в адресе (?q=…&url=…): вернувшись кнопкой «Назад»,
+  // пользователь попадает в тот же результат поиска
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [urlFilter, setUrlFilter] = useState(() => searchParams.get("url") ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
@@ -162,6 +165,16 @@ export default function DocumentsPage() {
     }
   };
 
+  // Смена фильтра: обновляем стейт и адрес (replace — история не засоряется).
+  const applyFilters = (nextQuery: string, nextUrl: string) => {
+    setQuery(nextQuery);
+    setUrlFilter(nextUrl);
+    const params = new URLSearchParams();
+    if (nextQuery.trim()) params.set("q", nextQuery.trim());
+    if (nextUrl.trim()) params.set("url", nextUrl.trim());
+    setSearchParams(params, { replace: true });
+  };
+
   return (
     <section>
       <div className="page-head">
@@ -191,12 +204,12 @@ export default function DocumentsPage() {
         <input
           placeholder="Поиск по названию…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => applyFilters(e.target.value, urlFilter)}
         />
         <input
           placeholder="Поиск по ссылке…"
           value={urlFilter}
-          onChange={(e) => setUrlFilter(e.target.value)}
+          onChange={(e) => applyFilters(query, e.target.value)}
         />
       </div>
 
