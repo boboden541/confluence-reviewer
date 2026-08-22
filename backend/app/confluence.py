@@ -103,6 +103,8 @@ class ConfluenceClient:
             auth=auth,
             timeout=_TIMEOUT,
             transport=transport,
+            # Корпоративный корневой CA для внутреннего Confluence (если задан)
+            verify=settings.confluence_ca_bundle or True,
         )
 
     async def __aenter__(self) -> "ConfluenceClient":

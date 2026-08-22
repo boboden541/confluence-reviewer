@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     confluence_password: str = ""
     # email | username | auto (email, затем локальная часть до @)
     confluence_creator_field: str = "auto"
+    # PEM-бандл корпоративных корневых CA для проверки сертификата внутреннего
+    # Confluence (в docker монтируется в /certs). Пусто — системный набор CA.
+    confluence_ca_bundle: str = ""
 
     # Синхронизация
     sync_interval_hours: int = 24

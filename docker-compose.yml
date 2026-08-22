@@ -20,6 +20,17 @@ services:
     environment:
       # Внутри compose-сети БД доступна по хосту db
       DATABASE_URL: postgresql+psycopg2://confluence_reviewer:${POSTGRES_PASSWORD}@db:5432/confluence_reviewer
+      # Корпоративная сеть: внутренний Confluence достижим только через VPN-маршрут
+      # хоста — контейнер идёт через CONNECT-прокси на хосте (tools/connect_proxy.py)
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,db}
+      CONFLUENCE_CA_BUNDLE: ${CONFLUENCE_CA_BUNDLE:-}
+    volumes:
+      # PEM с корпоративными корневыми CA (docker/ca/, в git не попадает)
+      - ./docker/ca:/certs:ro
+    extra_hosts:
+      # стабильное имя хоста из контейнера (Docker Desktop его не всегда инжектит)
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
