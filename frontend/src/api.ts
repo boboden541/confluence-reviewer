@@ -107,6 +107,8 @@ export interface DocumentListItem {
   validation_status: ValidationStatus;
   last_validated_at: string | null;
   has_note: boolean;
+  /** Релевантность семантического поиска, 0..1 (иначе null) */
+  score?: number | null;
 }
 
 export interface DocumentPage {

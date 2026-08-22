@@ -51,6 +51,8 @@ class DocumentListItem(BaseModel):
     last_validated_at: datetime | None
     # Есть ли у документа заметка руководителя (ФТ-CR-18) — видно в списке
     has_note: bool = False
+    # Релевантность 0..1 — только в ответе семантического поиска
+    score: float | None = None
 
 
 class DocumentPage(BaseModel):

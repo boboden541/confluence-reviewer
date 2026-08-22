@@ -23,12 +23,16 @@ from app.services.comments import (
     NoReportError,
     publish_report_comment,
 )
+from app.services.semantic_search import SemanticSearchError, SemanticSearcher
 from app.services.validation import DocumentNotFound, latest_report
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 20
+
+# один экземпляр на процесс: кэш результатов семантического поиска живёт в нём
+searcher = SemanticSearcher()
 
 
 def get_document_or_404(document_id: int, db: Session) -> ConfluenceDocument:
@@ -109,6 +113,59 @@ def _to_list_item(item: ConfluenceDocument, has_note: bool) -> DocumentListItem:
     out = DocumentListItem.model_validate(item)
     out.has_note = has_note
     return out
+
+
+@router.get("/analysts/{analyst_id}/documents/semantic", response_model=DocumentPage)
+def semantic_documents(
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    query: str = Query(min_length=2, max_length=512, description="Смысловое соответствие"),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """Семантический поиск: GLM ранжирует заголовки по смыслу запроса."""
+    if db.get(Analyst, analyst_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден")
+
+    rows = db.execute(
+        select(ConfluenceDocument.id, ConfluenceDocument.title)
+        .where(ConfluenceDocument.analyst_id == analyst_id)
+        .order_by(ConfluenceDocument.id)
+    ).all()
+    if not rows:
+        return DocumentPage(items=[], total=0, page=1, page_size=limit)
+
+    try:
+        matches = searcher.search(analyst_id, query.strip(), list(rows))
+    except SemanticSearchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Семантический поиск недоступен: {exc}",
+        )
+
+    docs = {
+        doc.id: doc
+        for doc in db.scalars(
+            select(ConfluenceDocument).where(
+                ConfluenceDocument.id.in_([doc_id for doc_id, _ in matches])
+            )
+        ).all()
+    }
+    noted_ids: set[int] = set()
+    if matches:
+        noted_ids = set(
+            db.scalars(
+                select(DocumentNote.document_id).where(
+                    DocumentNote.document_id.in_([doc_id for doc_id, _ in matches])
+                )
+            ).all()
+        )
+
+    items: list[DocumentListItem] = []
+    for doc_id, score in matches[:limit]:
+        item = _to_list_item(docs[doc_id], doc_id in noted_ids)
+        item.score = round(score, 3)
+        items.append(item)
+    return DocumentPage(items=items, total=len(items), page=1, page_size=limit)
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)

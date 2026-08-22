@@ -18,6 +18,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const PAGE_SIZE = 20;
+const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
+const SEMANTIC_DEBOUNCE_MS = 800; // не дёргаем ИИ на каждое нажатие
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -42,47 +44,80 @@ export default function DocumentsPage() {
   // пользователь попадает в тот же результат поиска
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [urlFilter, setUrlFilter] = useState(() => searchParams.get("url") ?? "");
+  const [semantic, setSemantic] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
   const bulkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // защита от устаревших ответов: сменили режим/фильтр — старый ответ
+  // не должен затирать новое состояние списка
+  const loadSeq = useRef(0);
 
   // targetPage > 1 — догружаем к уже показанным, иначе заменяем список
   // (фильтр/поиск сменились — начинаем с первой страницы).
   const load = useCallback(
     async (targetPage: number, append: boolean) => {
       if (!analystId) return;
+      const seq = ++loadSeq.current;
       setLoading(true);
       try {
-        const params = new URLSearchParams({
-          page: String(targetPage),
-          page_size: String(PAGE_SIZE),
-        });
-        if (query.trim()) params.set("query", query.trim());
-        if (urlFilter.trim()) params.set("url", urlFilter.trim());
-        const data = await api<DocumentPage>(
-          `/api/analysts/${analystId}/documents?${params}`,
-        );
-        setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+        const trimmed = query.trim();
+        let data: DocumentPage;
+        let more = false;
+        if (semantic) {
+          // поиск по смыслу: одна выдача от ИИ, догрузки страниц нет
+          const params = new URLSearchParams({ query: trimmed, limit: String(PAGE_SIZE) });
+          data = await api<DocumentPage>(
+            `/api/analysts/${analystId}/documents/semantic?${params}`,
+          );
+        } else {
+          const params = new URLSearchParams({
+            page: String(targetPage),
+            page_size: String(PAGE_SIZE),
+          });
+          if (trimmed) params.set("query", trimmed);
+          if (urlFilter.trim()) params.set("url", urlFilter.trim());
+          data = await api<DocumentPage>(`/api/analysts/${analystId}/documents?${params}`);
+          more = targetPage * data.page_size < data.total;
+        }
+        if (seq !== loadSeq.current) return; // ответ уже неактуален
+        setItems((prev) => (append && !semantic ? [...prev, ...data.items] : data.items));
         setTotal(data.total);
-        setHasMore(targetPage * data.page_size < data.total);
+        setHasMore(more);
         setPage(targetPage);
         setLoaded(true);
         setError("");
       } catch (exc) {
-        setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить документы");
+        if (seq === loadSeq.current) {
+          setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить документы");
+        }
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [analystId, query, urlFilter],
+    [analystId, query, urlFilter, semantic],
   );
 
   // Смена фильтров/аналитика — перезагрузка с первой страницы.
+  // Семантический поиск стоит денег: ждём паузу в наборе и 3+ символа.
   useEffect(() => {
-    load(1, false);
-  }, [load]);
+    if (!semantic) {
+      load(1, false);
+      return;
+    }
+    if (query.trim().length < SEMANTIC_MIN) {
+      loadSeq.current += 1; // летящие ответы обычного поиска больше неактуальны
+      setItems([]);
+      setTotal(0);
+      setLoaded(true);
+      setHasMore(false);
+      setLoading(false);
+      return;
+    }
+    const timer = setTimeout(() => load(1, false), SEMANTIC_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [load, semantic]);
 
   useEffect(() => {
     if (!analystId) return;
@@ -209,8 +244,18 @@ export default function DocumentsPage() {
         <input
           placeholder="Поиск по ссылке…"
           value={urlFilter}
+          disabled={semantic}
+          title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
           onChange={(e) => applyFilters(query, e.target.value)}
         />
+        <label className="muted toggle" title="GLM ищет по смыслу, а не по словам">
+          <input
+            type="checkbox"
+            checked={semantic}
+            onChange={(e) => setSemantic(e.target.checked)}
+          />
+          по смыслу (ИИ)
+        </label>
       </div>
 
       <table className="table">
@@ -230,6 +275,12 @@ export default function DocumentsPage() {
             <tr key={doc.id}>
               <td>
                 <Link to={`/documents/${doc.id}`}>{doc.title}</Link>
+                {doc.score != null && (
+                  <span className="muted" title="Релевантность по мнению ИИ">
+                    {" "}
+                    {Math.round(doc.score * 100)}%
+                  </span>
+                )}
               </td>
               <td>
                 <span className={`badge ${doc.validation_status}`}>
@@ -259,7 +310,9 @@ export default function DocumentsPage() {
           {!loading && loaded && items.length === 0 && (
             <tr>
               <td colSpan={7} className="empty">
-                Документы не найдены
+                {semantic && query.trim().length < SEMANTIC_MIN
+                  ? `Введите минимум ${SEMANTIC_MIN} символа — поиск по смыслу через ИИ`
+                  : "Документы не найдены"}
               </td>
             </tr>
           )}
