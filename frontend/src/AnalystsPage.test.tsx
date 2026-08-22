@@ -5,7 +5,7 @@ import AnalystsPage from "./pages/AnalystsPage";
 import { AUTH_STORAGE_KEY } from "./api";
 
 function mockFetch(responses: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const path = String(input);
     for (const [prefix, payload] of Object.entries(responses)) {
       if (path.startsWith(prefix)) {
@@ -182,5 +182,108 @@ describe("AnalystsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Добавить аналитика" }));
 
     expect(await screen.findByText(/уже существует/)).toBeInTheDocument();
+  });
+
+  it("edits an analyst from the row button", async () => {
+    const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    const buttons = await screen.findAllByRole("button", { name: "Изменить" });
+    fireEvent.click(buttons[0]); // Алиев
+
+    // форма предзаполнена данными карточки
+    const nameInput = screen.getByPlaceholderText("ФИО аналитика") as HTMLInputElement;
+    expect(nameInput.value).toBe("Алиев Рустам Азадович");
+    expect(
+      (screen.getByPlaceholderText("Новый email аналитика") as HTMLInputElement).value,
+    ).toBe("raaliev@mts.ru");
+    expect(
+      (screen.getByPlaceholderText("username в Confluence (пусто — авто)") as HTMLInputElement)
+        .value,
+    ).toBe("");
+
+    fireEvent.change(nameInput, { target: { value: "Алиев Рустам Новое ФИО" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/analysts/1" && (init as RequestInit | undefined)?.method === "PUT",
+      );
+      expect(put).toBeDefined();
+      expect(JSON.parse((put![1] as RequestInit).body as string)).toEqual({
+        full_name: "Алиев Рустам Новое ФИО",
+        email: "raaliev@mts.ru",
+        confluence_username: null,
+      });
+    });
+    expect(await screen.findByText("Карточка аналитика сохранена")).toBeInTheDocument();
+  });
+
+  it("cancels editing without a request", async () => {
+    const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    const editButtons = await screen.findAllByRole("button", { name: "Изменить" });
+    fireEvent.click(editButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+
+    expect(screen.queryByPlaceholderText("ФИО аналитика")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+  });
+
+  it("deletes an analyst after confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    const buttons = await screen.findAllByRole("button", { name: "Удалить" });
+    fireEvent.click(buttons[1]); // Грудинин, 3 документа
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Удалить аналитика «Грудинин Александр» и все его документы (3)?",
+    );
+    await waitFor(() => {
+      const del = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/analysts/2" &&
+          (init as RequestInit | undefined)?.method === "DELETE",
+      );
+      expect(del).toBeDefined();
+    });
+    expect(await screen.findByText(/удалён/)).toBeInTheDocument();
+  });
+
+  it("keeps the analyst when confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    const buttons = await screen.findAllByRole("button", { name: "Удалить" });
+    fireEvent.click(buttons[0]);
+
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE"),
+    ).toHaveLength(0);
   });
 });

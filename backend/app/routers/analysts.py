@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Analyst, ConfluenceDocument
-from app.schemas import AnalystCreate, AnalystOut
+from app.schemas import AnalystCreate, AnalystOut, AnalystUpdate
 
 router = APIRouter(prefix="/api/analysts", tags=["analysts"])
 
@@ -72,6 +72,43 @@ def get_analyst(analyst_id: int, db: Session = Depends(get_db)):
     item = AnalystOut.model_validate(analyst)
     item.documents_count = count or 0
     return item
+
+
+@router.put("/{analyst_id}", response_model=AnalystOut)
+def update_analyst(analyst_id: int, payload: AnalystUpdate, db: Session = Depends(get_db)):
+    """Редактирование карточки аналитика (ФИО, email, username в Confluence)."""
+    analyst = get_analyst_or_404(analyst_id, db)
+    duplicate = db.scalar(
+        select(Analyst).where(Analyst.email == payload.email, Analyst.id != analyst_id)
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Аналитик с email {payload.email} уже существует",
+        )
+    analyst.full_name = payload.full_name.strip()
+    analyst.email = payload.email.lower()
+    analyst.confluence_username = payload.confluence_username
+    db.commit()
+    db.refresh(analyst)
+    item = AnalystOut.model_validate(analyst)
+    item.documents_count = (
+        db.scalar(
+            select(func.count()).select_from(ConfluenceDocument).where(
+                ConfluenceDocument.analyst_id == analyst.id
+            )
+        )
+        or 0
+    )
+    return item
+
+
+@router.delete("/{analyst_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_analyst(analyst_id: int, db: Session = Depends(get_db)):
+    """Удалить аналитика вместе с его документами, отчётами и заметками."""
+    analyst = get_analyst_or_404(analyst_id, db)
+    db.delete(analyst)  # каскад: документы → отчёты и заметки
+    db.commit()
 
 
 @router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])
