@@ -106,6 +106,7 @@ export interface DocumentListItem {
   last_modified_in_confluence_at: string | null;
   validation_status: ValidationStatus;
   last_validated_at: string | null;
+  has_note: boolean;
 }
 
 export interface DocumentPage {

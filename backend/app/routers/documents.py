@@ -84,12 +84,31 @@ def list_documents(
         .limit(page_size)
     ).all()
 
+    # у каких документов страницы есть заметки — одним запросом
+    noted_ids: set[int] = set()
+    if items:
+        noted_ids = set(
+            db.scalars(
+                select(DocumentNote.document_id).where(
+                    DocumentNote.document_id.in_([item.id for item in items])
+                )
+            ).all()
+        )
+
     return DocumentPage(
-        items=[DocumentListItem.model_validate(item) for item in items],
+        items=[
+            _to_list_item(item, item.id in noted_ids) for item in items
+        ],
         total=total,
         page=page,
         page_size=page_size,
     )
+
+
+def _to_list_item(item: ConfluenceDocument, has_note: bool) -> DocumentListItem:
+    out = DocumentListItem.model_validate(item)
+    out.has_note = has_note
+    return out
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)
@@ -180,3 +199,13 @@ def update_note(document_id: int, payload: NoteUpdate, db: Session = Depends(get
     db.commit()
     db.refresh(note)
     return NoteOut.model_validate(note)
+
+
+@router.delete("/documents/{document_id}/note", status_code=status.HTTP_204_NO_CONTENT)
+def delete_note(document_id: int, db: Session = Depends(get_db)):
+    """Удалить заметку документа. Идемпотентно: заметки нет — тоже 204."""
+    get_document_or_404(document_id, db)
+    note = _get_note(db, document_id)
+    if note is not None:
+        db.delete(note)
+        db.commit()

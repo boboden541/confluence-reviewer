@@ -45,6 +45,7 @@ const DOCUMENTS = {
       last_modified_in_confluence_at: "2026-08-10T00:00:00",
       validation_status: "failed",
       last_validated_at: "2026-08-11T00:00:00",
+      has_note: true,
     },
     {
       id: 12,
@@ -55,6 +56,7 @@ const DOCUMENTS = {
       last_modified_in_confluence_at: "2026-08-12T00:00:00",
       validation_status: "not_checked",
       last_validated_at: null,
+      has_note: false,
     },
   ],
   total: 2,
@@ -92,6 +94,8 @@ describe("DocumentsPage", () => {
     expect(screen.getByText("не пройдено")).toBeInTheDocument();
     expect(screen.getByText("не проверено")).toBeInTheDocument();
     expect(screen.getByText("Всего документов: 2")).toBeInTheDocument();
+    // у первого документа есть заметка — это видно в списке
+    expect(screen.getByTitle("Есть заметка руководителя").textContent).toBe("📝");
   });
 
   it("passes search query to the API", async () => {
@@ -223,6 +227,7 @@ describe("DocumentsPage", () => {
       last_modified_in_confluence_at: "2026-08-10T00:00:00",
       validation_status: "not_checked",
       last_validated_at: null,
+      has_note: false,
     });
     const fetchMock = mockFetch({
       "/api/analysts/5": ANALYST,

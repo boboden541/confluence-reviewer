@@ -313,6 +313,14 @@ button.secondary {
   color: var(--muted);
 }
 
+.note-preview {
+  margin-top: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+
 textarea {
   width: 100%;
   min-height: 140px;
