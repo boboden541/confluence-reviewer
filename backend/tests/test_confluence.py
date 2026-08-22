@@ -156,3 +156,21 @@ def test_missing_base_url():
 
     with pytest.raises(ConfluenceError):
         run(scenario())
+
+
+def test_ca_bundle_is_passed_to_ssl_verification():
+    """CONFLUENCE_CA_BUNDLE попадает в проверку сертификатов httpx.
+
+    httpx валидирует `verify` при создании транспорта: несуществующий путь
+    к PEM-бандлу должен приводить к ошибке, корректный — приниматься.
+    """
+    import certifi
+
+    # корректный PEM-бандл — клиент создаётся без ошибок
+    client = ConfluenceClient(make_settings(confluence_ca_bundle=certifi.where()))
+    assert isinstance(client._client, httpx.AsyncClient)
+    asyncio.run(client.close())
+
+    # несуществующий путь — ошибка на этапе построения SSL-контекста
+    with pytest.raises(Exception):  # noqa: B017 — тип зависит от версии httpx
+        ConfluenceClient(make_settings(confluence_ca_bundle="/no/such/bundle.pem"))

@@ -35,3 +35,4 @@ postgres_data/
 .vscode/
 .DS_Store
 *.log
+docker/ca/

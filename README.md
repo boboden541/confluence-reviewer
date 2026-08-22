@@ -45,6 +45,36 @@ docker compose exec backend python -m pytest tests/ -q   # тесты внутр
 
 UI доступен на `http://localhost:8080` (логин/пароль — `APP_USERNAME`/`APP_PASSWORD` из `.env`).
 
+### Корпоративная сеть (MTS): доступ к внутреннему Confluence из docker
+
+Хост ходит во внутренний Confluence через VPN-туннель, а трафик docker-контейнеров
+идёт мимо туннеля и получает публичный сертификат `mts.ru` вместо сертификата
+`confluence.mts.ru` (SSL `hostname mismatch`). Решение — два шага:
+
+1. **CONNECT-прокси на хосте** (`tools/connect_proxy.py`, только stdlib):
+   соединения устанавливаются от хоста, проходят по VPN-маршруту и получают
+   настоящий сертификат. TLS остаётся сквозным — проверка сертификатов не отключается.
+
+   ```bash
+   python3 tools/connect_proxy.py &   # слушает 127.0.0.1:3128, только CONNECT на :443
+   ```
+
+   Для автозапуска — шаблон LaunchAgent в `tools/com.confluence-reviewer.connect-proxy.plist`:
+   скопировать в `~/Library/LaunchAgents/` и `launchctl load ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist`.
+
+2. **Корпоративные корневые CA** — экспортировать из системного keychain в
+   `docker/ca/mts-root-cas.pem` (каталог в `.gitignore`):
+
+   ```bash
+   mkdir -p docker/ca
+   security find-certificate -a -p -c "MTS" /Library/Keychains/System.keychain > docker/ca/mts-root-cas.pem
+   ```
+
+Затем задать в `.env` (см. пример в `.env.example`): `HTTPS_PROXY=http://host.docker.internal:3128`,
+`CONFLUENCE_CA_BUNDLE=/certs/mts-root-cas.pem` и перезапустить `docker compose up -d`.
+В `docker-compose.yml` уже настроены монтирование `./docker/ca:/certs` и
+`extra_hosts: host.docker.internal:host-gateway`.
+
 ## Локальная разработка
 
 ```bash
