@@ -20,6 +20,14 @@ class AnalystCreate(BaseModel):
     confluence_username: str | None = Field(default=None, max_length=255)
 
 
+class AnalystUpdate(BaseModel):
+    """Редактирование карточки аналитика: те же поля, что при создании."""
+
+    full_name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    confluence_username: str | None = Field(default=None, max_length=255)
+
+
 class AnalystOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

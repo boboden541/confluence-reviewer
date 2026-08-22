@@ -16,6 +16,12 @@ export default function AnalystsPage() {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [creating, setCreating] = useState(false);
+  // редактирование карточки: null — форма скрыта
+  const [editing, setEditing] = useState<Analyst | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -106,6 +112,58 @@ export default function AnalystsPage() {
     }
   };
 
+  const startEdit = (analyst: Analyst) => {
+    setEditing(analyst);
+    setEditName(analyst.full_name);
+    setEditEmail(analyst.email);
+    setEditUsername(analyst.confluence_username ?? "");
+    setError("");
+    setInfo("");
+  };
+
+  const cancelEdit = () => setEditing(null);
+
+  const saveEdit = async () => {
+    if (!editing || !editName.trim() || !editEmail.trim()) return;
+    setSavingEdit(true);
+    setInfo("");
+    setError("");
+    try {
+      await api(`/api/analysts/${editing.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          full_name: editName.trim(),
+          email: editEmail.trim(),
+          confluence_username: editUsername.trim() || null,
+        }),
+      });
+      setInfo("Карточка аналитика сохранена");
+      setEditing(null);
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить аналитика");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteAnalyst = async (analyst: Analyst) => {
+    const docsNote = analyst.documents_count
+      ? ` и все его документы (${analyst.documents_count})`
+      : "";
+    if (!window.confirm(`Удалить аналитика «${analyst.full_name}»${docsNote}?`)) return;
+    setInfo("");
+    setError("");
+    try {
+      await api(`/api/analysts/${analyst.id}`, { method: "DELETE" });
+      setInfo(`Аналитик «${analyst.full_name}» удалён`);
+      if (editing?.id === analyst.id) setEditing(null);
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось удалить аналитика");
+    }
+  };
+
   return (
     <section>
       <div className="page-head">
@@ -141,6 +199,39 @@ export default function AnalystsPage() {
         </button>
       </form>
 
+      {editing && (
+        <form
+          className="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveEdit();
+          }}
+        >
+          <input
+            placeholder="ФИО аналитика"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+          />
+          <input
+            placeholder="Новый email аналитика"
+            type="email"
+            value={editEmail}
+            onChange={(e) => setEditEmail(e.target.value)}
+          />
+          <input
+            placeholder="username в Confluence (пусто — авто)"
+            value={editUsername}
+            onChange={(e) => setEditUsername(e.target.value)}
+          />
+          <button type="submit" disabled={savingEdit || !editName.trim() || !editEmail.trim()}>
+            {savingEdit ? "Сохранение…" : "Сохранить"}
+          </button>
+          <button type="button" className="secondary" onClick={cancelEdit}>
+            Отмена
+          </button>
+        </form>
+      )}
+
       <table className="table">
         <thead>
           <tr>
@@ -166,12 +257,26 @@ export default function AnalystsPage() {
               <td className={analyst.sync_error ? "error" : ""}>
                 {analyst.sync_error ?? "—"}
               </td>
-              <td>
+              <td className="actions">
                 <button
                   onClick={() => syncAnalyst(analyst.id)}
                   disabled={syncing || busyAnalyst === analyst.id}
                 >
                   {busyAnalyst === analyst.id ? "…" : "Синхронизировать"}
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => startEdit(analyst)}
+                  disabled={syncing}
+                >
+                  Изменить
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => deleteAnalyst(analyst)}
+                  disabled={syncing}
+                >
+                  Удалить
                 </button>
               </td>
             </tr>
