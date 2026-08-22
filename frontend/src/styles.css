@@ -251,10 +251,66 @@ button.secondary {
   font-size: 1.1rem;
 }
 
+/* Отчёты проверок — отрендеренный markdown */
 .markdown {
-  white-space: pre-wrap;
   font-size: 0.93rem;
   line-height: 1.55;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5 {
+  margin: 0.9rem 0 0.4rem;
+  font-size: 1rem;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.4rem;
+}
+
+.markdown li {
+  margin: 0.25rem 0;
+}
+
+.markdown p {
+  margin: 0.4rem 0;
+}
+
+.markdown code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  background: var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.markdown table {
+  margin: 0.5rem 0;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.markdown blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.8rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
 }
 
 textarea {

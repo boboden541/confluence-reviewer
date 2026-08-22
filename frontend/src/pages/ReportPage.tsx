@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import Markdown from "../Markdown";
 import {
   api,
   ApiError,
@@ -211,7 +212,9 @@ export default function ReportPage() {
             <h2>
               {report.template_passed ? "✅" : "❌"} Соответствие шаблону требований
             </h2>
-            <div className="markdown">{report.template_findings || "—"}</div>
+            <div className="markdown">
+              <Markdown text={report.template_findings || "—"} />
+            </div>
           </div>
 
           <div className="card">
@@ -219,7 +222,9 @@ export default function ReportPage() {
               {report.ai_passed == null ? "—️" : report.ai_passed ? "✅" : "❌"} Качество
               содержимого (ИИ)
             </h2>
-            <div className="markdown">{report.ai_findings || "—"}</div>
+            <div className="markdown">
+              <Markdown text={report.ai_findings || "—"} />
+            </div>
             <div className="muted" style={{ marginTop: "0.6rem" }}>
               Отчёт сформирован {formatDateTime(report.created_at)} (запуск:{" "}
               {report.triggered_by === "auto" ? "автоматический" : "ручной"})

@@ -91,6 +91,31 @@ describe("ReportPage", () => {
     expect(screen.getByText("не пройдено")).toBeInTheDocument();
   });
 
+  it("renders findings as formatted markdown", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": {
+        ...REPORT,
+        template_findings:
+          "### ❌ Критичные замечания (1)\n\n- ❌ В разделе **Общее описание** нет контекста",
+      },
+      "/api/documents/42/note": NOTE,
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: /Критичные замечания/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("listitem").textContent).toBe(
+      "❌ В разделе Общее описание нет контекста",
+    );
+    expect(screen.getByText("Общее описание").tagName).toBe("STRONG");
+    // разметка отрендерена, а не показана исходником
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/###/)).not.toBeInTheDocument();
+  });
+
   it("shows prompt to run first validation when no report", async () => {
     mockFetch({
       "/api/documents/42": { ...DOCUMENT, validation_status: "not_checked" },
