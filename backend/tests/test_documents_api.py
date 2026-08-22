@@ -89,10 +89,11 @@ def test_list_analyst_not_found(client):
 
 
 def test_get_document_detail(client):
-    _, doc_ids = seed_analyst_with_docs(2)
+    analyst_id, doc_ids = seed_analyst_with_docs(2)
     resp = client.get(f"/api/documents/{doc_ids[0]}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["validation_status"] == "not_checked"
+    assert body["analyst_id"] == analyst_id
     assert "<h1>Введение</h1>" in body["content_html"]
     assert client.get("/api/documents/99999").status_code == 404
