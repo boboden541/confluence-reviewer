@@ -21,3 +21,9 @@ async def trigger_sync_all():
 @router.get("/status")
 def sync_status():
     return tasks.sync_status()
+
+
+@router.get("/bulk-validation")
+def bulk_validation_status():
+    """Прогресс массовой проверки документов аналитика (для UI-поллинга)."""
+    return tasks.bulk_status()

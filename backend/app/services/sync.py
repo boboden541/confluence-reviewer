@@ -14,7 +14,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.confluence import ConfluenceClient, ConfluenceError, PageSummary, creator_candidates
 from app.database import SessionLocal
-from app.models import Analyst, ConfluenceDocument
+from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.utils import now_utc
 
 logger = logging.getLogger("confluence_reviewer.sync")
@@ -28,9 +28,6 @@ class SyncResult:
     updated: int = 0
     error: str | None = None
     details: list[str] = field(default_factory=list)
-    # id документов, которые появились или получили новое содержимое —
-    # их нужно отправить на (пере)валидацию (ФТ-CR-12)
-    changed_document_ids: list[int] = field(default_factory=list)
 
 
 def _needs_content_refresh(doc: ConfluenceDocument | None, summary: PageSummary) -> bool:
@@ -104,6 +101,11 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
                             doc.last_modified_in_confluence_at = (
                                 content.last_modified_at or summary.last_modified_at
                             )
+                            if not is_new:
+                                # Страница изменилась после прошлой проверки —
+                                # статус сбрасываем, отчёт устарел (замечание №3)
+                                doc.validation_status = ValidationStatus.NOT_CHECKED
+                                doc.last_validated_at = None
                         else:
                             doc.created_in_confluence_at = (
                                 summary.created_at or doc.created_in_confluence_at
@@ -116,10 +118,6 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
                             result.created += 1
                         else:
                             result.updated += 1
-
-                        if is_new or content is not None:
-                            db.flush()  # id для нового документа
-                            result.changed_document_ids.append(doc.id)
                     except ConfluenceError as exc:
                         result.details.append(f"Страница {summary.page_id}: {exc}")
                         logger.warning("Ошибка загрузки страницы %s: %s", summary.page_id, exc)

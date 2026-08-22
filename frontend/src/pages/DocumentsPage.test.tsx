@@ -133,4 +133,65 @@ describe("DocumentsPage", () => {
 
     expect(await screen.findByText("Документы не найдены")).toBeInTheDocument();
   });
+
+  it("runs single validation from the row button", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // doc 11 — failed → «Актуализировать», doc 12 — not_checked → «Проверить»
+    const refresh = await screen.findByRole("button", { name: "Актуализировать" });
+    fireEvent.click(refresh);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/11/validate" && init?.method === "POST",
+      );
+      expect(call).toBeDefined();
+    });
+  });
+
+  it("starts bulk validation for the analyst", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/sync/bulk-validation": {
+        running: false,
+        analyst_id: null,
+        total: 0,
+        done: 0,
+        started_at: null,
+        finished_at: null,
+        error: null,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Проверить все" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/analysts/5/validate-all" && init?.method === "POST",
+      );
+      expect(call).toBeDefined();
+    });
+  });
 });

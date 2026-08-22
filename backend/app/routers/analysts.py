@@ -84,3 +84,19 @@ async def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"status": "started", "message": message}
+
+
+@router.post("/{analyst_id}/validate-all", status_code=status.HTTP_202_ACCEPTED)
+async def validate_all_documents(analyst_id: int, db: Session = Depends(get_db)):
+    """Ручная массовая проверка документов аналитика (в фоне, последовательно).
+
+    Не-force: актуальные документы пропускаются, проверяются только новые
+    и изменившиеся после прошлой проверки.
+    """
+    get_analyst_or_404(analyst_id, db)
+    from app.services import tasks
+
+    started, message = tasks.start_bulk_validation(analyst_id)
+    if not started:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
+    return {"status": "started", "message": message}
