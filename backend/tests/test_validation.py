@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import timedelta
 from types import SimpleNamespace
@@ -192,26 +193,116 @@ def test_document_not_found():
         raise AssertionError("ожидали DocumentNotFound")
 
 
-# --- автозапуск после синхронизации (ФТ-CR-12) ---
+# --- синхронизация не запускает валидации (поведение по замечанию заказчика) ---
 
 
-def test_start_validations_for_changed_docs(monkeypatch):
-    calls: list[tuple] = []
+def test_sync_does_not_trigger_validation(client, monkeypatch):
+    """Синхронизация только обновляет список; проверки запускаются вручную."""
 
-    def fake_start(doc_id, *, trigger, force=False):
-        calls.append((doc_id, trigger))
-        return True, "ok"
+    def unexpected(*args, **kwargs):
+        raise AssertionError("валидация не должна запускаться автоматически")
 
-    monkeypatch.setattr(tasks, "start_validation", fake_start)
-    results = [
-        tasks.SyncResult(analyst_id=1, analyst_name="A", changed_document_ids=[10, 11]),
-        tasks.SyncResult(analyst_id=2, analyst_name="B"),  # без изменений
-        tasks.SyncResult(analyst_id=3, analyst_name="C", error="нет связи", changed_document_ids=[12]),
-    ]
-    started = tasks.start_validations_for(results)
-    assert started == [10, 11]
-    assert calls[0] == (10, TriggerType.AUTO)
-    assert calls[1] == (11, TriggerType.AUTO)
+    monkeypatch.setattr(tasks, "start_validation", unexpected)
+    monkeypatch.setattr(tasks, "start_bulk_validation", unexpected)
+
+    async def fake_execute(analyst_id):
+        return [tasks.SyncResult(analyst_id=1, analyst_name="A", created=3, updated=2)]
+
+    monkeypatch.setattr(tasks, "_execute_sync", fake_execute)
+    with SessionLocal() as db:
+        db.add(Analyst(full_name="Синк", email="sync@mts.ru"))
+        db.commit()
+    assert client.post("/api/analysts/1/sync").status_code == 202
+
+    for _ in range(50):
+        if tasks.sync_status()["running"] is False:
+            break
+        time.sleep(0.05)
+    assert tasks.sync_status()["running"] is False  # не упало — автовалидаций не было
+
+
+# --- массовая ручная проверка документов аналитика ---
+
+
+def seed_analyst_with_documents(count: int = 2) -> tuple[int, list[int]]:
+    with SessionLocal() as db:
+        analyst = Analyst(full_name="Батч", email="batch@mts.ru")
+        db.add(analyst)
+        db.flush()
+        base = str(now_utc().timestamp()).replace(".", "")
+        ids: list[int] = []
+        for i in range(count):
+            doc = ConfluenceDocument(
+                analyst_id=analyst.id,
+                confluence_page_id=f"{base}{i}",
+                title=f"[СТ] Документ {i}",
+                url=f"https://conf.test/pages/{i}",
+                content_html=GOOD_BODY,
+                last_modified_in_confluence_at=now_utc(),
+            )
+            db.add(doc)
+            db.flush()
+            ids.append(doc.id)
+        db.commit()
+        return analyst.id, ids
+
+
+def test_bulk_validation_endpoint_runs_all(client, monkeypatch):
+    analyst_id, doc_ids = seed_analyst_with_documents(2)
+    reports = iter([SimpleNamespace(id=101), SimpleNamespace(id=102)])
+    seen_triggers: list[TriggerType] = []
+
+    async def fake_exec(document_id, trigger, force):
+        seen_triggers.append(trigger)
+        return next(reports)
+
+    monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
+    assert client.post(f"/api/analysts/{analyst_id}/validate-all").status_code == 202
+
+    for _ in range(100):
+        st = tasks.bulk_status()
+        if not st["running"]:
+            break
+        time.sleep(0.05)
+    assert (st["done"], st["total"]) == (2, 2)
+    assert seen_triggers == [TriggerType.MANUAL, TriggerType.MANUAL]
+    states = tasks.validation_status()
+    assert all(states[i]["status"] == "done" for i in doc_ids)
+    assert client.get("/api/sync/bulk-validation").json()["running"] is False
+
+
+def test_bulk_validation_conflict_and_document_error(client, monkeypatch):
+    analyst_id, doc_ids = seed_analyst_with_documents(2)
+
+    async def slow_exec(document_id, trigger, force):
+        await asyncio.sleep(0.3)
+        if document_id == doc_ids[0]:
+            raise RuntimeError("ИИ недоступен")
+        return SimpleNamespace(id=55)
+
+    monkeypatch.setattr(tasks, "_execute_validation", slow_exec)
+    assert client.post(f"/api/analysts/{analyst_id}/validate-all").status_code == 202
+    # пока идёт — повторный запуск отклоняется
+    assert client.post(f"/api/analysts/{analyst_id}/validate-all").status_code == 409
+
+    for _ in range(100):
+        if not tasks.bulk_status()["running"]:
+            break
+        time.sleep(0.05)
+    # ошибка одного документа не останавливает прогон
+    states = tasks.validation_status()
+    assert states[doc_ids[0]]["status"] == "error"
+    assert states[doc_ids[1]]["status"] == "done"
+
+
+def test_bulk_validation_no_documents_and_unknown_analyst(client):
+    with SessionLocal() as db:
+        empty = Analyst(full_name="Пусто", email="empty@mts.ru")
+        db.add(empty)
+        db.commit()
+        empty_id = empty.id
+    assert client.post(f"/api/analysts/{empty_id}/validate-all").status_code == 409
+    assert client.post("/api/analysts/99999/validate-all").status_code == 404
 
 
 # --- API: ручной запуск и получение отчёта (ФТ-CR-13, ФТ-CR-16) ---

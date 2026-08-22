@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { api, ApiError, type Analyst, type DocumentPage } from "../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  api,
+  ApiError,
+  type Analyst,
+  type BulkValidationStatus,
+  type DocumentPage,
+} from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
   not_checked: "не проверено",
@@ -21,6 +27,7 @@ function formatDate(value: string | null): string {
 
 export default function DocumentsPage() {
   const { analystId } = useParams();
+  const navigate = useNavigate();
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [data, setData] = useState<DocumentPage | null>(null);
   const [query, setQuery] = useState("");
@@ -28,6 +35,8 @@ export default function DocumentsPage() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
+  const bulkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!analystId) return;
@@ -58,6 +67,48 @@ export default function DocumentsPage() {
       .catch(() => setAnalyst(null));
   }, [analystId]);
 
+  useEffect(() => {
+    return () => {
+      if (bulkTimer.current) clearInterval(bulkTimer.current);
+    };
+  }, []);
+
+  // Ручная проверка одного документа: запускаем и переходим к отчёту.
+  const validateOne = async (documentId: number) => {
+    setError("");
+    try {
+      await api(`/api/documents/${documentId}/validate`, { method: "POST" });
+      navigate(`/documents/${documentId}`);
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
+    }
+  };
+
+  // Массовая проверка всех документов аналитика (в фоне, с прогрессом).
+  const validateAll = async () => {
+    if (!analystId) return;
+    setError("");
+    try {
+      await api(`/api/analysts/${analystId}/validate-all`, { method: "POST" });
+      if (bulkTimer.current) clearInterval(bulkTimer.current);
+      bulkTimer.current = setInterval(async () => {
+        try {
+          const status = await api<BulkValidationStatus>("/api/sync/bulk-validation");
+          setBulk(status);
+          if (!status.running) {
+            if (bulkTimer.current) clearInterval(bulkTimer.current);
+            bulkTimer.current = null;
+            await load();
+          }
+        } catch {
+          // статус недоступен — продолжаем опрос
+        }
+      }, 1000);
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
+    }
+  };
+
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
 
   return (
@@ -69,8 +120,17 @@ export default function DocumentsPage() {
           </div>
           <h1>{analyst ? analyst.full_name : "Документы аналитика"}</h1>
         </div>
-        <div className="muted">
-          {data ? `Всего документов: ${data.total}` : ""}
+        <div className="actions">
+          {bulk?.running ? (
+            <span className="muted">
+              Проверка {bulk.done} из {bulk.total}…
+            </span>
+          ) : (
+            <button onClick={validateAll} disabled={!data || data.total === 0}>
+              Проверить все
+            </button>
+          )}
+          <span className="muted">{data ? `Всего документов: ${data.total}` : ""}</span>
         </div>
       </div>
 
@@ -103,6 +163,7 @@ export default function DocumentsPage() {
             <th>Создан</th>
             <th>Изменён</th>
             <th>Проверен</th>
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -119,11 +180,20 @@ export default function DocumentsPage() {
               <td>{formatDate(doc.created_in_confluence_at)}</td>
               <td>{formatDate(doc.last_modified_in_confluence_at)}</td>
               <td>{formatDate(doc.last_validated_at)}</td>
+              <td>
+                <button
+                  className="secondary"
+                  disabled={bulk?.running || doc.validation_status === "in_progress"}
+                  onClick={() => validateOne(doc.id)}
+                >
+                  {doc.validation_status === "not_checked" ? "Проверить" : "Актуализировать"}
+                </button>
+              </td>
             </tr>
           ))}
           {!loading && data?.items.length === 0 && (
             <tr>
-              <td colSpan={5} className="empty">
+              <td colSpan={6} className="empty">
                 Документы не найдены
               </td>
             </tr>

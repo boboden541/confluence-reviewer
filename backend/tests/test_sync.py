@@ -179,3 +179,40 @@ def test_sync_all_analysts(db, fake_client):
     assert len(results) == 2
     assert all(r.error is None for r in results)
     assert db.query(ConfluenceDocument).count() == 2
+
+
+def test_sync_modified_page_resets_validation_status(db, fake_client):
+    """Изменившаяся страница сбрасывает прошлую проверку (замечание №3).
+
+    Неизменившиеся документы сохраняют статус и дату проверки.
+    """
+    analyst = seed_analyst(db)
+    FakeClient.summaries["raaliev"] = [
+        make_summary("101", "Страница A"),
+        make_summary("102", "Страница B"),
+    ]
+    run(sync_module.sync_analyst(analyst.id))
+
+    checked_at = now_utc()
+    for page_id in ("101", "102"):
+        doc = db.query(ConfluenceDocument).filter_by(confluence_page_id=page_id).one()
+        doc.validation_status = "failed"
+        doc.last_validated_at = checked_at
+    db.commit()
+
+    # 102 изменилась, 101 — нет
+    unchanged_101 = FakeClient.summaries["raaliev"][0]
+    FakeClient.summaries["raaliev"] = [
+        unchanged_101,
+        make_summary("102", "Страница B (обновлена)", modified=True),
+    ]
+    run(sync_module.sync_analyst(analyst.id))
+
+    db.expire_all()  # объекты читались до коммита синхронизации в другой сессии
+    stale = db.query(ConfluenceDocument).filter_by(confluence_page_id="102").one()
+    assert stale.validation_status == "not_checked"
+    assert stale.last_validated_at is None
+
+    fresh = db.query(ConfluenceDocument).filter_by(confluence_page_id="101").one()
+    assert fresh.validation_status == "failed"
+    assert fresh.last_validated_at == checked_at

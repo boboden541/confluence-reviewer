@@ -142,3 +142,13 @@ export interface SyncStatus {
     error: string | null;
   }[];
 }
+
+export interface BulkValidationStatus {
+  running: boolean;
+  analyst_id: number | null;
+  total: number;
+  done: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+}

@@ -6,7 +6,10 @@ import asyncio
 import logging
 from typing import Any
 
-from app.models import TriggerType
+from sqlalchemy import select
+
+from app.database import SessionLocal
+from app.models import ConfluenceDocument, TriggerType
 from app.services.sync import SyncResult, sync_all, sync_analyst
 from app.services.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
@@ -23,6 +26,17 @@ _sync_state: dict[str, Any] = {
 
 # document_id -> {"status": running|done|error|not_found, "report_id", "error", ...}
 _validation_state: dict[int, dict[str, Any]] = {}
+
+# Массовая проверка документов аналитика (запускается вручную)
+_bulk_state: dict[str, Any] = {
+    "running": False,
+    "analyst_id": None,
+    "total": 0,
+    "done": 0,
+    "started_at": None,
+    "finished_at": None,
+    "error": None,
+}
 
 
 def sync_status() -> dict[str, Any]:
@@ -61,8 +75,8 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
                 }
                 for r in results
             ]
-            # ФТ-CR-12: новые и изменившиеся документы уходят на проверку автоматически
-            start_validations_for(results)
+            # Валидации запускаются только вручную: синхронизация лишь обновляет
+            # список и содержимое документов (замечание заказчика 2026-08-22).
         except Exception as exc:  # noqa: BLE001 — фоновая задача не должна ронять процесс
             logger.exception("Фоновая синхронизация упала")
             _sync_state["error"] = str(exc)
@@ -76,19 +90,6 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
 
     asyncio.create_task(runner())
     return True, "Синхронизация запущена"
-
-
-def start_validations_for(results: list[SyncResult]) -> list[int]:
-    """Автовалидация изменённых документов (ФТ-CR-12). Возвращает запущенные id."""
-    started_ids: list[int] = []
-    for result in results:
-        if result.error:
-            continue
-        for doc_id in result.changed_document_ids:
-            started, _ = start_validation(doc_id, trigger=TriggerType.AUTO)
-            if started:
-                started_ids.append(doc_id)
-    return started_ids
 
 
 async def _execute_validation(
@@ -137,3 +138,72 @@ def start_validation(
 
     loop.create_task(runner())
     return True, "Валидация запущена"
+
+
+def bulk_status() -> dict[str, Any]:
+    return dict(_bulk_state)
+
+
+def start_bulk_validation(analyst_id: int) -> tuple[bool, str]:
+    """Проверить все документы аналитика последовательно, в фоне.
+
+    Не-force: актуальные (не менявшиеся после последней проверки) документы
+    пропускаются идемпотентностью run_validation. Последовательный прогон —
+    чтобы не упереться в лимиты ИИ-провайдера.
+    """
+    if _bulk_state["running"]:
+        return False, "Массовая проверка уже выполняется"
+
+    with SessionLocal() as db:
+        doc_ids = (
+            db.scalars(
+                select(ConfluenceDocument.id)
+                .where(ConfluenceDocument.analyst_id == analyst_id)
+                .order_by(ConfluenceDocument.id)
+            )
+            .all()
+        )
+
+    if not doc_ids:
+        return False, "У аналитика нет документов для проверки"
+
+    async def runner() -> None:
+        _bulk_state.update(
+            running=True,
+            analyst_id=analyst_id,
+            total=len(doc_ids),
+            done=0,
+            started_at=now_utc().isoformat(),
+            finished_at=None,
+            error=None,
+        )
+        try:
+            for doc_id in doc_ids:
+                _validation_state[doc_id] = {
+                    "status": "running",
+                    "started_at": now_utc().isoformat(),
+                    "error": None,
+                }
+                try:
+                    report = await _execute_validation(doc_id, TriggerType.MANUAL, False)
+                    _validation_state[doc_id].update(
+                        status="done", report_id=report.id, finished_at=now_utc().isoformat()
+                    )
+                except DocumentNotFound:
+                    _validation_state[doc_id].update(
+                        status="not_found", error="Документ не найден"
+                    )
+                except Exception as exc:  # noqa: BLE001 — один документ не роняет прогон
+                    logger.exception("Массовая валидация: документ %s упал", doc_id)
+                    _validation_state[doc_id].update(status="error", error=str(exc))
+                _bulk_state["done"] += 1
+        finally:
+            _bulk_state.update(running=False, finished_at=now_utc().isoformat())
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False, "Нет активного event loop"
+
+    loop.create_task(runner())
+    return True, "Массовая проверка запущена"
