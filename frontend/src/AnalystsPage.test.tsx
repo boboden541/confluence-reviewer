@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AnalystsPage from "./pages/AnalystsPage";
 import { AUTH_STORAGE_KEY } from "./api";
@@ -96,5 +96,91 @@ describe("AnalystsPage", () => {
     );
 
     expect(await screen.findByText("Аналитики ещё не заведены")).toBeInTheDocument();
+  });
+
+  it("creates a new analyst from the form and reloads the list", async () => {
+    let listCalls = 0;
+    const CREATED = {
+      id: 3,
+      full_name: "Тестов Тест Тестович",
+      email: "testov@mts.ru",
+      confluence_username: null,
+      created_at: "2026-08-22T10:00:00",
+      documents_count: 0,
+      last_synced_at: null,
+      sync_error: null,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/analysts" && init?.method === "POST") {
+        return new Response(JSON.stringify(CREATED), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      listCalls += 1;
+      return new Response(JSON.stringify(listCalls === 1 ? [] : [CREATED]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Аналитики ещё не заведены");
+    fireEvent.change(screen.getByPlaceholderText("ФИО нового аналитика"), {
+      target: { value: "Тестов Тест Тестович" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("email@example.com"), {
+      target: { value: "testov@mts.ru" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить аналитика" }));
+
+    expect(await screen.findByText("Тестов Тест Тестович")).toBeInTheDocument();
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) => String(url) === "/api/analysts" && init?.method === "POST",
+    ) as [RequestInfo | URL, RequestInit] | undefined;
+    expect(post).toBeDefined();
+    expect(JSON.parse(post![1].body as string)).toEqual({
+      full_name: "Тестов Тест Тестович",
+      email: "testov@mts.ru",
+    });
+  });
+
+  it("shows backend error on duplicate email", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/analysts" && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({ detail: "Аналитик с email dup@mts.ru уже существует" }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Аналитики ещё не заведены");
+    fireEvent.change(screen.getByPlaceholderText("ФИО нового аналитика"), {
+      target: { value: "Дубль Дублиевич" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("email@example.com"), {
+      target: { value: "dup@mts.ru" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить аналитика" }));
+
+    expect(await screen.findByText(/уже существует/)).toBeInTheDocument();
   });
 });
