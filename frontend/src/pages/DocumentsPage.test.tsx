@@ -5,10 +5,12 @@ import DocumentsPage from "./DocumentsPage";
 import { AUTH_STORAGE_KEY } from "../api";
 
 function mockFetch(responses: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const path = String(input);
+    const bare = path.split("?")[0];
     for (const [prefix, payload] of Object.entries(responses)) {
-      if (path.split("?")[0] === prefix) {
+      // точное совпадение (с query-строкой) либо без неё
+      if (path === prefix || bare === prefix) {
         return new Response(JSON.stringify(payload), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -193,5 +195,69 @@ describe("DocumentsPage", () => {
       );
       expect(call).toBeDefined();
     });
+  });
+
+  it("appends the next page when the sentinel becomes visible", async () => {
+    // Мок IntersectionObserver: колбэк можно дёрнуть вручную из теста.
+    class MockIntersectionObserver {
+      static instances: MockIntersectionObserver[] = [];
+      callback: (entries: { isIntersecting: boolean }[]) => void;
+
+      constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+        this.callback = callback;
+        MockIntersectionObserver.instances.push(this);
+      }
+
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+
+    const doc = (id: number, title: string) => ({
+      id,
+      confluence_page_id: String(1000 + id),
+      title,
+      url: `https://confluence.mts.ru/x/${id}`,
+      created_in_confluence_at: "2026-07-01T00:00:00",
+      last_modified_in_confluence_at: "2026-08-10T00:00:00",
+      validation_status: "not_checked",
+      last_validated_at: null,
+    });
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents?page=1&page_size=20": {
+        items: [doc(1, "Первая страница — 1")],
+        total: 25,
+        page: 1,
+        page_size: 20,
+      },
+      "/api/analysts/5/documents?page=2&page_size=20": {
+        items: [doc(21, "Вторая страница — 21")],
+        total: 25,
+        page: 2,
+        page_size: 20,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Первая страница — 1")).toBeInTheDocument();
+    expect(screen.getByText("Показано 1 из 25")).toBeInTheDocument();
+
+    // скролл дошёл до сентинела — подгружается вторая страница
+    MockIntersectionObserver.instances[0].callback([{ isIntersecting: true }]);
+
+    expect(await screen.findByText("Вторая страница — 21")).toBeInTheDocument();
+    expect(screen.getByText("Показано 2 из 25")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("page=2"))).toBe(
+      true,
+    );
   });
 });

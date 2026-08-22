@@ -5,6 +5,7 @@ import {
   ApiError,
   type Analyst,
   type BulkValidationStatus,
+  type DocumentListItem,
   type DocumentPage,
 } from "../api";
 
@@ -15,6 +16,8 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "не пройдено",
   error: "ошибка",
 };
+
+const PAGE_SIZE = 20;
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -29,35 +32,53 @@ export default function DocumentsPage() {
   const { analystId } = useParams();
   const navigate = useNavigate();
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
-  const [data, setData] = useState<DocumentPage | null>(null);
+  const [items, setItems] = useState<DocumentListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
   const [urlFilter, setUrlFilter] = useState("");
-  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
   const bulkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const load = useCallback(async () => {
-    if (!analystId) return;
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(page), page_size: "20" });
-      if (query.trim()) params.set("query", query.trim());
-      if (urlFilter.trim()) params.set("url", urlFilter.trim());
-      setData(
-        await api<DocumentPage>(`/api/analysts/${analystId}/documents?${params}`),
-      );
-      setError("");
-    } catch (exc) {
-      setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить документы");
-    } finally {
-      setLoading(false);
-    }
-  }, [analystId, page, query, urlFilter]);
+  // targetPage > 1 — догружаем к уже показанным, иначе заменяем список
+  // (фильтр/поиск сменились — начинаем с первой страницы).
+  const load = useCallback(
+    async (targetPage: number, append: boolean) => {
+      if (!analystId) return;
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          page: String(targetPage),
+          page_size: String(PAGE_SIZE),
+        });
+        if (query.trim()) params.set("query", query.trim());
+        if (urlFilter.trim()) params.set("url", urlFilter.trim());
+        const data = await api<DocumentPage>(
+          `/api/analysts/${analystId}/documents?${params}`,
+        );
+        setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+        setTotal(data.total);
+        setHasMore(targetPage * data.page_size < data.total);
+        setPage(targetPage);
+        setLoaded(true);
+        setError("");
+      } catch (exc) {
+        setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить документы");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [analystId, query, urlFilter],
+  );
 
+  // Смена фильтров/аналитика — перезагрузка с первой страницы.
   useEffect(() => {
-    load();
+    load(1, false);
   }, [load]);
 
   useEffect(() => {
@@ -71,6 +92,38 @@ export default function DocumentsPage() {
     return () => {
       if (bulkTimer.current) clearInterval(bulkTimer.current);
     };
+  }, []);
+
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      load(page + 1, true);
+    }
+  }, [loading, hasMore, page, load]);
+
+  // Актуальный loadMore — в ref: observer создаётся один раз.
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+
+  // Сентинел появляется только после первой загрузки — подписываемся
+  // callback-ref'ом, а не эффектом на монтировании.
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const attachSentinel = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    sentinelRef.current = el;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadMoreRef.current();
+        }
+      },
+      { rootMargin: "200px" }, // начинаем догрузку до конца списка
+    );
+    observer.observe(el);
+    observerRef.current = observer;
   }, []);
 
   // Ручная проверка одного документа: запускаем и переходим к отчёту.
@@ -98,7 +151,7 @@ export default function DocumentsPage() {
           if (!status.running) {
             if (bulkTimer.current) clearInterval(bulkTimer.current);
             bulkTimer.current = null;
-            await load();
+            await load(1, false);
           }
         } catch {
           // статус недоступен — продолжаем опрос
@@ -108,8 +161,6 @@ export default function DocumentsPage() {
       setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
     }
   };
-
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
 
   return (
     <section>
@@ -126,11 +177,11 @@ export default function DocumentsPage() {
               Проверка {bulk.done} из {bulk.total}…
             </span>
           ) : (
-            <button onClick={validateAll} disabled={!data || data.total === 0}>
+            <button onClick={validateAll} disabled={loaded && total === 0}>
               Проверить все
             </button>
           )}
-          <span className="muted">{data ? `Всего документов: ${data.total}` : ""}</span>
+          <span className="muted">{loaded ? `Всего документов: ${total}` : ""}</span>
         </div>
       </div>
 
@@ -140,18 +191,12 @@ export default function DocumentsPage() {
         <input
           placeholder="Поиск по названию…"
           value={query}
-          onChange={(e) => {
-            setPage(1);
-            setQuery(e.target.value);
-          }}
+          onChange={(e) => setQuery(e.target.value)}
         />
         <input
           placeholder="Поиск по ссылке…"
           value={urlFilter}
-          onChange={(e) => {
-            setPage(1);
-            setUrlFilter(e.target.value);
-          }}
+          onChange={(e) => setUrlFilter(e.target.value)}
         />
       </div>
 
@@ -167,7 +212,7 @@ export default function DocumentsPage() {
           </tr>
         </thead>
         <tbody>
-          {(data?.items ?? []).map((doc) => (
+          {items.map((doc) => (
             <tr key={doc.id}>
               <td>
                 <Link to={`/documents/${doc.id}`}>{doc.title}</Link>
@@ -191,7 +236,7 @@ export default function DocumentsPage() {
               </td>
             </tr>
           ))}
-          {!loading && data?.items.length === 0 && (
+          {!loading && loaded && items.length === 0 && (
             <tr>
               <td colSpan={6} className="empty">
                 Документы не найдены
@@ -201,27 +246,16 @@ export default function DocumentsPage() {
         </tbody>
       </table>
 
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            className="secondary"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ← Назад
-          </button>
+      {!loading && hasMore && <div ref={attachSentinel} className="empty" />}
+
+      <div className="pagination">
+        {loading && <span>Загрузка…</span>}
+        {!loading && loaded && items.length > 0 && (
           <span>
-            Страница {page} из {totalPages}
+            Показано {items.length} из {total}
           </span>
-          <button
-            className="secondary"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Вперёд →
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
