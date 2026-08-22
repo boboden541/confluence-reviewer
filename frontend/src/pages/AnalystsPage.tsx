@@ -13,6 +13,9 @@ export default function AnalystsPage() {
   const [info, setInfo] = useState("");
   const [busyAnalyst, setBusyAnalyst] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [creating, setCreating] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -82,6 +85,27 @@ export default function AnalystsPage() {
     }
   };
 
+  // ФТ-CR-1 в UI: создание карточки аналитика вручную.
+  const addAnalyst = async () => {
+    if (!newName.trim() || !newEmail.trim()) return;
+    setCreating(true);
+    setInfo("");
+    setError("");
+    try {
+      await api("/api/analysts", {
+        method: "POST",
+        body: JSON.stringify({ full_name: newName, email: newEmail }),
+      });
+      setNewName("");
+      setNewEmail("");
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитика");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <section>
       <div className="page-head">
@@ -93,6 +117,29 @@ export default function AnalystsPage() {
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
+
+      <form
+        className="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          addAnalyst();
+        }}
+      >
+        <input
+          placeholder="ФИО нового аналитика"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <input
+          placeholder="email@example.com"
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+        />
+        <button type="submit" disabled={creating || !newName.trim() || !newEmail.trim()}>
+          {creating ? "Добавление…" : "Добавить аналитика"}
+        </button>
+      </form>
 
       <table className="table">
         <thead>
