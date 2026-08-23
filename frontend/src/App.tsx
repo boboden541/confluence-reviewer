@@ -68,8 +68,9 @@ export function LoginGate() {
   );
 }
 
-/** Сайдбар пространства: навигация + дерево документов аналитиков (стиль Confluence). */
-function Sidebar() {
+/** Сайдбар пространства: навигация + дерево документов аналитиков (стиль Confluence).
+ *  На узких экранах прячется off-canvas и открывается кнопкой «Меню» в шапке. */
+function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation();
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [docsOpen, setDocsOpen] = useState(false);
@@ -95,14 +96,18 @@ function Sidebar() {
   }, [activeAnalystId]);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? " open" : ""}`}>
       <div className="space-head">
         <span className="space-icon">РТ</span>
         <span className="space-name">Ревью требований</span>
       </div>
 
       <div className="nav-label">Обзор</div>
-      <Link to="/" className={`nav-item${onAnalysts ? " active" : ""}`}>
+      <Link
+        to="/"
+        className={`nav-item${onAnalysts ? " active" : ""}`}
+        onClick={onClose}
+      >
         <span className="ic">👥</span> Аналитики
       </Link>
 
@@ -123,6 +128,7 @@ function Sidebar() {
               key={analyst.id}
               to={`/analysts/${analyst.id}`}
               className={`nav-item${analyst.id === activeAnalystId ? " active" : ""}`}
+              onClick={onClose}
             >
               {analyst.full_name}
             </Link>
@@ -131,7 +137,11 @@ function Sidebar() {
       )}
 
       <div className="nav-label">Настройка</div>
-      <Link to="/template" className={`nav-item${onTemplate ? " active" : ""}`}>
+      <Link
+        to="/template"
+        className={`nav-item${onTemplate ? " active" : ""}`}
+        onClick={onClose}
+      >
         <span className="ic">🧩</span> Шаблон требований
       </Link>
 
@@ -149,6 +159,13 @@ function Sidebar() {
 export default function App() {
   const [authed, setAuthed] = useState(hasCredentials());
   const [me, setMe] = useState("Р");
+  const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+
+  // переход по любой ссылке закрывает мобильное меню
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const onUnauthorized = () => setAuthed(false);
@@ -176,8 +193,18 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
+        <button
+          type="button"
+          className="topbar-burger"
+          aria-label="Меню"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          ☰
+        </button>
         <Link to="/" className="topbar-logo">
-          <span className="logo-mark">РТ</span> Ревью требований
+          <span className="logo-mark">РТ</span>
+          <span className="logo-text"> Ревью требований</span>
         </Link>
         <GlobalSearch />
         <button
@@ -194,7 +221,11 @@ export default function App() {
         </button>
       </header>
       <div className="layout">
-        <Sidebar />
+        <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
+        <div
+          className={`sidebar-backdrop${navOpen ? " show" : ""}`}
+          onClick={() => setNavOpen(false)}
+        />
         <main className="content">
           <Routes>
             <Route path="/" element={<AnalystsPage />} />

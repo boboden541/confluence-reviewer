@@ -296,6 +296,7 @@ export default function AnalystsPage() {
         </form>
       )}
 
+      <div className="table-wrap">
       <table className="cf">
         <thead>
           <tr>
@@ -359,6 +360,7 @@ export default function AnalystsPage() {
           )}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
