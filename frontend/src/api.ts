@@ -161,3 +161,31 @@ export interface BulkValidationStatus {
   finished_at: string | null;
   error: string | null;
 }
+
+// --- Шаблон требований (редактор) ---
+
+export interface TemplateSection {
+  /** Уровень 1..3 задаёт вложенность; порядок — позиция в списке */
+  level: number;
+  text: string;
+  required: boolean;
+  aliases: string[];
+}
+
+export interface TemplateInfo {
+  /** id = номер версии */
+  id: number;
+  name: string;
+  description: string | null;
+  title_marker: string;
+  sections: TemplateSection[];
+  created_at: string;
+}
+
+export interface TemplateVersionInfo {
+  id: number;
+  name: string;
+  created_at: string;
+  is_active: boolean;
+  section_count: number;
+}

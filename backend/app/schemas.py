@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import TriggerType, ValidationStatus
 
@@ -100,6 +100,58 @@ class ValidationReportOut(BaseModel):
     overall_passed: bool
     error_message: str | None = None
     comment_sent_at: datetime | None = None
+
+
+# --- Шаблон требований (UI-редактор) ---
+
+
+class TemplateSection(BaseModel):
+    """Раздел шаблона: уровень 1..3 задаёт вложенность, порядок — позиция в списке."""
+
+    level: int = Field(ge=1, le=3)
+    text: str = Field(min_length=1, max_length=255)
+    required: bool = False
+    aliases: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("text")
+    @classmethod
+    def text_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Название раздела не может быть пустым")
+        return cleaned
+
+
+class TemplateUpdate(BaseModel):
+    """PUT /api/template: маркер названия + плоский список разделов.
+
+    name/description и повторяемые блоки из UI не редактируются —
+    переносятся из предыдущей версии (см. services.template_store).
+    """
+
+    title_marker: str = Field(default="", max_length=100)
+    sections: list[TemplateSection] = Field(default_factory=list, max_length=200)
+
+
+class TemplateOut(BaseModel):
+    """Активная версия шаблона. id = номер версии."""
+
+    id: int
+    name: str
+    description: str | None = None
+    title_marker: str
+    sections: list[TemplateSection]
+    created_at: datetime
+
+
+class TemplateVersionInfo(BaseModel):
+    """Строка истории версий шаблона."""
+
+    id: int
+    name: str
+    created_at: datetime
+    is_active: bool
+    section_count: int
 
 
 # --- Заметки руководителя ---
