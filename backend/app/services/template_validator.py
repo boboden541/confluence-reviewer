@@ -3,13 +3,15 @@
 Шаблон передаётся словарём (активная версия из БД, см. services.template_store):
 title_marker + sections (с вычисленными parent/order) + repeatable_blocks.
 
-Проверки:
+Проверки мягкие (по замечаниям заказчика): у аналитиков структура свободная —
 - заголовок страницы содержит маркер отдельным словом («[СТ]», «СТ-15» …);
-- обязательные разделы присутствуют (сравнение без учёта регистра, по префиксу —
-  допускаются суффиксы вида «Функциональные требования (BackEnd)»);
-- подразделы внутри родителя (Общая информация под Введение и т.п.);
-- в каждом повторяемом блоке доработки есть обязательные дочерние разделы;
-- порядок разделов верхнего уровня (нарушение — замечание, не провал).
+- обязательные разделы должны присутствовать; порядок разделов и их уровни
+  (вложенность) могут отличаться от шаблона — это не замечание;
+- совпадение имён неточное: без учёта регистра, одно название внутри другого
+  («Общая информация о сервисе» ≈ «Общая информация»), тот же набор слов в
+  другом порядке («Информация общая») или похожесть текста
+  («Критерий приёмки» ≈ «Критерии приёмки»);
+- в каждом повторяемом блоке доработки есть обязательные дочерние разделы.
 
 passed = нет критичных замечаний (отсутствие обязательных разделов).
 """
@@ -18,11 +20,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from bs4 import BeautifulSoup
 
-# символы, которые могут отделять имя раздела от суффикса
-_BOUNDARY = set(" (:.—–-/«\"',")
+# неточное совпадение: порог похожести и минимальная длина для него
+# (короче 6 символов — только точное совпадение: «риски» не должно
+# «входить» в произвольные слова документа)
+_FUZZY_RATIO = 0.8
+_FUZZY_MIN_LEN = 6
 
 
 @dataclass(slots=True)
@@ -56,14 +62,34 @@ def normalize_heading(text: str) -> str:
     return cleaned
 
 
+def _words(text: str) -> set[str]:
+    """Значимые слова (от 3 символов) — для сравнения без учёта порядка."""
+    return {word for word in re.split(r"\W+", text) if len(word) >= 3}
+
+
 def heading_matches(actual_norm: str, required_norm: str) -> bool:
-    """actual начинается с required и либо совпадает, либо за ним идёт разделитель."""
+    """Неточное вхождение: точное совпадение, вхождение одного названия
+    в другое, тот же набор слов в другом порядке или похожесть по символам
+    ≥ 0.8 (регистр не важен).
+
+    Ловит «Общая информация о сервисе» ≈ «Общая информация»,
+    «Информация общая» (перестановка слов), «Критерий приёмки» ≈ «Критерии
+    приёмки». Короткие названия (короче 6 символов) сравниваются только
+    точно — иначе слишком много ложных срабатываний.
+    """
+    if not required_norm or not actual_norm:
+        return False
     if actual_norm == required_norm:
         return True
-    if not actual_norm.startswith(required_norm):
+    if len(required_norm) < _FUZZY_MIN_LEN or len(actual_norm) < _FUZZY_MIN_LEN:
         return False
-    tail = actual_norm[len(required_norm) :]
-    return bool(tail) and tail[0] in _BOUNDARY
+    if required_norm in actual_norm or actual_norm in required_norm:
+        return True
+    # перестановка слов: «Информация общая» ≈ «Общая информация»
+    actual_words, required_words = _words(actual_norm), _words(required_norm)
+    if required_words and (required_words <= actual_words or actual_words <= required_words):
+        return True
+    return SequenceMatcher(None, required_norm, actual_norm).ratio() >= _FUZZY_RATIO
 
 
 def extract_headings(content_html: str) -> list[Heading]:
@@ -77,13 +103,13 @@ def extract_headings(content_html: str) -> list[Heading]:
     return headings
 
 
-def find_heading(
-    headings: list[Heading], level: int, names: list[str], start_after: int = -1
-) -> Heading | None:
-    """Первый заголовок уровня level, совпадающий с одним из имён (с префикс-допуском)."""
+def find_heading(headings: list[Heading], names: list[str]) -> Heading | None:
+    """Первый заголовок с любым уровнем, неточно совпадающий с одним из имён.
+
+    Уровень не фильтруем: у аналитиков вложенность может отличаться
+    от шаблона — важно наличие раздела, а не его место в иерархии.
+    """
     for heading in headings:
-        if heading.position <= start_after or heading.level != level:
-            continue
         for name in names:
             if heading_matches(heading.norm, normalize_heading(name)):
                 return heading
@@ -101,17 +127,17 @@ def _section_scope_end(headings: list[Heading], parent: Heading) -> int:
 def _check_blocks(
     template: dict, headings: list[Heading], findings: list[Finding]
 ) -> None:
-    """Повторяемые блоки доработок: обязательные дочерние разделы в каждом блоке."""
+    """Повторяемые блоки доработок: обязательные дочерние разделы в каждом блоке.
+
+    Уровни в шаблоне не фильтруют поиск (могут отличаться у аналитиков):
+    маркер ищется на любом уровне, дети — уровнем ниже фактического уровня
+    маркера в документе.
+    """
     for block in template.get("repeatable_blocks", []):
-        marker = find_heading(
-            headings,
-            block["marker_level"],
-            [block["marker_text"]],
-        )
+        marker = find_heading(headings, [block["marker_text"]])
         if marker is None:
             continue  # отсутствие самого маркера уже зафиксировано в sections
         scope_end = _section_scope_end(headings, marker)
-        child_level = block["child_level"]
         required_children: list[str] = block.get("required_children", [])
         prefix = block.get("child_prefix")
 
@@ -120,7 +146,7 @@ def _check_blocks(
             for h in headings
             if h.position > marker.position
             and h.position < scope_end
-            and h.level == child_level
+            and h.level == marker.level + 1
             and (prefix is None or heading_matches(h.norm, normalize_heading(prefix)))
         ]
         if not children:
@@ -140,7 +166,7 @@ def _check_blocks(
                 found = any(
                     h.position > child.position
                     and h.position < child_end
-                    and h.level == child_level + 1
+                    and h.level == child.level + 1
                     and heading_matches(h.norm, normalize_heading(required))
                     for h in headings
                 )
@@ -190,60 +216,17 @@ def validate_template(title: str, content_html: str, template: dict) -> Template
         )
         return _render(template, findings)
 
-    # 1. Обязательные разделы и подразделы
+    # 1. Обязательные разделы. Порядок, уровень и конкретный родитель не важны
+    #    (структура у аналитиков свободная) — проверяем наличие по имени.
     for section in template.get("sections", []):
         names = [section["text"], *section.get("aliases", [])]
-        search_from = -1
-        if section.get("parent"):
-            parent = find_heading(headings, section["level"] - 1, [section["parent"]])
-            if parent is None:
-                continue  # родитель отсутствует — ошибка уже выдана по нему
-            search_from = parent.position
-            scope_end = _section_scope_end(headings, parent)
-            found = next(
-                (
-                    h
-                    for h in headings
-                    if search_from < h.position < scope_end
-                    and h.level == section["level"]
-                    and any(heading_matches(h.norm, normalize_heading(n)) for n in names)
-                ),
-                None,
-            )
-        else:
-            found = find_heading(headings, section["level"], names, start_after=search_from)
-
-        if found is None and section.get("required"):
-            where = f" (внутри «{section['parent']}»)" if section.get("parent") else ""
+        if find_heading(headings, names) is None and section.get("required"):
             findings.append(
-                Finding(
-                    f"Отсутствует обязательный раздел «{section['text']}»{where}",
-                    critical=True,
-                )
+                Finding(f"Отсутствует обязательный раздел «{section['text']}»", critical=True)
             )
 
     # 2. Повторяемые блоки доработок
     _check_blocks(template, headings, findings)
-
-    # 3. Порядок разделов верхнего уровня (некритично)
-    ordered = [
-        s for s in template.get("sections", []) if s.get("order") and not s.get("parent")
-    ]
-    ordered.sort(key=lambda s: s["order"])
-    last_position = -1
-    for section in ordered:
-        names = [section["text"], *section.get("aliases", [])]
-        heading = find_heading(headings, section["level"], names)
-        if heading is None:
-            continue
-        if heading.position < last_position:
-            findings.append(
-                Finding(
-                    f"Раздел «{section['text']}» идёт раньше, чем предусмотрено шаблоном",
-                    critical=False,
-                )
-            )
-        last_position = max(last_position, heading.position)
 
     return _render(template, findings)
 

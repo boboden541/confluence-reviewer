@@ -10,7 +10,7 @@ from app.utils import now_utc
 
 
 def h(level: int, text: str) -> str:
-    return f"<h{level}>{text}</h>"
+    return f"<h{level}>{text}</h{level}>"
 
 
 def put_payload(**overrides) -> dict:
