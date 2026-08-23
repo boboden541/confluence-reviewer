@@ -105,17 +105,18 @@ def test_fr_block_missing_child_section():
         h(2, "Вторая доработка") + h(3, "Общее описание") + h(3, "Описание доработок")
         + h(3, "Критерии приёмки") + h(3, "Документация по функционалу"),
         h(2, "Вторая доработка") + h(3, "Общее описание") + h(3, "Описание доработок")
-        + h(3, "Критерий приёмки"),  # ед. число + нет документации
+        + h(3, "Критерий приёмки"),  # ед. число (теперь проходит) + нет документации
     )
     result = validate_template("[СТ] Документ", body, SEED)
     assert not result.passed
-    assert "Критерии приёмки" in result.findings_markdown
+    # «Критерий приёмки» неточно совпадает с «Критерии приёмки» — не замечание
+    assert "Критерии приёмки" not in result.findings_markdown
     assert "Документация по функционалу" in result.findings_markdown
 
 
 def test_real_gds15_example_structure_fails():
     """Структура реального документа GDS-15 (pageId=2380439645): без раздела ИТ,
-    в блоках ФТ нет «Документации по функционалу», «Критерий приёмки» в ед. числе."""
+    в блоках ФТ нет «Документации по функционалу»."""
     body = "".join(
         [
             h(1, "Введение"),
@@ -143,8 +144,7 @@ def test_real_gds15_example_structure_fails():
     assert not result.passed
     md = result.findings_markdown
     assert "Требования к интерфейсам" in md          # раздел отсутствует полностью
-    assert "Документация по функционалу" in md      # нет в обоих блоках ФТ
-    assert "Критерии приёмки" in md                 # «Критерий приёмки» не считается
+    assert "Документация по функционалу" in md       # нет в обоих блоках ФТ
 
 
 def test_no_headings_fails():
@@ -152,15 +152,53 @@ def test_no_headings_fails():
     assert not result.passed
 
 
-def test_heading_matches_prefix_and_exact():
+def test_heading_matches_fuzzy():
     norm = normalize_heading("Функциональные требования (BackEnd)")
     assert heading_matches(norm, normalize_heading("Функциональные требования"))
     assert heading_matches(norm, normalize_heading("функциональные требования"))
     assert not heading_matches(norm, normalize_heading("Требования к интерфейсам"))
-    # «Критерий приёмки» != «Критерии приёмки» — это разные заголовки
-    assert not heading_matches(
+    # вхождение одного названия в другое
+    assert heading_matches(
+        normalize_heading("Общая информация о сервисе"), normalize_heading("Общая информация")
+    )
+    assert heading_matches(
+        normalize_heading("Назначение"), normalize_heading("Назначение документа")
+    )
+    # перестановка слов и ед./мн. число — похожесть ловит
+    assert heading_matches(
+        normalize_heading("Информация общая"), normalize_heading("Общая информация")
+    )
+    assert heading_matches(
         normalize_heading("Критерий приёмки"), normalize_heading("Критерии приёмки")
     )
+    # короткие названия — только точное совпадение
+    assert not heading_matches(normalize_heading("риски проекта"), normalize_heading("риски"))
+
+
+def test_fuzzy_and_free_structure_document_passes():
+    """Неточные названия + другой порядок и уровни — не замечание."""
+    body = "".join(
+        [
+            h(1, "Ревью требований"),                       # порядок не как в шаблоне
+            h(2, "Общая информация о сервисе"),             # неточное название, Ур.2 без родителя
+            h(2, "Введение"),                               # уровень смещён
+            h(1, "Общее описание"),
+            h(3, "Назначение"),                             # вложенность смещена
+            h(2, "Контекст в системе"),
+            h(1, "Функциональные требования (BackEnd)"),
+            h(2, "Создать таблицу-справочник"),
+            h(3, "Общее описание доработки"),
+            h(3, "Описание доработок"),
+            h(3, "Критерий приёмки"),                       # ед. число
+            h(3, "Документация по функционалу"),
+            h(1, "Требования к интерфейсам"),
+            h(2, "Сценарии использования"),
+        ]
+    )
+    result = validate_template("[СТ] Документ", body, SEED)
+    assert result.passed, result.findings_markdown
+    assert result.warning_count == 0
+    assert result.critical_count == 0
 
 
 def test_extract_headings_skips_empty():
@@ -168,9 +206,11 @@ def test_extract_headings_skips_empty():
     assert len(headings) == 1 and headings[0].text == "Текст"
 
 
-def test_order_violation_is_warning_not_failure():
+def test_order_and_levels_are_tolerated():
+    """Порядок разделов и их уровни не проверяются — замечаний быть не должно."""
     body = GOOD_BODY.replace(h(1, "Ревью требований"), "")
     body = h(1, "Ревью требований") + body  # вынесен в начало
     result = validate_template("[СТ] Документ", body, SEED)
-    assert result.warning_count >= 1
-    assert result.passed  # порядок — предупреждение, не провал
+    assert result.passed
+    assert result.warning_count == 0
+    assert "раньше, чем предусмотрено" not in result.findings_markdown
