@@ -1,4 +1,5 @@
-"""Модель данных: аналитики, Confluence-документы, отчёты валидации, заметки.
+"""Модель данных: аналитики, Confluence-документы, отчёты валидации, заметки,
+версии шаблона требований.
 
 Время везде — наивный UTC (см. app.utils.now_utc), чтобы сравнения дат
 (ФТ-CR-14) работали одинаково на sqlite и postgres.
@@ -116,6 +117,29 @@ class ValidationReport(Base):
     comment_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     document: Mapped[ConfluenceDocument] = relationship(back_populates="reports")
+
+
+class TemplateVersion(Base):
+    """Версия шаблона требований (ФТ-CR-10). Редактируется через UI; каждое
+    сохранение создаёт новую версию, активна ровно одна (is_active).
+
+    Секции хранятся плоским списком в визуальном порядке — вложенность
+    задаётся уровнем 1..3 (см. services.template_store).
+    """
+
+    __tablename__ = "template_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Маркер названия: буквальное вхождение отдельным словом, без учёта регистра
+    title_marker: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    sections_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # Повторяемые блоки доработок: не редактируются из UI, переносятся из
+    # версии в версию (первая версия сеется из JSON-файла)
+    repeatable_blocks_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 
 
 class DocumentNote(Base):

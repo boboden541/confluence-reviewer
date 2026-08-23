@@ -1,7 +1,10 @@
 """Скриптовая валидация документа на соответствие шаблону (ФТ-CR-10).
 
+Шаблон передаётся словарём (активная версия из БД, см. services.template_store):
+title_marker + sections (с вычисленными parent/order) + repeatable_blocks.
+
 Проверки:
-- заголовок страницы соответствует title_pattern (например, содержит «[СТ]»);
+- заголовок страницы содержит маркер отдельным словом («[СТ]», «СТ-15» …);
 - обязательные разделы присутствуют (сравнение без учёта регистра, по префиксу —
   допускаются суффиксы вида «Функциональные требования (BackEnd)»);
 - подразделы внутри родителя (Общая информация под Введение и т.п.);
@@ -13,10 +16,8 @@ passed = нет критичных замечаний (отсутствие об
 
 from __future__ import annotations
 
-import json
 import re
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
 
@@ -97,20 +98,6 @@ def _section_scope_end(headings: list[Heading], parent: Heading) -> int:
     return len(headings) + 1
 
 
-def _load_template(template_file: str) -> dict:
-    """Шаблон ищется: как указано (abs/от cwd), затем от корня backend и от app/."""
-    candidates = [Path(template_file)]
-    if not Path(template_file).is_absolute():
-        backend_root = Path(__file__).resolve().parent.parent.parent
-        candidates.append(backend_root / template_file)
-        candidates.append(backend_root / "app" / Path(template_file).name)
-    for path in candidates:
-        if path.is_file():
-            with path.open(encoding="utf-8") as fh:
-                return json.load(fh)
-    raise FileNotFoundError(f"Файл шаблона не найден: {template_file}")
-
-
 def _check_blocks(
     template: dict, headings: list[Heading], findings: list[Finding]
 ) -> None:
@@ -166,27 +153,34 @@ def _check_blocks(
                     )
 
 
-def validate_title(title: str, pattern: str) -> Finding | None:
-    if not re.search(pattern, title or ""):
+def validate_title(title: str, marker: str) -> Finding | None:
+    """Маркер названия — буквальное вхождение отдельным словом, регистр не важен.
+
+    «СТ» найдётся в «[СТ] GDS-15» и «СТ-15 Доработка», но не в «Структура»
+    или «Просто страница» (вхождение внутри слова не считается).
+    """
+    marker = (marker or "").strip()
+    if not marker:
+        return None  # маркер не задан — подходит любое название
+    pattern = rf"(?<!\w){re.escape(marker)}(?!\w)"
+    if not re.search(pattern, title or "", flags=re.IGNORECASE):
         return Finding(
-            f"Заголовок страницы не соответствует шаблону: ожидается маркер «{pattern}»"
-            f" (например, «1. [СТ] - Название доработки»); фактически: «{title or '—'}»",
+            f"Заголовок страницы не содержит маркер «{marker}»"
+            f" (например, «1. [СТ] — Название доработки»); фактически: «{title or '—'}»",
             critical=True,
         )
     return None
 
 
-def validate_template(
-    title: str, content_html: str, template_file: str | None = None
-) -> TemplateValidationResult:
-    """Главная функция скриптовой валидации (ФТ-CR-10)."""
-    from app.config import get_settings
+def validate_template(title: str, content_html: str, template: dict) -> TemplateValidationResult:
+    """Главная функция скриптовой валидации (ФТ-CR-10).
 
-    template = _load_template(template_file or get_settings().template_file)
+    template — активная версия шаблона из БД (services.template_store).
+    """
     headings = extract_headings(content_html)
     findings: list[Finding] = []
 
-    title_finding = validate_title(title, template.get("title_pattern", ""))
+    title_finding = validate_title(title, template.get("title_marker", ""))
     if title_finding:
         findings.append(title_finding)
 

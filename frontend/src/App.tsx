@@ -10,6 +10,7 @@ import {
 import AnalystsPage from "./pages/AnalystsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
+import TemplatePage from "./pages/TemplatePage";
 
 export function LoginGate() {
   const navigate = useNavigate();
@@ -77,9 +78,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <Link to="/" className="brand">
-          Confluence Reviewer
-        </Link>
+        <div className="topbar-nav">
+          <Link to="/" className="brand">
+            Confluence Reviewer
+          </Link>
+          <Link to="/template" className="topbar-link">
+            Шаблон
+          </Link>
+        </div>
         <button
           className="link"
           onClick={() => {
@@ -95,6 +101,7 @@ export default function App() {
           <Route path="/" element={<AnalystsPage />} />
           <Route path="/analysts/:analystId" element={<DocumentsPage />} />
           <Route path="/documents/:documentId" element={<ReportPage />} />
+          <Route path="/template" element={<TemplatePage />} />
         </Routes>
       </main>
     </div>

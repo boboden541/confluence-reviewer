@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.services.ai_validator import AIValidationError, AIValidator
 from app.services.html_to_markdown import html_to_markdown
+from app.services.template_store import get_template_for_validation
 from app.services.template_validator import validate_template
 from app.utils import now_utc
 
@@ -93,8 +94,12 @@ def run_validation(
         doc.validation_status = ValidationStatus.IN_PROGRESS
         db.commit()
 
+        # Шаблон требований — активная версия из БД (редактируется через UI)
+        template = get_template_for_validation(db)
+        if template is None:
+            return _save_error(db, doc, trigger, "Шаблон требований не настроен")
         try:
-            template_result = validate_template(doc.title, doc.content_html)
+            template_result = validate_template(doc.title, doc.content_html, template)
         except Exception as exc:  # noqa: BLE001 — любая ошибка = статус error
             return _save_error(db, doc, trigger, f"Ошибка проверки шаблона: {exc}")
 

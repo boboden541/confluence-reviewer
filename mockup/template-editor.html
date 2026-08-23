@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Макет: редактор шаблона требований (drag &amp; drop)</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --border: #dde3ea;
+    --text: #1e2733;
+    --muted: #6b7684;
+    --accent: #2563eb;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --bad: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 1.5rem; background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; }
+  .mock-badge {
+    background: var(--warn); color: #fff; border-radius: 999px;
+    padding: 0.15rem 0.7rem; font-size: 0.75rem; font-weight: 600;
+  }
+  .content { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  .muted { color: var(--muted); font-size: 0.88rem; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.07); }
+  button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  button.small { padding: 0.25rem 0.55rem; font-size: 0.8rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.2rem 1.4rem; margin-bottom: 1.2rem;
+  }
+  .card h2 { margin: 0 0 0.8rem; font-size: 1.1rem; }
+  input[type="text"] {
+    width: 100%; padding: 0.5rem 0.7rem; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 0.95rem; font-family: inherit;
+  }
+  input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); border-color: var(--accent); }
+  .title-row { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
+  .title-row .marker-input { width: 180px; font-size: 1.05rem; font-weight: 600; text-align: center; }
+  .demo-title { margin-top: 0.8rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); border-radius: 999px; padding: 0.2rem 0.7rem;
+    font-size: 0.82rem; background: var(--bg);
+  }
+  .chip.ok { border-color: var(--ok); color: var(--ok); }
+  .chip.bad { border-color: var(--bad); color: var(--bad); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* --- строки разделов --- */
+  .section-row {
+    display: flex; align-items: center; gap: 0.45rem;
+    padding: 0.35rem 0.4rem; border-radius: 6px;
+    background: transparent; position: relative;
+  }
+  .section-row:hover { background: var(--bg); }
+  .handle {
+    color: var(--muted); cursor: grab; font-size: 0.95rem;
+    padding: 0.1rem 0.15rem; user-select: none; letter-spacing: -1px;
+  }
+  .handle:active { cursor: grabbing; }
+  .level-select {
+    border: 1px solid var(--border); border-radius: 6px; background: var(--card);
+    padding: 0.3rem 0.35rem; font-size: 0.82rem; color: var(--text); flex: 0 0 auto;
+  }
+  .section-row input.name { flex: 1; padding: 0.35rem 0.55rem; font-size: 0.9rem; }
+  .indent-2 { margin-left: 1.6rem; }
+  .indent-3 { margin-left: 3.2rem; }
+  .req-toggle {
+    border: 1px solid var(--border); background: var(--card); border-radius: 6px;
+    width: 1.9rem; height: 1.7rem; line-height: 1; font-size: 0.95rem; color: var(--muted);
+    padding: 0; flex: 0 0 auto;
+  }
+  .req-toggle.on { color: var(--bad); border-color: var(--bad); font-weight: 700; }
+  .row-x {
+    border: none; background: none; color: var(--muted); font-size: 1rem;
+    cursor: pointer; padding: 0.1rem 0.3rem; border-radius: 4px;
+  }
+  .row-x:hover { color: var(--bad); background: var(--bg); }
+  .aliases {
+    font-size: 0.78rem; color: var(--muted); margin-left: 3.4rem; margin-top: -0.15rem;
+    padding-bottom: 0.25rem; border-radius: 6px;
+  }
+  .aliases input {
+    border: none; border-bottom: 1px dashed var(--border); background: none;
+    padding: 0.1rem 0; font-size: 0.78rem; color: var(--muted); width: 70%;
+  }
+  .add-row { margin-top: 0.7rem; display: flex; gap: 0.5rem; }
+
+  /* --- drag & drop --- */
+  .section-row.dragging, .aliases.dragging { opacity: 0.35; }
+  .section-row.drop-before { box-shadow: 0 -3px 0 0 var(--accent); }
+  .section-row.drop-after { box-shadow: 0 3px 0 0 var(--accent); }
+  .section-row.nest-target {
+    outline: 2px solid var(--accent); outline-offset: -2px; background: #eff6ff;
+  }
+  .aliases.drop-after { box-shadow: 0 3px 0 0 var(--accent); }
+  #drop-badge {
+    position: fixed; z-index: 10; pointer-events: none; display: none;
+    background: var(--text); color: #fff; border-radius: 6px;
+    padding: 0.25rem 0.6rem; font-size: 0.8rem; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+
+  .preview .outline-item { margin: 0.22rem 0; line-height: 1.45; }
+  .preview .num { color: var(--muted); margin-right: 0.2rem; font-variant-numeric: tabular-nums; }
+  .preview .req { color: var(--bad); font-weight: 700; }
+  .preview .opt { color: var(--muted); }
+  .preview-box {
+    border: 1px dashed var(--border); border-radius: 8px; padding: 0.9rem 1.1rem;
+    background: var(--bg); font-size: 0.9rem;
+  }
+  .actions { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+  .alert.ok { border-left: 4px solid var(--ok); background: #f0fdf4; border-radius: 6px; padding: 0.6rem 0.9rem; font-size: 0.88rem; }
+  .sticky { position: sticky; top: 1rem; }
+  kbd {
+    background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 0.3rem; font-size: 0.8em;
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="#">Confluence Reviewer</a>
+  <span class="mock-badge">Дизайн-макет · не реализовано</span>
+</div>
+<div id="drop-badge"></div>
+
+<div class="content">
+  <div class="page-head">
+    <div>
+      <div class="muted"><a href="#" class="link" style="text-decoration:none">← Аналитики</a></div>
+      <h1>Шаблон требований</h1>
+      <div class="muted">По этому шаблону проверяются все документы при запуске проверки</div>
+    </div>
+    <button>Сохранить шаблон</button>
+  </div>
+
+  <!-- 1. Маркер названия -->
+  <div class="card">
+    <h2>Название документа</h2>
+    <div class="title-row">
+      <span class="muted">Название должно содержать маркер</span>
+      <input type="text" class="marker-input" id="marker" value="СТ" />
+      <span class="muted">— регистр не важен, ищется вхождение</span>
+    </div>
+    <div class="demo-title">
+      <span class="muted">Примеры:</span>
+      <span class="chip" id="chip1">[СТ] GDS-15 Загрузка кино</span>
+      <span class="chip" id="chip2">GDS-15 Загрузка кино</span>
+      <span class="muted" id="title-verdict"></span>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 2. Структура разделов с drag & drop -->
+    <div class="card">
+      <h2>Структура разделов</h2>
+      <div class="muted" style="margin-bottom: 0.6rem">
+        Тяните за <span style="letter-spacing:-1px">⋮⋮</span> — перемещение мышкой:
+        <b>верх/низ строки</b> — вставить рядом (линия показывает место),
+        <b>середина строки</b> — сделать вложенным разделом (рамка вокруг строки).
+        <span style="color: var(--bad); font-weight: 700">✱</span> — обязателен (клик).
+      </div>
+      <div id="sections">
+        <div class="section-row" data-level="1">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option selected>Ур. 1</option><option>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="Введение" />
+          <button class="req-toggle on" title="Обязательный раздел">✱</button>
+          <button class="row-x" title="Удалить">✕</button>
+        </div>
+        <div class="section-row indent-2" data-level="2">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option>Ур. 1</option><option selected>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="Общая информация" />
+          <button class="req-toggle on">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+        <div class="section-row indent-2" data-level="2">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option>Ур. 1</option><option selected>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="История изменений" />
+          <button class="req-toggle">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+        <div class="section-row" data-level="1">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option selected>Ур. 1</option><option>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="Общее описание" />
+          <button class="req-toggle on">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+        <div class="section-row indent-2" data-level="2">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option>Ур. 1</option><option selected>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="Назначение документа" />
+          <button class="req-toggle on">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+        <div class="aliases">
+          доп. допустимые названия: <input value="Цель документа" />
+        </div>
+        <div class="section-row indent-3" data-level="3">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option>Ур. 1</option><option>Ур. 2</option><option selected>Ур. 3</option></select>
+          <input class="name" value="Критерии приёмки" />
+          <button class="req-toggle on">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+        <div class="section-row" data-level="1">
+          <span class="handle">⋮⋮</span>
+          <select class="level-select"><option selected>Ур. 1</option><option>Ур. 2</option><option>Ур. 3</option></select>
+          <input class="name" value="Ревью требований" />
+          <button class="req-toggle">✱</button>
+          <button class="row-x">✕</button>
+        </div>
+      </div>
+      <div class="add-row">
+        <button class="secondary small" id="add-section">+ Добавить раздел</button>
+      </div>
+    </div>
+
+    <!-- 3. Живой предпросмотр -->
+    <div class="sticky">
+      <div class="card preview">
+        <h2>Как будет проверяться</h2>
+        <div class="muted" style="margin-bottom: 0.5rem">Название документа:</div>
+        <div class="preview-box" id="title-preview" style="margin-bottom: 0.8rem"></div>
+        <div class="muted" style="margin-bottom: 0.5rem">Структура разделов (1 → 1.1 → 1.1.1):</div>
+        <div class="preview-box">
+          <div id="outline-preview"></div>
+        </div>
+        <div class="muted" style="margin-top: 0.6rem">
+          Красные ✱ — обязательные разделы, серые ○ — необязательные.
+          Перетаскивание сразу видно здесь.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button>Сохранить шаблон</button>
+    <button class="secondary">Сбросить изменения</button>
+    <span class="muted">Шаблон применяется ко всем следующим проверкам; уже созданные отчёты не пересчитываются</span>
+  </div>
+
+  <div class="alert ok" style="margin-top: 1rem">
+    ✅ Макет для согласования: drag &amp; drop, уровни, ✱, маркер названия и предпросмотр
+    работают вживую; «Сохранить» ничего не сохраняет.
+  </div>
+</div>
+
+<script>
+  const container = document.getElementById("sections");
+  const badge = document.getElementById("drop-badge");
+
+  // ---------- маркер названия ----------
+  const markerInput = document.getElementById("marker");
+  function refreshTitleDemo() {
+    const m = markerInput.value.trim().toLowerCase();
+    const c1 = document.getElementById("chip1");
+    const c2 = document.getElementById("chip2");
+    c1.className = "chip " + (m && c1.textContent.toLowerCase().includes(m) ? "ok" : "bad");
+    c2.className = "chip " + (m && c2.textContent.toLowerCase().includes(m) ? "ok" : "bad");
+    document.getElementById("title-verdict").textContent = m
+      ? (c1.className.includes("ok") ? "— первый проходит, второй нет" : "— примеры не проходят")
+      : "— маркер пуст: подходит любое название";
+    document.getElementById("title-preview").innerHTML = m
+      ? `Название должно содержать: <b>«${markerInput.value}»</b>`
+      : "Любое название (маркер не задан)";
+  }
+  markerInput.addEventListener("input", refreshTitleDemo);
+
+  // ---------- утилиты структуры ----------
+  const rowLevel = (row) => Number(row.dataset.level);
+
+  // блок = строка + её строка aliases + все строки глубже уровня (поддерево)
+  function getBlock(row) {
+    const block = [row];
+    let el = row.nextElementSibling;
+    if (el && el.classList.contains("aliases")) { block.push(el); el = el.nextElementSibling; }
+    while (el && el.classList.contains("section-row") && rowLevel(el) > rowLevel(row)) {
+      block.push(el);
+      const a = el.nextElementSibling;
+      if (a && a.classList.contains("aliases")) { block.push(a); el = a.nextElementSibling; }
+      else el = a;
+    }
+    return block;
+  }
+
+  function applyLevel(row, level) {
+    row.dataset.level = level;
+    row.classList.remove("indent-2", "indent-3");
+    if (level === 2) row.classList.add("indent-2");
+    if (level === 3) row.classList.add("indent-3");
+    row.querySelector(".level-select").selectedIndex = level - 1;
+    const aliases = row.nextElementSibling;
+    if (aliases && aliases.classList.contains("aliases")) {
+      aliases.classList.remove("indent-2", "indent-3");
+      if (level === 2) aliases.classList.add("indent-2");
+      if (level === 3) aliases.classList.add("indent-3");
+      aliases.style.marginLeft = level === 1 ? "3.4rem" : level === 2 ? "5.0rem" : "6.6rem";
+    }
+  }
+
+  // Иерархическая нумерация 1 → 1.1 → 1.1.1: счётчики по уровням,
+  // глубже лежащие сбрасываются при выходе на верхний уровень.
+  // «Дыр» в иерархии не показываем: после Ур.1 раздел Ур.3 отображается как 1.1.
+  function refreshOutline() {
+    const rows = [...container.querySelectorAll(".section-row")];
+    const box = document.getElementById("outline-preview");
+    box.innerHTML = "";
+    const counters = [0, 0, 0];
+    let prevEffective = 0;
+    rows.forEach((row) => {
+      const level = Math.min(rowLevel(row), prevEffective + 1);
+      prevEffective = level;
+      counters[level - 1] += 1;
+      for (let i = level; i < 3; i += 1) counters[i] = 0;
+      const num = counters.slice(0, level).join(".");
+      const name = row.querySelector("input.name").value || "(без названия)";
+      const req = row.querySelector(".req-toggle").classList.contains("on");
+      const item = document.createElement("div");
+      item.className = "outline-item";
+      item.style.marginLeft = (level - 1) * 1.2 + "rem";
+      item.innerHTML =
+        `<span class="num">${num}.</span>` +
+        (req ? '<span class="req">✱ </span>' : '<span class="opt">○ </span>') +
+        name;
+      box.appendChild(item);
+    });
+  }
+
+  // ---------- drag & drop ----------
+  let dragBlock = null; // массив элементов перетаскируемого поддерева
+
+  // тянуть можно только за ручку — чтобы не мешать выделению текста в полях
+  container.addEventListener("mousedown", (e) => {
+    const row = e.target.closest(".section-row");
+    if (row && e.target.closest(".handle")) row.draggable = true;
+  });
+  const clearDraggable = () =>
+    container.querySelectorAll(".section-row").forEach((r) => (r.draggable = false));
+
+  container.addEventListener("dragstart", (e) => {
+    const row = e.target.closest(".section-row");
+    if (!row) return;
+    dragBlock = getBlock(row);
+    dragBlock.forEach((el) => el.classList.add("dragging"));
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", "section");
+  });
+
+  function clearIndicators() {
+    container
+      .querySelectorAll(".drop-before, .drop-after, .nest-target")
+      .forEach((el) => el.classList.remove("drop-before", "drop-after", "nest-target"));
+    badge.style.display = "none";
+  }
+
+  // зона над строкой: 30% сверху / 30% снизу — вставка рядом, середина — вложить
+  function zoneFor(row, e) {
+    const rect = row.getBoundingClientRect();
+    const ratio = (e.clientY - rect.top) / rect.height;
+    if (ratio < 0.3) return "before";
+    if (ratio > 0.7) return "after";
+    return "nest";
+  }
+
+  container.addEventListener("dragover", (e) => {
+    if (!dragBlock) return;
+    const row = e.target.closest(".section-row");
+    clearIndicators();
+    if (!row || dragBlock.includes(row)) return; // на своё поддерево не бросаем
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const zone = zoneFor(row, e);
+    const name = row.querySelector("input.name").value;
+    if (zone === "nest") {
+      if (rowLevel(row) >= 3) {
+        badge.textContent = "Максимум 3 уровня — вложить нельзя";
+      } else {
+        row.classList.add("nest-target");
+        badge.textContent = `Вложить в «${name}» (Ур. ${rowLevel(row) + 1})`;
+      }
+    } else {
+      row.classList.add(zone === "before" ? "drop-before" : "drop-after");
+      badge.textContent = zone === "before" ? `Вставить до «${name}»` : `Вставить после «${name}»`;
+    }
+    badge.style.display = "block";
+    badge.style.left = e.clientX + 14 + "px";
+    badge.style.top = e.clientY + 14 + "px";
+  });
+
+  container.addEventListener("drop", (e) => {
+    if (!dragBlock) return;
+    const row = e.target.closest(".section-row");
+    if (!row || dragBlock.includes(row)) { clearIndicators(); return; }
+    e.preventDefault();
+    const zone = zoneFor(row, e);
+
+    const oldRootLevel = rowLevel(dragBlock[0]);
+    let newRootLevel;
+    let anchor; // элемент, относительно которого вставляем блок
+    if (zone === "nest" && rowLevel(row) < 3) {
+      newRootLevel = rowLevel(row) + 1;
+      anchor = getBlock(row)[getBlock(row).length - 1]; // в конец детей этой строки
+    } else if (zone === "before") {
+      newRootLevel = rowLevel(row);
+      anchor = row.previousElementSibling === dragBlock[0] ? null : row;
+      // частный случай: тянем на строку сразу после нашего блока — это «после»
+      const prev = dragBlock[dragBlock.length - 1].nextElementSibling;
+      if (prev === row) { newRootLevel = rowLevel(row); anchor = row; }
+      if (anchor === row && row.previousElementSibling && dragBlock.includes(row.previousElementSibling)) {
+        // блок стоит прямо перед строкой — «до» уже выполнено, просто выравниваем уровень
+        const delta0 = newRootLevel - oldRootLevel;
+        shiftLevels(dragBlock, delta0);
+        finishDrag();
+        return;
+      }
+    } else {
+      newRootLevel = rowLevel(row);
+      anchor = getBlock(row)[getBlock(row).length - 1];
+    }
+
+    // нельзя вставить «до/после», если место совпадает с текущим и уровень тот же
+    const delta = newRootLevel - oldRootLevel;
+    if (anchor) anchor.after(...dragBlock);
+    shiftLevels(dragBlock, delta);
+    finishDrag();
+  });
+
+  function shiftLevels(block, delta) {
+    if (!delta) return;
+    block.forEach((el) => {
+      if (!el.classList.contains("section-row")) return;
+      applyLevel(el, Math.min(3, Math.max(1, rowLevel(el) + delta)));
+    });
+  }
+
+  function finishDrag() {
+    dragBlock.forEach((el) => el.classList.remove("dragging"));
+    dragBlock = null;
+    clearDraggable();
+    clearIndicators();
+    refreshOutline();
+  }
+
+  container.addEventListener("dragend", () => {
+    if (dragBlock) finishDrag();
+    clearDraggable();
+    clearIndicators();
+  });
+  container.addEventListener("dragleave", (e) => {
+    if (!container.contains(e.relatedTarget)) clearIndicators();
+  });
+
+  // ---------- кнопки строк ----------
+  container.addEventListener("click", (e) => {
+    const row = e.target.closest(".section-row");
+    if (!row) return;
+    if (e.target.classList.contains("req-toggle")) {
+      e.target.classList.toggle("on");
+      refreshOutline();
+    }
+    if (e.target.classList.contains("row-x")) {
+      getBlock(row).forEach((el) => el.remove());
+      refreshOutline();
+    }
+  });
+  container.addEventListener("change", (e) => {
+    const row = e.target.closest(".section-row");
+    if (row && e.target.classList.contains("level-select")) {
+      applyLevel(row, e.target.selectedIndex + 1);
+      refreshOutline();
+    }
+  });
+  container.addEventListener("input", (e) => {
+    if (e.target.classList.contains("name")) refreshOutline();
+  });
+
+  document.getElementById("add-section").addEventListener("click", () => {
+    const row = document.createElement("div");
+    row.className = "section-row";
+    row.dataset.level = "1";
+    row.innerHTML =
+      '<span class="handle">⋮⋮</span>' +
+      '<select class="level-select"><option selected>Ур. 1</option><option>Ур. 2</option><option>Ур. 3</option></select>' +
+      '<input class="name" value="Новый раздел" />' +
+      '<button class="req-toggle" title="Обязательный раздел">✱</button>' +
+      '<button class="row-x" title="Удалить">✕</button>';
+    container.appendChild(row);
+    refreshOutline();
+  });
+
+  refreshTitleDemo();
+  refreshOutline();
+</script>
+</body>
+</html>

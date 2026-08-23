@@ -26,6 +26,14 @@ async def lifespan(app: FastAPI):
         if created:
             logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
 
+    # Первая версия шаблона требований — из файла, если в БД ещё нет
+    from app.database import SessionLocal
+    from app.services.template_store import seed_if_missing
+
+    with SessionLocal() as db:
+        if seed_if_missing(db) is not None:
+            logger.info("Первая версия шаблона требований создана из файла")
+
     # ФТ-CR-5: регламентная автосинхронизация раз в N часов
     scheduler = None
     if settings.confluence_base_url:
@@ -89,11 +97,13 @@ def create_app(settings=None) -> FastAPI:
     from app.routers.documents import router as documents_router
     from app.routers.health import router as health_router
     from app.routers.sync import router as sync_router
+    from app.routers.templates import router as templates_router
 
     app.include_router(health_router)
     app.include_router(analysts_router)
     app.include_router(documents_router)
     app.include_router(sync_router)
+    app.include_router(templates_router)
 
     return app
 
