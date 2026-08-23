@@ -8,14 +8,7 @@ import {
   type DocumentListItem,
   type DocumentPage,
 } from "../api";
-
-const STATUS_LABELS: Record<string, string> = {
-  not_checked: "не проверено",
-  in_progress: "проверяется",
-  passed: "пройдено",
-  failed: "не пройдено",
-  error: "ошибка",
-};
+import StatusBadge from "../StatusBadge";
 
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
@@ -211,54 +204,82 @@ export default function DocumentsPage() {
   };
 
   return (
-    <section>
+    <section className="page">
+      <nav className="breadcrumbs">
+        <Link to="/">Ревью требований</Link>
+        <span className="sep">/</span>
+        <span>Аналитики</span>
+      </nav>
       <div className="page-head">
         <div>
-          <div className="muted">
-            <Link to="/">← Аналитики</Link>
+          <h1 className="page-title">
+            <span className="title-icon">📄</span>
+            {analyst ? analyst.full_name : "Документы аналитика"}
+          </h1>
+          <div className="page-meta">
+            <span className="muted">{loaded ? `Всего документов: ${total}` : ""}</span>
           </div>
-          <h1>{analyst ? analyst.full_name : "Документы аналитика"}</h1>
         </div>
-        <div className="actions">
-          {bulk?.running ? (
-            <span className="muted">
-              Проверка {bulk.done} из {bulk.total}…
-            </span>
-          ) : (
-            <button onClick={validateAll} disabled={loaded && total === 0}>
-              Проверить все
-            </button>
-          )}
-          <span className="muted">{loaded ? `Всего документов: ${total}` : ""}</span>
+        <div className="head-actions">
+          <button className="btn primary" onClick={validateAll} disabled={loaded && total === 0}>
+            <span aria-hidden="true">▶</span> Проверить все
+          </button>
         </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
 
-      <div className="search">
-        <input
-          placeholder="Поиск по названию…"
-          value={query}
-          onChange={(e) => applyFilters(e.target.value, urlFilter)}
-        />
-        <input
-          placeholder="Поиск по ссылке…"
-          value={urlFilter}
-          disabled={semantic}
-          title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
-          onChange={(e) => applyFilters(query, e.target.value)}
-        />
-        <label className="muted toggle" title="GLM ищет по смыслу, а не по словам">
+      {bulk?.running && (
+        <div className="progress-line">
+          <span>
+            Проверка {bulk.done} из {bulk.total}…
+          </span>
+          <div className="progress-bar">
+            <div style={{ width: `${bulk.total ? Math.round((bulk.done / bulk.total) * 100) : 0}%` }} />
+          </div>
+        </div>
+      )}
+
+      <div className="form-row">
+        <span className="field">
+          <label htmlFor="doc-title-search">Название</label>
+          <input
+            id="doc-title-search"
+            className="text-input"
+            placeholder="Поиск по названию…"
+            style={{ width: "260px" }}
+            value={query}
+            onChange={(e) => applyFilters(e.target.value, urlFilter)}
+          />
+        </span>
+        <span className="field">
+          <label htmlFor="doc-url-search">Ссылка</label>
+          <input
+            id="doc-url-search"
+            className="text-input"
+            placeholder="Поиск по ссылке…"
+            style={{ width: "220px" }}
+            value={urlFilter}
+            disabled={semantic}
+            title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
+            onChange={(e) => applyFilters(query, e.target.value)}
+          />
+        </span>
+        <label
+          className="checkbox-label"
+          style={{ marginBottom: "6px" }}
+          title="GLM ищет по смыслу, а не по словам"
+        >
           <input
             type="checkbox"
             checked={semantic}
             onChange={(e) => setSemantic(e.target.checked)}
           />
-          по смыслу (ИИ)
+          по смыслу <span className="lozenge new">ИИ</span>
         </label>
       </div>
 
-      <table className="table">
+      <table className="cf">
         <thead>
           <tr>
             <th>Название</th>
@@ -283,33 +304,38 @@ export default function DocumentsPage() {
                 )}
               </td>
               <td>
-                <span className={`badge ${doc.validation_status}`}>
-                  {STATUS_LABELS[doc.validation_status] ?? doc.validation_status}
-                </span>
+                <StatusBadge status={doc.validation_status} />
               </td>
-              <td>{formatDate(doc.created_in_confluence_at)}</td>
-              <td>{formatDate(doc.last_modified_in_confluence_at)}</td>
-              <td>{formatDate(doc.last_validated_at)}</td>
+              <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
+              <td className="cell-subtle">{formatDate(doc.last_modified_in_confluence_at)}</td>
+              <td className="cell-subtle">{formatDate(doc.last_validated_at)}</td>
               <td
-                className="muted"
                 title={doc.has_note ? "Есть заметка руководителя" : "Заметки нет"}
               >
                 {doc.has_note ? "📝" : "—"}
               </td>
-              <td>
+              <td className="actions-cell">
                 <button
-                  className="secondary"
+                  className="btn small subtle"
                   disabled={bulk?.running || doc.validation_status === "in_progress"}
                   onClick={() => validateOne(doc.id)}
                 >
-                  {doc.validation_status === "not_checked" ? "Проверить" : "Актуализировать"}
+                  {doc.validation_status === "not_checked" ? (
+                    <>
+                      <span aria-hidden="true">▶</span> Проверить
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">⟳</span> Актуализировать
+                    </>
+                  )}
                 </button>
               </td>
             </tr>
           ))}
           {!loading && loaded && items.length === 0 && (
             <tr>
-              <td colSpan={7} className="empty">
+              <td colSpan={7} className="table-empty">
                 {semantic && query.trim().length < SEMANTIC_MIN
                   ? `Введите минимум ${SEMANTIC_MIN} символа — поиск по смыслу через ИИ`
                   : "Документы не найдены"}
@@ -319,12 +345,12 @@ export default function DocumentsPage() {
         </tbody>
       </table>
 
-      {!loading && hasMore && <div ref={attachSentinel} className="empty" />}
+      {!loading && hasMore && <div ref={attachSentinel} className="sentinel" />}
 
       <div className="pagination">
-        {loading && <span>Загрузка…</span>}
+        {loading && <span className="muted">Загрузка…</span>}
         {!loading && loaded && items.length > 0 && (
-          <span>
+          <span className="muted">
             Показано {items.length} из {total}
           </span>
         )}

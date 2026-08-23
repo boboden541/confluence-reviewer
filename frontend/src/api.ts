@@ -118,6 +118,15 @@ export interface DocumentPage {
   page_size: number;
 }
 
+/** Строка результата глобального поиска (шапка сервиса) */
+export interface SearchHit {
+  id: number;
+  title: string;
+  validation_status: ValidationStatus;
+  analyst_id: number;
+  analyst_name: string;
+}
+
 export interface DocumentDetail extends DocumentListItem {
   content_html: string;
   sync_error: string | null;

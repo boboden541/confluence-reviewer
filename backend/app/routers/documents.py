@@ -15,6 +15,7 @@ from app.schemas import (
     DocumentListItem,
     NoteOut,
     NoteUpdate,
+    SearchHit,
     ValidationReportOut,
 )
 from app.services import tasks
@@ -166,6 +167,38 @@ def semantic_documents(
         item.score = round(score, 3)
         items.append(item)
     return DocumentPage(items=items, total=len(items), page=1, page_size=limit)
+
+
+@router.get("/documents/search", response_model=list[SearchHit])
+def search_documents(
+    db: Session = Depends(get_db),
+    q: str = Query(default="", max_length=256, description="Подстрока названия документа"),
+    limit: int = Query(default=8, ge=1, le=25),
+):
+    """Глобальный поиск по названию — документы всех аналитиков (шапка сервиса)."""
+    needle = q.strip().lower()
+    if len(needle) < 2:
+        return []
+    rows = db.execute(
+        select(ConfluenceDocument, Analyst.full_name)
+        .join(Analyst, ConfluenceDocument.analyst_id == Analyst.id)
+        .where(func.lower(ConfluenceDocument.title).like(f"%{needle}%"))
+        .order_by(
+            ConfluenceDocument.last_modified_in_confluence_at.desc().nullslast(),
+            ConfluenceDocument.id.desc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        SearchHit(
+            id=doc.id,
+            title=doc.title,
+            validation_status=doc.validation_status,
+            analyst_id=doc.analyst_id,
+            analyst_name=analyst_name,
+        )
+        for doc, analyst_name in rows
+    ]
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)

@@ -227,32 +227,41 @@ export default function TemplatePage() {
 
   if (loading) {
     return (
-      <section>
+      <section className="page">
         <p className="muted">Загрузка шаблона…</p>
       </section>
     );
   }
 
   return (
-    <section>
+    <section className="page">
+      <nav className="breadcrumbs">
+        <span>Ревью требований</span>
+        <span className="sep">/</span>
+        <span>Шаблон требований</span>
+      </nav>
       <div className="page-head">
         <div>
-          <h1>Шаблон требований</h1>
-          <div className="muted">
+          <h1 className="page-title">
+            <span className="title-icon">🧩</span>Шаблон требований
+          </h1>
+          <div className="page-meta">
             {template
               ? `${template.name} · версия №${template.id} от ${formatDate(template.created_at)}`
               : ""}
           </div>
         </div>
-        <button onClick={save} disabled={saving || !template}>
-          {saving ? "Сохранение…" : "Сохранить шаблон"}
-        </button>
+        <div className="head-actions">
+          <button className="btn primary" onClick={save} disabled={saving || !template}>
+            {saving ? "Сохранение…" : "Сохранить шаблон"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
-      <div className="card">
+      <div className="panel">
         <h2>Название документа</h2>
         <div className="marker-row">
           <span className="muted">Название должно содержать маркер</span>
@@ -279,7 +288,7 @@ export default function TemplatePage() {
       </div>
 
       <div className="template-layout">
-        <div className="card">
+        <div className="panel">
           <h2>Структура разделов</h2>
           <p className="muted">
             Тяните за <span className="handle-demo">⋮⋮</span> — верх/низ строки: вставить рядом
@@ -345,14 +354,14 @@ export default function TemplatePage() {
             ))}
           </div>
           <div className="add-row">
-            <button className="secondary small" onClick={addSection}>
+            <button className="btn subtle small" onClick={addSection}>
               + Добавить раздел
             </button>
           </div>
         </div>
 
         <div className="template-side">
-          <div className="card">
+          <div className="panel">
             <h2>Как будет проверяться</h2>
             <div className="muted">Название документа:</div>
             <div className="preview-box">
@@ -393,7 +402,7 @@ export default function TemplatePage() {
           </div>
 
           {versions.length > 0 && (
-            <div className="card">
+            <div className="panel">
               <h2>История версий</h2>
               <ul className="versions">
                 {versions.slice(0, 5).map((version) => (
@@ -408,12 +417,12 @@ export default function TemplatePage() {
         </div>
       </div>
 
-      <div className="actions">
-        <button onClick={save} disabled={saving || !template}>
+      <div className="head-actions" style={{ marginTop: "16px" }}>
+        <button className="btn primary" onClick={save} disabled={saving || !template}>
           {saving ? "Сохранение…" : "Сохранить шаблон"}
         </button>
         <button
-          className="secondary"
+          className="btn subtle"
           onClick={() => {
             setInfo("");
             load();
