@@ -1,20 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Markdown from "../Markdown";
+import StatusBadge from "../StatusBadge";
 import {
   api,
   ApiError,
   type DocumentDetail,
   type ValidationReport,
 } from "../api";
-
-const STATUS_LABELS: Record<string, string> = {
-  not_checked: "не проверено",
-  in_progress: "проверяется",
-  passed: "пройдено",
-  failed: "не пройдено",
-  error: "ошибка",
-};
 
 interface Note {
   document_id: number;
@@ -157,8 +150,8 @@ export default function ReportPage() {
 
   if (!doc) {
     return (
-      <section>
-        {error ? <div className="alert error">{error}</div> : <p className="empty">Загрузка…</p>}
+      <section className="page">
+        {error ? <div className="alert error">{error}</div> : <p className="muted">Загрузка…</p>}
       </section>
     );
   }
@@ -174,16 +167,19 @@ export default function ReportPage() {
   };
 
   return (
-    <section>
+    <section className="page">
+      <nav className="breadcrumbs">
+        <button className="link" onClick={goBack}>
+          ← Назад
+        </button>
+      </nav>
       <div className="page-head">
         <div>
-          <div className="muted">
-            <button className="link" onClick={goBack}>
-              ← Назад
-            </button>
-          </div>
-          <h1>{doc.title}</h1>
-          <div className="muted">
+          <h1 className="page-title">
+            <span className="title-icon">📄</span>
+            {doc.title}
+          </h1>
+          <div className="page-meta">
             <a href={doc.url} target="_blank" rel="noreferrer">
               Открыть в Confluence ↗
             </a>
@@ -193,22 +189,23 @@ export default function ReportPage() {
             {formatDateTime(doc.last_modified_in_confluence_at)}
           </div>
         </div>
-        <span className={`badge ${doc.validation_status}`}>
-          {STATUS_LABELS[doc.validation_status] ?? doc.validation_status}
-        </span>
+        <div className="head-actions">
+          <StatusBadge status={doc.validation_status} />
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
-      <div className="actions" style={{ marginBottom: "1.2rem" }}>
-        <button onClick={() => runValidation(false)} disabled={busy || checking}>
-          {checking ? "Проверяется…" : "Проверить"}
+      <div className="head-actions" style={{ marginBottom: "16px" }}>
+        <button className="btn primary" onClick={() => runValidation(false)} disabled={busy || checking}>
+          {checking ? "Проверяется…" : "▶ Проверить"}
         </button>
-        <button className="secondary" onClick={() => runValidation(true)} disabled={busy || checking}>
-          Проверить заново
+        <button className="btn subtle" onClick={() => runValidation(true)} disabled={busy || checking}>
+          ⟳ Проверить заново
         </button>
         <button
+          className="btn subtle"
           onClick={sendComment}
           disabled={busy || !report || !!report.error_message || !!report.comment_sent_at}
           title={
@@ -226,8 +223,8 @@ export default function ReportPage() {
       </div>
 
       {!report && (
-        <div className="card">
-          <p className="empty">
+        <div className="panel">
+          <p className="table-empty">
             Документ ещё не проверялся. Нажмите «Проверить», чтобы запустить
             проверку шаблона и ИИ-анализ содержимого.
           </p>
@@ -235,7 +232,7 @@ export default function ReportPage() {
       )}
 
       {report?.error_message && (
-        <div className="card">
+        <div className="panel">
           <h2>❌ Ошибка проверки</h2>
           <div className="markdown error">{report.error_message}</div>
         </div>
@@ -243,7 +240,7 @@ export default function ReportPage() {
 
       {report && !report.error_message && (
         <>
-          <div className="card">
+          <div className="panel">
             <h2>
               {report.template_passed ? "✅" : "❌"} Соответствие шаблону требований
             </h2>
@@ -252,7 +249,7 @@ export default function ReportPage() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="panel">
             <h2>
               {report.ai_passed == null ? "—️" : report.ai_passed ? "✅" : "❌"} Качество
               содержимого (ИИ)
@@ -260,7 +257,7 @@ export default function ReportPage() {
             <div className="markdown">
               <Markdown text={report.ai_findings || "—"} />
             </div>
-            <div className="muted" style={{ marginTop: "0.6rem" }}>
+            <div className="muted" style={{ marginTop: "10px" }}>
               Отчёт сформирован {formatDateTime(report.created_at)} (запуск:{" "}
               {report.triggered_by === "auto" ? "автоматический" : "ручной"})
             </div>
@@ -268,16 +265,18 @@ export default function ReportPage() {
         </>
       )}
 
-      <div className="card">
+      <div className="panel">
         <h2>📝 Заметки руководителя (Markdown)</h2>
         <textarea
+          className="text-input"
+          rows={5}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Замечания, договорённости, задачи по документу…"
         />
         {note.trim() && (
           <div className="note-preview">
-            <div className="muted" style={{ marginBottom: "0.3rem" }}>
+            <div className="muted" style={{ marginBottom: "4px" }}>
               Предпросмотр:
             </div>
             <div className="markdown">
@@ -285,12 +284,16 @@ export default function ReportPage() {
             </div>
           </div>
         )}
-        <div className="actions" style={{ marginTop: "0.7rem" }}>
-          <button onClick={saveNote} disabled={busy || note === noteOriginal}>
+        <div className="head-actions" style={{ marginTop: "12px" }}>
+          <button
+            className="btn primary"
+            onClick={saveNote}
+            disabled={busy || note === noteOriginal}
+          >
             Сохранить заметку
           </button>
           <button
-            className="secondary"
+            className="btn subtle danger"
             onClick={deleteNote}
             disabled={busy || (!noteOriginal && !note)}
           >

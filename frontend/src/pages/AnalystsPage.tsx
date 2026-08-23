@@ -165,80 +165,144 @@ export default function AnalystsPage() {
   };
 
   return (
-    <section>
+    <section className="page">
+      <nav className="breadcrumbs">
+        <span>Ревью требований</span>
+        <span className="sep">/</span>
+        <span>Аналитики</span>
+      </nav>
       <div className="page-head">
-        <h1>Аналитики</h1>
-        <button onClick={syncAll} disabled={syncing}>
-          {syncing ? "Синхронизация…" : "Синхронизировать всех"}
-        </button>
+        <div>
+          <h1 className="page-title">
+            <span className="title-icon">👥</span>Аналитики
+          </h1>
+          <div className="page-meta">
+            {analysts.length} аналитиков · документов:{" "}
+            {analysts.reduce((acc, a) => acc + a.documents_count, 0)}
+          </div>
+        </div>
+        <div className="head-actions">
+          <button className="btn primary" onClick={syncAll} disabled={syncing}>
+            {syncing ? "Синхронизация…" : "⟳ Синхронизировать всех"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
       <form
-        className="search"
+        className="panel add-panel"
         onSubmit={(e) => {
           e.preventDefault();
           addAnalyst();
         }}
       >
-        <input
-          placeholder="ФИО нового аналитика"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <input
-          placeholder="email@example.com"
-          type="email"
-          value={newEmail}
-          onChange={(e) => setNewEmail(e.target.value)}
-        />
-        <button type="submit" disabled={creating || !newName.trim() || !newEmail.trim()}>
-          {creating ? "Добавление…" : "Добавить аналитика"}
-        </button>
+        <div className="form-row">
+          <span className="field">
+            <label htmlFor="new-analyst-name">ФИО</label>
+            <input
+              id="new-analyst-name"
+              className="text-input"
+              placeholder="ФИО нового аналитика"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </span>
+          <span className="field">
+            <label htmlFor="new-analyst-email">Email</label>
+            <input
+              id="new-analyst-email"
+              className="text-input"
+              placeholder="email@example.com"
+              type="email"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+            />
+          </span>
+          <button
+            className="btn subtle"
+            type="submit"
+            disabled={creating || !newName.trim() || !newEmail.trim()}
+            style={{ marginBottom: "1px" }}
+          >
+            {creating ? "Добавление…" : (
+              <>
+                <span aria-hidden="true">＋</span> Добавить аналитика
+              </>
+            )}
+          </button>
+        </div>
       </form>
 
       {editing && (
         <form
-          className="search"
+          className="panel"
           onSubmit={(e) => {
             e.preventDefault();
             saveEdit();
           }}
         >
-          <input
-            placeholder="ФИО аналитика"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-          />
-          <input
-            placeholder="Новый email аналитика"
-            type="email"
-            value={editEmail}
-            onChange={(e) => setEditEmail(e.target.value)}
-          />
-          <input
-            placeholder="username в Confluence (пусто — авто)"
-            value={editUsername}
-            onChange={(e) => setEditUsername(e.target.value)}
-          />
-          <button type="submit" disabled={savingEdit || !editName.trim() || !editEmail.trim()}>
-            {savingEdit ? "Сохранение…" : "Сохранить"}
-          </button>
-          <button type="button" className="secondary" onClick={cancelEdit}>
-            Отмена
-          </button>
+          <h2>Изменение: {editing.full_name}</h2>
+          <div className="form-row">
+            <span className="field">
+              <label htmlFor="edit-analyst-name">ФИО</label>
+              <input
+                id="edit-analyst-name"
+                className="text-input"
+                placeholder="ФИО аналитика"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </span>
+            <span className="field">
+              <label htmlFor="edit-analyst-email">Email</label>
+              <input
+                id="edit-analyst-email"
+                className="text-input"
+                placeholder="Новый email аналитика"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+              />
+            </span>
+            <span className="field">
+              <label htmlFor="edit-analyst-username">Username в Confluence</label>
+              <input
+                id="edit-analyst-username"
+                className="text-input"
+                placeholder="username в Confluence (пусто — авто)"
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value)}
+              />
+            </span>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={savingEdit || !editName.trim() || !editEmail.trim()}
+              style={{ marginBottom: "1px" }}
+            >
+              {savingEdit ? "Сохранение…" : "Сохранить"}
+            </button>
+            <button
+              className="btn subtle"
+              type="button"
+              onClick={cancelEdit}
+              style={{ marginBottom: "1px" }}
+            >
+              Отмена
+            </button>
+          </div>
         </form>
       )}
 
-      <table className="table">
+      <table className="cf">
         <thead>
           <tr>
             <th>ФИО</th>
             <th>Email</th>
             <th>Username в Confluence</th>
-            <th>Документов</th>
+            <th className="num">Документов</th>
             <th>Последняя синхронизация</th>
             <th>Ошибки</th>
             <th />
@@ -250,40 +314,45 @@ export default function AnalystsPage() {
               <td>
                 <Link to={`/analysts/${analyst.id}`}>{analyst.full_name}</Link>
               </td>
-              <td>{analyst.email}</td>
-              <td>{analyst.confluence_username ?? "auto"}</td>
-              <td>{analyst.documents_count}</td>
-              <td>{formatDate(analyst.last_synced_at)}</td>
-              <td className={analyst.sync_error ? "error" : ""}>
+              <td className="cell-subtle">{analyst.email}</td>
+              <td className="cell-subtle">{analyst.confluence_username ?? "auto"}</td>
+              <td className="num">{analyst.documents_count}</td>
+              <td className="cell-subtle">{formatDate(analyst.last_synced_at)}</td>
+              <td className={analyst.sync_error ? "cell-error" : "cell-subtle"}>
                 {analyst.sync_error ?? "—"}
               </td>
-              <td className="actions">
+              <td className="actions-cell">
                 <button
+                  className="btn small subtle"
                   onClick={() => syncAnalyst(analyst.id)}
                   disabled={syncing || busyAnalyst === analyst.id}
                 >
-                  {busyAnalyst === analyst.id ? "…" : "Синхронизировать"}
+                  {busyAnalyst === analyst.id ? "…" : (
+                    <>
+                      <span aria-hidden="true">⟳</span> Синхронизировать
+                    </>
+                  )}
                 </button>
                 <button
-                  className="secondary"
+                  className="btn small subtle"
                   onClick={() => startEdit(analyst)}
                   disabled={syncing}
                 >
-                  Изменить
+                  <span aria-hidden="true">✎</span> Изменить
                 </button>
                 <button
-                  className="secondary"
+                  className="btn small subtle danger"
                   onClick={() => deleteAnalyst(analyst)}
                   disabled={syncing}
                 >
-                  Удалить
+                  <span aria-hidden="true">🗑</span> Удалить
                 </button>
               </td>
             </tr>
           ))}
           {analysts.length === 0 && (
             <tr>
-              <td colSpan={7} className="empty">
+              <td colSpan={7} className="table-empty">
                 Аналитики ещё не заведены
               </td>
             </tr>

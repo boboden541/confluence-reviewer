@@ -97,3 +97,69 @@ def test_get_document_detail(client):
     assert body["analyst_id"] == analyst_id
     assert "<h1>Введение</h1>" in body["content_html"]
     assert client.get("/api/documents/99999").status_code == 404
+
+
+def _global_search_seed() -> tuple[int, int]:
+    """Два аналитика с документами, у которых пересекаются названия."""
+    with SessionLocal() as db:
+        first = Analyst(full_name="Первый", email="first@mts.ru")
+        second = Analyst(full_name="Второй", email="second@mts.ru")
+        db.add_all([first, second])
+        db.flush()
+        older = now_utc() - timedelta(days=10)
+        newer = now_utc() - timedelta(hours=1)
+        db.add_all(
+            [
+                ConfluenceDocument(
+                    analyst_id=first.id,
+                    confluence_page_id="2001",
+                    title="[СТ] GDS-15 Загрузка кино",
+                    url="https://conf.test/2001",
+                    content_html="<h1>Введение</h1>",
+                    last_modified_in_confluence_at=older,
+                    validation_status=ValidationStatus.FAILED,
+                ),
+                ConfluenceDocument(
+                    analyst_id=second.id,
+                    confluence_page_id="2002",
+                    title="GDS-15 ревью",
+                    url="https://conf.test/2002",
+                    content_html="<h1>Введение</h1>",
+                    last_modified_in_confluence_at=newer,
+                    validation_status=ValidationStatus.PASSED,
+                ),
+                ConfluenceDocument(
+                    analyst_id=second.id,
+                    confluence_page_id="2003",
+                    title="Без совпадений",
+                    url="https://conf.test/2003",
+                    content_html="<h1>Введение</h1>",
+                    last_modified_in_confluence_at=newer,
+                    validation_status=ValidationStatus.NOT_CHECKED,
+                ),
+            ]
+        )
+        db.commit()
+        return first.id, second.id
+
+
+def test_global_search_across_analysts(client):
+    _global_search_seed()
+    body = client.get("/api/documents/search", params={"q": "gds-15"}).json()
+    # регистр не важен, оба аналитика найдены, без совпадений — нет
+    assert [hit["title"] for hit in body] == ["GDS-15 ревью", "[СТ] GDS-15 Загрузка кино"]
+    assert body[0]["analyst_name"] == "Второй"
+    assert body[0]["validation_status"] == "passed"
+    assert all(hit["analyst_id"] for hit in body)
+
+
+def test_global_search_short_query_returns_empty(client):
+    _global_search_seed()
+    assert client.get("/api/documents/search", params={"q": "g"}).json() == []
+    assert client.get("/api/documents/search").json() == []
+
+
+def test_global_search_limit(client):
+    _global_search_seed()
+    body = client.get("/api/documents/search", params={"q": "gds", "limit": 1}).json()
+    assert len(body) == 1 and body[0]["title"] == "GDS-15 ревью"

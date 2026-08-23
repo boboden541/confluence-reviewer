@@ -72,6 +72,16 @@ class DocumentPage(BaseModel):
     page_size: int
 
 
+class SearchHit(BaseModel):
+    """Результат глобального поиска по документам (строка поиска в шапке)."""
+
+    id: int
+    title: str
+    validation_status: ValidationStatus
+    analyst_id: int
+    analyst_name: str
+
+
 class DocumentOut(DocumentListItem):
     """Полный объект документа (для страницы отчёта)."""
 
