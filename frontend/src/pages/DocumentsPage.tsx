@@ -279,6 +279,7 @@ export default function DocumentsPage() {
         </label>
       </div>
 
+      <div className="table-wrap">
       <table className="cf">
         <thead>
           <tr>
@@ -344,6 +345,7 @@ export default function DocumentsPage() {
           )}
         </tbody>
       </table>
+      </div>
 
       {!loading && hasMore && <div ref={attachSentinel} className="sentinel" />}
 
