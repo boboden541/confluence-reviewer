@@ -148,6 +148,9 @@ export interface ValidationReport {
   overall_passed: boolean;
   error_message: string | null;
   comment_sent_at: string | null;
+  /** Чем проверяли: версия шаблона и пользовательский промт (null — стандартный) */
+  template_version_id?: number | null;
+  ai_prompt?: string | null;
 }
 
 export interface SyncStatus {
@@ -172,6 +175,31 @@ export interface BulkValidationStatus {
   started_at: string | null;
   finished_at: string | null;
   error: string | null;
+}
+
+// --- диалог настроек проверки (шаблон + промт ИИ) ---
+
+export interface TemplateOption {
+  /** id = номер версии шаблона */
+  id: number;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  section_count: number;
+}
+
+export interface ValidationConfig {
+  templates: TemplateOption[];
+  default_prompt: string;
+}
+
+/** POST /api/documents/validate-batch */
+export interface BatchValidationRequest {
+  document_ids: number[];
+  force?: boolean;
+  template_id?: number | null;
+  /** null/undefined — стандартный промт; строка — пользовательский на этот запуск */
+  ai_prompt?: string | null;
 }
 
 // --- Шаблон требований (редактор) ---

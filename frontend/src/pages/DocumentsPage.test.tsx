@@ -97,6 +97,29 @@ const DOCUMENTS = {
   page_size: 20,
 };
 
+const VALIDATION_CONFIG = {
+  templates: [
+    {
+      id: 1,
+      name: "Шаблон системных требований [СТ] (MTSLIVE)",
+      description: "Восстановлен из шаблона Confluence",
+      is_default: true,
+      section_count: 24,
+    },
+  ],
+  default_prompt: "Ты — опытный ведущий системный аналитик, ревьюер требований.",
+};
+
+const BULK_IDLE = {
+  running: false,
+  analyst_id: null,
+  total: 0,
+  done: 0,
+  started_at: null,
+  finished_at: null,
+  error: null,
+};
+
 describe("DocumentsPage", () => {
   beforeEach(() => {
     localStorage.setItem(AUTH_STORAGE_KEY, btoa("u:p"));
@@ -277,10 +300,12 @@ describe("DocumentsPage", () => {
     ).toBe(true);
   });
 
-  it("runs single validation from the row button", async () => {
+  it("runs single validation from the row button through the settings dialog", async () => {
     const fetchMock = mockFetch({
       "/api/analysts/5": ANALYST,
       "/api/analysts/5/documents": DOCUMENTS,
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/sync/bulk-validation": BULK_IDLE,
     });
 
     render(
@@ -295,12 +320,22 @@ describe("DocumentsPage", () => {
     const refresh = await screen.findByRole("button", { name: "Актуализировать" });
     fireEvent.click(refresh);
 
+    // кнопка в строке открывает тот же диалог настроек, что и для партии
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Проверка документов")).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Запустить проверку — 1 док\./ }),
+    );
+
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
         ([url, init]) =>
-          String(url) === "/api/documents/11/validate" && init?.method === "POST",
+          String(url) === "/api/documents/validate-batch" && init?.method === "POST",
       );
       expect(call).toBeDefined();
+      const body = JSON.parse(String(call?.[1]?.body));
+      expect(body.document_ids).toEqual([11]);
+      expect(body.force).toBe(true); // «актуализировать» = перепроверить безусловно
     });
   });
 
@@ -503,19 +538,12 @@ describe("DocumentsPage", () => {
     expect(within(dialog).getByText(/Шаблон требований/)).toBeInTheDocument();
   });
 
-  it("starts bulk validation for the analyst", async () => {
+  it("starts validation for the selected documents", async () => {
     const fetchMock = mockFetch({
       "/api/analysts/5": ANALYST,
       "/api/analysts/5/documents": DOCUMENTS,
-      "/api/sync/bulk-validation": {
-        running: false,
-        analyst_id: null,
-        total: 0,
-        done: 0,
-        started_at: null,
-        finished_at: null,
-        error: null,
-      },
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/sync/bulk-validation": BULK_IDLE,
     });
 
     render(
@@ -526,14 +554,104 @@ describe("DocumentsPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Проверить все" }));
+    // без выбора кнопка неактивна
+    const run = await screen.findByRole("button", { name: /Проверить выбранные/ });
+    expect(run).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Выбрать документ: [СТ] GDS-15 Загрузка кино"));
+    fireEvent.click(screen.getByLabelText("Выбрать документ: [СТ] Вторая доработка"));
+    expect(screen.getByText("Выбрано: 2")).toBeInTheDocument();
+    expect(run).toHaveTextContent("Проверить выбранные (2)");
+
+    fireEvent.click(run);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Запустить проверку — 2 док\./ }),
+    );
 
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
         ([url, init]) =>
-          String(url) === "/api/analysts/5/validate-all" && init?.method === "POST",
+          String(url) === "/api/documents/validate-batch" && init?.method === "POST",
       );
       expect(call).toBeDefined();
+      const body = JSON.parse(String(call?.[1]?.body));
+      expect(body.document_ids).toEqual([11, 12]);
+      expect(body.force).toBe(false);
+      expect(body.ai_prompt).toBeNull(); // промт не меняли — идём со стандартным
+    });
+  });
+
+  it("selects all loaded documents from the header checkbox and clears selection", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByLabelText("Выбрать все загруженные документы"));
+    expect(screen.getByText("Выбрано: 2")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Проверить выбранные \(2\)/ }),
+    ).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Снять выделение" }));
+    expect(screen.queryByText("Выбрано: 2")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Проверить выбранные/ })).toBeDisabled();
+  });
+
+  it("prefills the standard prompt and sends the edited one", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/sync/bulk-validation": BULK_IDLE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Проверить" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const textarea = within(dialog).getByLabelText(
+      "Промт ИИ-проверки",
+    ) as HTMLTextAreaElement;
+    // всегда предзаполнен стандартным промтом
+    expect(textarea.value).toBe(VALIDATION_CONFIG.default_prompt);
+
+    // правка подсвечивается и откатывается одной кнопкой
+    fireEvent.change(textarea, { target: { value: "мой особый промт" } });
+    expect(within(dialog).getByText(/промт изменён/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Вернуть стандартный промт/ }));
+    expect(textarea.value).toBe(VALIDATION_CONFIG.default_prompt);
+
+    // изменённый промт уходит в запуск, стандартный — нет
+    fireEvent.change(textarea, { target: { value: "особый промт партии" } });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Запустить проверку — 1 док\./ }),
+    );
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/validate-batch" && init?.method === "POST",
+      );
+      expect(call).toBeDefined();
+      const body = JSON.parse(String(call?.[1]?.body));
+      expect(body.ai_prompt).toBe("особый промт партии");
+      expect(body.document_ids).toEqual([12]); // кнопка «Проверить» — из строки doc 12
     });
   });
 

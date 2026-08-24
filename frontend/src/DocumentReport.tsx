@@ -371,6 +371,8 @@ export default function DocumentReport({
             <div className="muted report-meta">
               Отчёт сформирован {formatDateTime(report.created_at)} · запуск:{" "}
               {report.triggered_by === "auto" ? "автоматический" : "ручной"}
+              {report.ai_prompt && " · промт ИИ: изменён"}
+              {report.template_version_id != null && ` · шаблон v${report.template_version_id}`}
             </div>
           </div>
         </>

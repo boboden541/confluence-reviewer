@@ -93,11 +93,20 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
 
 
 async def _execute_validation(
-    document_id: int, trigger: TriggerType, force: bool
+    document_id: int,
+    trigger: TriggerType,
+    force: bool,
+    template_version_id: int | None = None,
+    ai_prompt: str | None = None,
 ) -> Any:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     return await asyncio.to_thread(
-        run_validation, document_id, trigger=trigger, force=force
+        run_validation,
+        document_id,
+        trigger=trigger,
+        force=force,
+        template_version_id=template_version_id,
+        ai_prompt=ai_prompt,
     )
 
 
@@ -106,8 +115,13 @@ def start_validation(
     *,
     trigger: TriggerType = TriggerType.MANUAL,
     force: bool = False,
+    template_version_id: int | None = None,
+    ai_prompt: str | None = None,
 ) -> tuple[bool, str]:
-    """Запустить валидацию документа в фоне (ФТ-CR-16). True — запущена."""
+    """Запустить валидацию документа в фоне (ФТ-CR-16). True — запущена.
+
+    template_version_id / ai_prompt — настройки из диалога проверки.
+    """
     current = _validation_state.get(document_id)
     if current and current.get("status") == "running":
         return False, "Валидация документа уже выполняется"
@@ -119,7 +133,9 @@ def start_validation(
             "error": None,
         }
         try:
-            report = await _execute_validation(document_id, trigger, force)
+            report = await _execute_validation(
+                document_id, trigger, force, template_version_id, ai_prompt
+            )
             _validation_state[document_id].update(
                 status="done", report_id=report.id, finished_at=now_utc().isoformat()
             )
@@ -144,8 +160,16 @@ def bulk_status() -> dict[str, Any]:
     return dict(_bulk_state)
 
 
-def start_bulk_validation(analyst_id: int) -> tuple[bool, str]:
-    """Проверить все документы аналитика последовательно, в фоне.
+def start_bulk_validation(
+    document_ids: list[int],
+    analyst_id: int | None = None,
+    *,
+    force: bool = False,
+    template_version_id: int | None = None,
+    ai_prompt: str | None = None,
+) -> tuple[bool, str]:
+    """Проверить документы последовательно, в фоне (выбор пользователя
+    в списке или «все документы аналитика»).
 
     Не-force: актуальные (не менявшиеся после последней проверки) документы
     пропускаются идемпотентностью run_validation. Последовательный прогон —
@@ -153,39 +177,30 @@ def start_bulk_validation(analyst_id: int) -> tuple[bool, str]:
     """
     if _bulk_state["running"]:
         return False, "Массовая проверка уже выполняется"
-
-    with SessionLocal() as db:
-        doc_ids = (
-            db.scalars(
-                select(ConfluenceDocument.id)
-                .where(ConfluenceDocument.analyst_id == analyst_id)
-                .order_by(ConfluenceDocument.id)
-            )
-            .all()
-        )
-
-    if not doc_ids:
-        return False, "У аналитика нет документов для проверки"
+    if not document_ids:
+        return False, "Не выбраны документы для проверки"
 
     async def runner() -> None:
         _bulk_state.update(
             running=True,
             analyst_id=analyst_id,
-            total=len(doc_ids),
+            total=len(document_ids),
             done=0,
             started_at=now_utc().isoformat(),
             finished_at=None,
             error=None,
         )
         try:
-            for doc_id in doc_ids:
+            for doc_id in document_ids:
                 _validation_state[doc_id] = {
                     "status": "running",
                     "started_at": now_utc().isoformat(),
                     "error": None,
                 }
                 try:
-                    report = await _execute_validation(doc_id, TriggerType.MANUAL, False)
+                    report = await _execute_validation(
+                        doc_id, TriggerType.MANUAL, force, template_version_id, ai_prompt
+                    )
                     _validation_state[doc_id].update(
                         status="done", report_id=report.id, finished_at=now_utc().isoformat()
                     )
@@ -207,3 +222,19 @@ def start_bulk_validation(analyst_id: int) -> tuple[bool, str]:
 
     loop.create_task(runner())
     return True, "Массовая проверка запущена"
+
+
+def start_analyst_bulk_validation(analyst_id: int) -> tuple[bool, str]:
+    """«Проверить все документы аналитика»: набор id из БД (legacy-эндпоинт)."""
+    with SessionLocal() as db:
+        doc_ids = (
+            db.scalars(
+                select(ConfluenceDocument.id)
+                .where(ConfluenceDocument.analyst_id == analyst_id)
+                .order_by(ConfluenceDocument.id)
+            )
+            .all()
+        )
+    if not doc_ids:
+        return False, "У аналитика нет документов для проверки"
+    return start_bulk_validation(doc_ids, analyst_id)

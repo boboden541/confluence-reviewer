@@ -133,7 +133,7 @@ async def validate_all_documents(analyst_id: int, db: Session = Depends(get_db))
     get_analyst_or_404(analyst_id, db)
     from app.services import tasks
 
-    started, message = tasks.start_bulk_validation(analyst_id)
+    started, message = tasks.start_analyst_bulk_validation(analyst_id)
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"status": "started", "message": message}

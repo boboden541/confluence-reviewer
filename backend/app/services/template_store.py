@@ -209,8 +209,17 @@ def version_to_dict(version: TemplateVersion) -> dict:
     }
 
 
-def get_template_for_validation(db: Session) -> dict | None:
-    """Шаблон для проверки документа: активная версия; если БД пуста —
-    сеем из файла (страховка для первого запуска и сервисных тестов)."""
+def get_template_for_validation(
+    db: Session, version_id: int | None = None
+) -> tuple[dict, int] | None:
+    """Шаблон для проверки документа: (словарь для валидатора, id версии).
+
+    version_id — конкретная версия, выбранная пользователем в диалоге
+    проверки (пока выбор один — активная). None — активная версия;
+    если БД пуста, сеем из файла (страховка для первого запуска и тестов).
+    """
+    if version_id is not None:
+        version = db.get(TemplateVersion, version_id)
+        return (version_to_dict(version), version.id) if version is not None else None
     active = get_active(db) or seed_if_missing(db)
-    return version_to_dict(active) if active is not None else None
+    return (version_to_dict(active), active.id) if active is not None else None

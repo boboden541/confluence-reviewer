@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -17,6 +17,7 @@ import {
 } from "../api";
 import StatusBadge from "../StatusBadge";
 import DocumentReport from "../DocumentReport";
+import ValidationDialog from "../ValidationDialog";
 
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
@@ -39,7 +40,6 @@ function formatDate(value: string | null): string {
 
 export default function DocumentsPage() {
   const { analystId } = useParams();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [items, setItems] = useState<DocumentListItem[]>([]);
@@ -60,6 +60,39 @@ export default function DocumentsPage() {
   // защита от устаревших ответов: сменили режим/фильтр — старый ответ
   // не должен затирать новое состояние списка
   const loadSeq = useRef(0);
+
+  // Выбранные для проверки документы (чекбоксы в таблице). Выделение
+  // живёт до запуска проверки или смены фильтра/аналитика.
+  const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
+  const [dialogOpen, setDialogOpen] = useState(false);
+  // «Актуализировать» из строки — перевалидировать безусловно (force)
+  const [dialogForce, setDialogForce] = useState(false);
+
+  const toggleSelected = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllLoaded = (on: boolean) => {
+    setSelected((on ? new Set(items.map((doc) => doc.id)) : new Set()));
+  };
+
+  // смена фильтра или аналитика — выделение больше не относится к списку
+  useEffect(() => {
+    setSelected(new Set());
+  }, [analystId, query, urlFilter]);
+
+  const allLoadedSelected = items.length > 0 && items.every((doc) => selected.has(doc.id));
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selected.size > 0 && !allLoadedSelected;
+    }
+  }, [selected, allLoadedSelected]);
 
   // Быстрый просмотр документа в панели справа: ?doc=<id> в адресе —
   // панель переживает F5, а кнопка «назад» браузера её закрывает.
@@ -252,40 +285,43 @@ export default function DocumentsPage() {
     }
   };
 
-  // Ручная проверка одного документа: запускаем и переходим к отчёту.
-  const validateOne = async (documentId: number) => {
-    setError("");
-    try {
-      await api(`/api/documents/${documentId}/validate`, { method: "POST" });
-      navigate(`/documents/${documentId}`);
-    } catch (exc) {
-      setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
-    }
+  // Проверка выбранных документов: сначала диалог настроек (шаблон + промт ИИ).
+  const openBulkDialog = () => {
+    setDialogForce(false);
+    setDialogOpen(true);
   };
 
-  // Массовая проверка всех документов аналитика (в фоне, с прогрессом).
-  const validateAll = async () => {
-    if (!analystId) return;
-    setError("");
-    try {
-      await api(`/api/analysts/${analystId}/validate-all`, { method: "POST" });
-      if (bulkTimer.current) clearInterval(bulkTimer.current);
-      bulkTimer.current = setInterval(async () => {
-        try {
-          const status = await api<BulkValidationStatus>("/api/sync/bulk-validation");
-          setBulk(status);
-          if (!status.running) {
-            if (bulkTimer.current) clearInterval(bulkTimer.current);
-            bulkTimer.current = null;
-            await load(1, false);
-          }
-        } catch {
-          // статус недоступен — продолжаем опрос
+  // Кнопка в строке документа: тот же диалог на один документ.
+  // Уже проверенный документ «актуализируем» — запускаем с force.
+  const openSingleDialog = (doc: DocumentListItem) => {
+    setSelected(new Set([doc.id]));
+    setDialogForce(doc.validation_status !== "not_checked");
+    setDialogOpen(true);
+  };
+
+  // Опрос прогресса фоновой проверки: строка «k из N…», по завершении — обновить список.
+  const startBulkPolling = () => {
+    if (bulkTimer.current) clearInterval(bulkTimer.current);
+    bulkTimer.current = setInterval(async () => {
+      try {
+        const status = await api<BulkValidationStatus>("/api/sync/bulk-validation");
+        setBulk(status);
+        if (!status.running) {
+          if (bulkTimer.current) clearInterval(bulkTimer.current);
+          bulkTimer.current = null;
+          await load(1, false);
         }
-      }, 1000);
-    } catch (exc) {
-      setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
-    }
+      } catch {
+        // статус недоступен — продолжаем опрос
+      }
+    }, 1000);
+  };
+
+  // Диалог отработал: проверка ушла в фон, выделение больше не нужно
+  const handleLaunched = () => {
+    setDialogOpen(false);
+    setSelected(new Set());
+    startBulkPolling();
   };
 
   // Смена фильтра: обновляем стейт и адрес (replace — история не засоряется).
@@ -318,11 +354,29 @@ export default function DocumentsPage() {
           </div>
         </div>
         <div className="head-actions">
-          <button className="btn primary" onClick={validateAll} disabled={loaded && total === 0}>
-            <span aria-hidden="true">▶</span> Проверить все
+          <button
+            className="btn primary"
+            onClick={openBulkDialog}
+            disabled={selected.size === 0}
+            title="Отметьте документы чекбоксами — настройки проверки спросят шаблон и промт ИИ"
+          >
+            <span aria-hidden="true">▶</span> Проверить выбранные
+            {selected.size > 0 ? ` (${selected.size})` : ""}
           </button>
         </div>
       </div>
+
+      {selected.size > 0 && (
+        <div className="selection-bar">
+          <span className="count">Выбрано: {selected.size}</span>
+          <button className="btn ghost" onClick={() => selectAllLoaded(true)}>
+            Выбрать все загруженные
+          </button>
+          <button className="btn ghost" onClick={() => setSelected(new Set())}>
+            Снять выделение
+          </button>
+        </div>
+      )}
 
       {error && <div className="alert error">{error}</div>}
 
@@ -380,6 +434,17 @@ export default function DocumentsPage() {
       <table className="cf">
         <thead>
           <tr>
+            <th className="cb-cell">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                className="cb"
+                checked={allLoadedSelected}
+                onChange={(e) => selectAllLoaded(e.target.checked)}
+                aria-label="Выбрать все загруженные документы"
+                title="Выбрать все загруженные по фильтру"
+              />
+            </th>
             <th>Название</th>
             <th>Статус проверки</th>
             <th>Создан</th>
@@ -392,6 +457,15 @@ export default function DocumentsPage() {
         <tbody>
           {items.map((doc) => (
             <tr key={doc.id}>
+              <td className="cb-cell">
+                <input
+                  type="checkbox"
+                  className="cb"
+                  checked={selected.has(doc.id)}
+                  onChange={() => toggleSelected(doc.id)}
+                  aria-label={`Выбрать документ: ${doc.title}`}
+                />
+              </td>
               <td>
                 <button
                   type="button"
@@ -423,7 +497,7 @@ export default function DocumentsPage() {
                 <button
                   className="btn small subtle"
                   disabled={bulk?.running || doc.validation_status === "in_progress"}
-                  onClick={() => validateOne(doc.id)}
+                  onClick={() => openSingleDialog(doc)}
                 >
                   {doc.validation_status === "not_checked" ? (
                     <>
@@ -440,7 +514,7 @@ export default function DocumentsPage() {
           ))}
           {!loading && loaded && items.length === 0 && (
             <tr>
-              <td colSpan={7} className="table-empty">
+              <td colSpan={8} className="table-empty">
                 {semantic && query.trim().length < SEMANTIC_MIN
                   ? `Введите минимум ${SEMANTIC_MIN} символа — поиск по смыслу через ИИ`
                   : "Документы не найдены"}
@@ -461,6 +535,15 @@ export default function DocumentsPage() {
           </span>
         )}
       </div>
+
+      {dialogOpen && selected.size > 0 && (
+        <ValidationDialog
+          documentIds={[...selected]}
+          force={dialogForce}
+          onClose={() => setDialogOpen(false)}
+          onLaunched={handleLaunched}
+        />
+      )}
 
       {drawerDocId != null && (
         <>

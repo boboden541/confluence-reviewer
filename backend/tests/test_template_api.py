@@ -118,7 +118,7 @@ def test_validation_uses_saved_template_and_keeps_repeatable_blocks(client, monk
             (),
             {
                 "validate": staticmethod(
-                    lambda title, markdown: AIValidationResult(
+                    lambda title, markdown, system_prompt=None: AIValidationResult(
                         passed=True,
                         summary="ok",
                         findings_markdown="✅ Замечаний нет.",

@@ -150,14 +150,20 @@ class AIValidator:
             )
         return self._client
 
-    def validate(self, title: str, markdown: str) -> AIValidationResult:
-        """Оценить документ (заголовок + содержимое в Markdown)."""
+    def validate(
+        self, title: str, markdown: str, system_prompt: str | None = None
+    ) -> AIValidationResult:
+        """Оценить документ (заголовок + содержимое в Markdown).
+
+        system_prompt — переопределение стандартного промта на один запуск
+        (выбор пользователя в диалоге проверки); None — стандартный.
+        """
         user_message = f"Документ требований «{title}»:\n\n{markdown}"
         try:
             response = self._get_client().messages.create(
                 model=self._settings.ai_model,
                 max_tokens=self._settings.ai_max_tokens,
-                system=SYSTEM_PROMPT,
+                system=system_prompt or SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_message}],
             )
         except anthropic.AuthenticationError as exc:

@@ -23,7 +23,7 @@ from app.models import (
     ValidationReport,
     ValidationStatus,
 )
-from app.services.ai_validator import AIValidationError, AIValidator
+from app.services.ai_validator import AIValidationError, AIValidator, SYSTEM_PROMPT
 from app.services.html_to_markdown import html_to_markdown
 from app.services.template_store import get_template_for_validation
 from app.services.template_validator import validate_template
@@ -75,8 +75,19 @@ def run_validation(
     *,
     trigger: TriggerType = TriggerType.MANUAL,
     force: bool = False,
+    template_version_id: int | None = None,
+    ai_prompt: str | None = None,
 ) -> ValidationReport:
-    """Прогнать проверки документа и сохранить отчёт."""
+    """Прогнать проверки документа и сохранить отчёт.
+
+    template_version_id / ai_prompt — настройки из диалога проверки:
+    конкретная версия шаблона и промт ИИ на этот запуск. Изменённый
+    промт — всегда перевалидация (иначе отчёт вернулся бы из кэша
+    идемпотентности, и настройка не применилась бы).
+    """
+    custom_prompt = ai_prompt if ai_prompt and ai_prompt.strip() else None
+    force = force or (custom_prompt is not None and custom_prompt != SYSTEM_PROMPT)
+
     with SessionLocal() as db:
         doc = db.get(ConfluenceDocument, document_id)
         if doc is None:
@@ -94,18 +105,19 @@ def run_validation(
         doc.validation_status = ValidationStatus.IN_PROGRESS
         db.commit()
 
-        # Шаблон требований — активная версия из БД (редактируется через UI)
-        template = get_template_for_validation(db)
+        # Шаблон требований — выбранная версия или активная (редактируется через UI)
+        template = get_template_for_validation(db, template_version_id)
         if template is None:
             return _save_error(db, doc, trigger, "Шаблон требований не настроен")
+        template_dict, used_template_id = template
         try:
-            template_result = validate_template(doc.title, doc.content_html, template)
+            template_result = validate_template(doc.title, doc.content_html, template_dict)
         except Exception as exc:  # noqa: BLE001 — любая ошибка = статус error
             return _save_error(db, doc, trigger, f"Ошибка проверки шаблона: {exc}")
 
         try:
             markdown = html_to_markdown(doc.content_html)
-            ai_result = AIValidator().validate(doc.title, markdown)
+            ai_result = AIValidator().validate(doc.title, markdown, custom_prompt)
         except AIValidationError as exc:
             return _save_error(db, doc, trigger, str(exc))
 
@@ -118,6 +130,9 @@ def run_validation(
             ai_passed=ai_result.passed,
             ai_findings=ai_result.findings_markdown,
             overall_passed=overall,
+            template_version_id=used_template_id,
+            # в отчёте храним только пользовательский промт (стандартный и так в коде)
+            ai_prompt=custom_prompt if custom_prompt != SYSTEM_PROMPT else None,
         )
         db.add(report)
         doc.validation_status = ValidationStatus.PASSED if overall else ValidationStatus.FAILED
