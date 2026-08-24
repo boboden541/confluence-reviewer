@@ -87,8 +87,11 @@ class DocumentOut(DocumentListItem):
 
     content_html: str
     sync_error: str | None = None
-    # для кнопки «Назад» при прямом открытии страницы документа
+    # для кнопки «Назад» и хлебных крошек при прямом открытии страницы документа
     analyst_id: int
+    # автор документа: сразу видно, чью страницу открыли (не из ORM — заполняет роутер)
+    analyst_name: str = ""
+    analyst_email: str | None = None
 
 
 # --- Отчёты валидации ---

@@ -34,6 +34,8 @@ const DOCUMENT = {
   content_html: "<h1>Введение</h1>",
   sync_error: null,
   analyst_id: 5,
+  analyst_name: "Иван Тестов",
+  analyst_email: "t@mts.ru",
 };
 
 const REPORT = {
@@ -84,7 +86,8 @@ describe("ReportPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+    // название видно и в крошках, и в заголовке страницы
+    expect(await screen.findAllByText("[СТ] GDS-15 Загрузка кино")).toHaveLength(2);
     expect(
       screen.getByText(/Соответствие шаблону требований/),
     ).toBeInTheDocument();
@@ -204,29 +207,45 @@ describe("ReportPage", () => {
     expect(screen.queryByDisplayValue("старая заметка")).not.toBeInTheDocument();
   });
 
-  it("goes back in history preserving the previous screen", async () => {
+  it("shows the document author with email", async () => {
     mockFetch({
       "/api/documents/42": DOCUMENT,
       "/api/documents/42/report": REPORT,
       "/api/documents/42/note": NOTE,
     });
 
-    renderPage(["/", "/documents/42"]);
+    renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "← Назад" }));
+    // имя видно и в хлебных крошках, и в блоке автора под заголовком
+    expect(await screen.findAllByText("Иван Тестов")).toHaveLength(2);
+    expect(screen.getByText("t@mts.ru")).toBeInTheDocument();
+  });
+
+  it("breadcrumb leads to the analysts list", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+    });
+
+    renderPage(["/documents/42"]);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Аналитики" }));
     expect(await screen.findByText("Список аналитиков")).toBeInTheDocument();
   });
 
-  it("falls back to the analyst document list when opened directly", async () => {
+  it("breadcrumb leads to the analyst's document list", async () => {
     mockFetch({
       "/api/documents/42": DOCUMENT,
       "/api/documents/42/report": REPORT,
       "/api/documents/42/note": NOTE,
     });
 
-    renderPage(["/documents/42"]); // нет истории — начальная загрузка
+    renderPage(["/documents/42"]);
 
-    fireEvent.click(await screen.findByRole("button", { name: "← Назад" }));
+    // имя автора — ссылка на его документы (крошка и блок автора)
+    const links = await screen.findAllByRole("link", { name: "Иван Тестов" });
+    fireEvent.click(links[0]);
     expect(await screen.findByText("Список документов")).toBeInTheDocument();
   });
 });

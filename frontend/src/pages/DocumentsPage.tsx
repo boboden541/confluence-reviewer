@@ -9,6 +9,7 @@ import {
   type DocumentPage,
 } from "../api";
 import StatusBadge from "../StatusBadge";
+import DocumentReport from "../DocumentReport";
 
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
@@ -46,6 +47,33 @@ export default function DocumentsPage() {
   // защита от устаревших ответов: сменили режим/фильтр — старый ответ
   // не должен затирать новое состояние списка
   const loadSeq = useRef(0);
+
+  // Быстрый просмотр документа в панели справа: ?doc=<id> в адресе —
+  // панель переживает F5, а кнопка «назад» браузера её закрывает.
+  const docParam = searchParams.get("doc");
+  const drawerDocId = docParam && /^\d+$/.test(docParam) ? Number(docParam) : null;
+
+  const openDoc = (id: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("doc", String(id));
+    setSearchParams(params);
+  };
+
+  const closeDrawer = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("doc");
+    setSearchParams(params, { replace: true });
+  };
+
+  // Esc закрывает панель
+  useEffect(() => {
+    if (drawerDocId == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDrawer();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerDocId, searchParams]);
 
   // targetPage > 1 — догружаем к уже показанным, иначе заменяем список
   // (фильтр/поиск сменились — начинаем с первой страницы).
@@ -194,12 +222,14 @@ export default function DocumentsPage() {
   };
 
   // Смена фильтра: обновляем стейт и адрес (replace — история не засоряется).
+  // Открытую панель просмотра (doc=) сохраняем.
   const applyFilters = (nextQuery: string, nextUrl: string) => {
     setQuery(nextQuery);
     setUrlFilter(nextUrl);
     const params = new URLSearchParams();
     if (nextQuery.trim()) params.set("q", nextQuery.trim());
     if (nextUrl.trim()) params.set("url", nextUrl.trim());
+    if (docParam) params.set("doc", docParam);
     setSearchParams(params, { replace: true });
   };
 
@@ -296,7 +326,14 @@ export default function DocumentsPage() {
           {items.map((doc) => (
             <tr key={doc.id}>
               <td>
-                <Link to={`/documents/${doc.id}`}>{doc.title}</Link>
+                <button
+                  type="button"
+                  className="link doc-link"
+                  title="Открыть панель просмотра"
+                  onClick={() => openDoc(doc.id)}
+                >
+                  {doc.title}
+                </button>
                 {doc.score != null && (
                   <span className="muted" title="Релевантность по мнению ИИ">
                     {" "}
@@ -357,6 +394,35 @@ export default function DocumentsPage() {
           </span>
         )}
       </div>
+
+      {drawerDocId != null && (
+        <>
+          <div className="drawer-backdrop show" onClick={closeDrawer} />
+          <aside className="drawer" role="dialog" aria-label="Просмотр документа">
+            <div className="drawer-toolbar">
+              <button
+                type="button"
+                className="btn small subtle"
+                onClick={() => navigate(`/documents/${drawerDocId}`)}
+                title="Полная страница документа"
+              >
+                <span aria-hidden="true">↗</span> Открыть на отдельной странице
+              </button>
+              <button
+                type="button"
+                className="btn small subtle drawer-close"
+                aria-label="Закрыть панель"
+                onClick={closeDrawer}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="drawer-body">
+              <DocumentReport documentId={drawerDocId} embedded />
+            </div>
+          </aside>
+        </>
+      )}
     </section>
   );
 }

@@ -131,6 +131,9 @@ export interface DocumentDetail extends DocumentListItem {
   content_html: string;
   sync_error: string | null;
   analyst_id: number;
+  /** Автор документа — видно на странице отчёта, чей документ открыт */
+  analyst_name?: string;
+  analyst_email?: string | null;
 }
 
 export interface ValidationReport {
