@@ -1,0 +1,300 @@
+"""Выборочная проверка: диалог настроек — шаблон + промт ИИ, batch-запуск.
+
+Покрывает: GET /api/validation-config, опции одиночной проверки,
+POST /api/documents/validate-batch, влияние промта на идемпотентность
+и аудит «чем проверяли» в отчёте.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from types import SimpleNamespace
+
+from app.database import Base, SessionLocal, engine
+from app.models import Analyst, ConfluenceDocument
+from app.services import tasks
+from app.services.ai_validator import AIValidationResult, SYSTEM_PROMPT
+from app.services.validation import run_validation
+from app.utils import now_utc
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _db():
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+def h(level: int, text: str) -> str:
+    return f"<h{level}>{text}</h{level}>"
+
+
+GOOD_BODY = "".join(
+    [
+        h(1, "Введение"),
+        h(2, "Общая информация"),
+        h(1, "Общее описание"),
+        h(2, "Назначение документа"),
+        h(2, "Контекст"),
+        h(1, "Функциональные требования (BackEnd)"),
+        h(2, "Создать таблицу-справочник"),
+        h(3, "Общее описание"),
+        h(3, "Описание доработок"),
+        h(3, "Критерии приёмки"),
+        h(3, "Документация по функционалу"),
+        h(1, "Требования к интерфейсам"),
+        h(2, "Сценарии использования"),
+        h(1, "Ревью требований"),
+    ]
+)
+
+
+def seed_document(title: str = "[СТ] Доработка", body: str = GOOD_BODY) -> int:
+    with SessionLocal() as db:
+        analyst = Analyst(
+            full_name="Тест", email=f"sel-{now_utc().timestamp()}-{id(object())}@mts.ru"
+        )
+        db.add(analyst)
+        db.flush()
+        doc = ConfluenceDocument(
+            analyst_id=analyst.id,
+            confluence_page_id=str(now_utc().timestamp()).replace(".", ""),
+            title=title,
+            url="https://conf.test/pages/sel",
+            content_html=body,
+            last_modified_in_confluence_at=now_utc(),
+        )
+        db.add(doc)
+        db.commit()
+        return doc.id
+
+
+class FakeAIValidator:
+    """Подмена ИИ: запоминает промт каждого вызова."""
+
+    calls = 0
+    prompts: list[str | None] = []
+
+    def validate(self, title, markdown, system_prompt=None):
+        type(self).calls += 1
+        type(self).prompts.append(system_prompt)
+        return AIValidationResult(
+            passed=True, summary="ok", findings_markdown="✅", findings_count=0, model="t"
+        )
+
+
+@pytest.fixture()
+def fake_ai(monkeypatch):
+    FakeAIValidator.calls = 0
+    FakeAIValidator.prompts = []
+    monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    return FakeAIValidator
+
+
+def wait_bulk_done(timeout_s: float = 5.0) -> dict:
+    deadline = time.monotonic() + timeout_s
+    st = tasks.bulk_status()
+    while st["running"] and time.monotonic() < deadline:
+        time.sleep(0.05)
+        st = tasks.bulk_status()
+    return st
+
+
+# --- GET /api/validation-config ---
+
+
+def test_validation_config_returns_active_template_and_default_prompt(client):
+    body = client.get("/api/validation-config").json()
+    assert body["default_prompt"] == SYSTEM_PROMPT
+    assert "ревьюер технических требований" in body["default_prompt"]
+
+    assert len(body["templates"]) == 1  # пока шаблон один; список — задел
+    tpl = body["templates"][0]
+    assert tpl["is_default"] is True
+    assert tpl["section_count"] > 0
+    assert "СТ" in tpl["name"]
+
+
+# --- run_validation: промт и шаблон на запуск ---
+
+
+def test_custom_prompt_reaches_ai_and_is_saved_in_report(client, fake_ai):
+    doc_id = seed_document()
+    custom = SYSTEM_PROMPT + "\n\nДополнительно: особое внимание к граничным случаям."
+    report = run_validation(doc_id, ai_prompt=custom)
+    assert fake_ai.prompts == [custom]
+    assert report.ai_prompt == custom  # в отчёте — что реально применено
+
+
+def test_default_prompt_not_saved_and_not_forced(client, fake_ai):
+    doc_id = seed_document()
+    first = run_validation(doc_id)  # стандартный промт
+    second = run_validation(doc_id, ai_prompt=SYSTEM_PROMPT)  # диалог вернул дефолт без правок
+    assert fake_ai.calls == 1  # идемпотентность работает: дефолтный промт ≠ повод перепроверять
+    assert second.id == first.id
+    assert second.ai_prompt is None
+
+
+def test_custom_prompt_forces_revalidation_of_unchanged_doc(client, fake_ai):
+    doc_id = seed_document()
+    first = run_validation(doc_id)
+    custom = SYSTEM_PROMPT.replace("опытный", "внимательный")
+    second = run_validation(doc_id, ai_prompt=custom)
+    assert fake_ai.calls == 2  # изменённый промт обходит идемпотентность
+    assert second.id != first.id
+    assert second.ai_prompt == custom
+
+
+def test_blank_prompt_is_ignored(client, fake_ai):
+    doc_id = seed_document()
+    report = run_validation(doc_id, ai_prompt="   ")
+    assert report.ai_prompt is None
+    assert fake_ai.prompts == [None]  # пустая строка = стандартный промт
+
+
+def test_specific_template_version_is_used(client, fake_ai):
+    """Проверка идёт по выбранной версии шаблона, а не только по активной."""
+    doc_id = seed_document(title="GDS-42 Изменение")  # маркер СТ не совпадает
+    # активная версия (сеется из файла) требует маркер СТ → шаблон не пройден
+    fail_report = run_validation(doc_id)
+    assert fail_report.template_passed is False
+
+    # сохраняем вторую версию с маркером GDS и одним обязательным разделом
+    assert (
+        client.put(
+            "/api/template",
+            json={
+                "title_marker": "GDS",
+                "sections": [{"level": 1, "text": "Введение", "required": True, "aliases": []}],
+            },
+        ).status_code
+        == 200
+    )
+    versions = client.get("/api/template/versions").json()
+    old_version_id = next(v["id"] for v in versions if not v["is_active"])
+
+    # документ не менялся, но force: по старой версии снова провал, по новой — пройден
+    pass_report = run_validation(doc_id, force=True)
+    assert pass_report.template_passed is True
+    assert pass_report.template_version_id == versions[0]["id"]  # активная (новая)
+
+    fail_by_choice = run_validation(doc_id, force=True, template_version_id=old_version_id)
+    assert fail_by_choice.template_passed is False  # выбранная версия реально применена
+    assert fail_by_choice.template_version_id == old_version_id
+
+
+# --- API: одиночный запуск с телом-опциями ---
+
+
+def test_validate_endpoint_accepts_options_body(client, monkeypatch):
+    doc_id = seed_document()
+    captured: dict = {}
+
+    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None):
+        captured.update(
+            template=template_version_id, prompt=ai_prompt, doc=document_id
+        )
+        return SimpleNamespace(id=9)
+
+    monkeypatch.setattr(tasks, "run_validation", fake_run)
+    resp = client.post(
+        f"/api/documents/{doc_id}/validate?force=true",
+        json={"template_id": 1, "ai_prompt": "мой промт"},
+    )
+    assert resp.status_code == 202
+    for _ in range(50):
+        state = tasks.validation_status().get(doc_id, {})
+        if state.get("status") in {"done", "error", "not_found"}:
+            break
+        time.sleep(0.05)
+    assert captured == {"doc": doc_id, "template": 1, "prompt": "мой промт"}
+
+
+def test_validate_endpoint_without_body_still_works(client, monkeypatch):
+    """Старые клиенты запускают проверку без тела — обратная совместимость."""
+    doc_id = seed_document()
+    monkeypatch.setattr(
+        tasks, "run_validation", lambda document_id, **kw: SimpleNamespace(id=1)
+    )
+    assert client.post(f"/api/documents/{doc_id}/validate").status_code == 202
+
+
+def test_validate_endpoint_unknown_template_404(client):
+    doc_id = seed_document()
+    resp = client.post(f"/api/documents/{doc_id}/validate", json={"template_id": 999})
+    assert resp.status_code == 404
+    assert "Шаблон" in resp.json()["detail"]
+
+
+def test_blank_prompt_rejected_by_schema(client):
+    doc_id = seed_document()
+    resp = client.post(f"/api/documents/{doc_id}/validate", json={"ai_prompt": "  "})
+    assert resp.status_code == 422
+
+
+# --- POST /api/documents/validate-batch ---
+
+
+def test_batch_runs_selected_documents_in_order(client, monkeypatch):
+    ids = [seed_document() for _ in range(3)]
+    seen: list[tuple[int, str | None, int | None]] = []
+
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None):
+        seen.append((document_id, ai_prompt, template_version_id))
+        return SimpleNamespace(id=document_id)
+
+    monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
+    chosen = [ids[2], ids[0], ids[2]]  # порядок сохраняется, дубль убирается
+    resp = client.post(
+        "/api/documents/validate-batch",
+        json={"document_ids": chosen, "template_id": 1, "ai_prompt": "партийный промт"},
+    )
+    assert resp.status_code == 202
+    assert resp.json()["total"] == 2
+
+    st = wait_bulk_done()
+    assert (st["done"], st["total"]) == (2, 2)
+    assert seen == [(ids[2], "партийный промт", 1), (ids[0], "партийный промт", 1)]
+
+
+def test_batch_missing_document_404(client):
+    doc_id = seed_document()
+    resp = client.post("/api/documents/validate-batch", json={"document_ids": [doc_id, 888888]})
+    assert resp.status_code == 404
+    assert "888888" in resp.json()["detail"]
+
+
+def test_batch_empty_ids_and_bad_prompt_422(client):
+    assert client.post("/api/documents/validate-batch", json={"document_ids": []}).status_code == 422
+    doc_id = seed_document()
+    assert (
+        client.post("/api/documents/validate-batch", json={"document_ids": [doc_id], "ai_prompt": " \t "}).status_code
+        == 422
+    )
+
+
+def test_batch_conflict_while_running(client, monkeypatch):
+    doc_id = seed_document()
+
+    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None):
+        await asyncio.sleep(0.2)  # держим прогон открытым
+        return SimpleNamespace(id=1)
+
+    monkeypatch.setattr(tasks, "_execute_validation", slow_exec)
+    assert client.post("/api/documents/validate-batch", json={"document_ids": [doc_id]}).status_code == 202
+    assert client.post("/api/documents/validate-batch", json={"document_ids": [doc_id]}).status_code == 409
+    wait_bulk_done()
+
+
+# --- аудит в API отчёта ---
+
+
+def test_report_exposes_template_and_prompt(client, fake_ai):
+    doc_id = seed_document()
+    run_validation(doc_id, ai_prompt="особый промт этой проверки")
+    body = client.get(f"/api/documents/{doc_id}/report").json()
+    assert body["ai_prompt"] == "особый промт этой проверки"
+    assert body["template_version_id"] is not None

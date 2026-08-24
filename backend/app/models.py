@@ -113,6 +113,12 @@ class ValidationReport(Base):
     ai_findings: Mapped[str | None] = mapped_column(Text, nullable=True)
     overall_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Какой версией шаблона проверяли (NULL — старые отчёты и проверки без выбора)
+    template_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("template_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    # Пользовательский промт ИИ этой проверки (NULL — стандартный промт)
+    ai_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Когда замечания этого отчёта были опубликованы комментарием в Confluence (ФТ-CR-17)
     comment_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

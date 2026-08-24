@@ -113,6 +113,57 @@ class ValidationReportOut(BaseModel):
     overall_passed: bool
     error_message: str | None = None
     comment_sent_at: datetime | None = None
+    # чем проверяли: версия шаблона и пользовательский промт (NULL — стандартный)
+    template_version_id: int | None = None
+    ai_prompt: str | None = None
+
+
+# --- Настройки запуска проверки (диалог выбора шаблона и промта) ---
+
+
+class ValidationOptions(BaseModel):
+    """Настройки одного запуска проверки: шаблон + промт ИИ.
+
+    Все поля опциональны — запуск без тела остаётся совместимым
+    (активный шаблон, стандартный промт).
+    """
+
+    template_id: int | None = Field(default=None, description="Версия шаблона требований")
+    ai_prompt: str | None = Field(
+        default=None, max_length=32_000, description="Промт ИИ на этот запуск"
+    )
+
+    @field_validator("ai_prompt")
+    @classmethod
+    def prompt_not_blank(cls, value: str | None) -> str | None:
+        # пустая строка = «стандартный промт», пробельная — ошибка ввода
+        if value is not None and not value.strip():
+            raise ValueError("Промт не может состоять из одних пробелов")
+        return value
+
+
+class ValidationBatchRequest(ValidationOptions):
+    """Проверка набора выбранных документов (последовательно, в фоне)."""
+
+    document_ids: list[int] = Field(min_length=1, max_length=200)
+    force: bool = Field(default=False, description="Перевалидировать безусловно")
+
+
+class TemplateOptionOut(BaseModel):
+    """Шаблон в списке выбора диалога проверки."""
+
+    id: int
+    name: str
+    description: str | None = None
+    is_default: bool
+    section_count: int
+
+
+class ValidationConfigOut(BaseModel):
+    """Конфиг диалога проверки: доступные шаблоны и стандартный промт ИИ."""
+
+    templates: list[TemplateOptionOut]
+    default_prompt: str
 
 
 # --- Шаблон требований (UI-редактор) ---

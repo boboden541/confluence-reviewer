@@ -2,12 +2,38 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
+
+logger = logging.getLogger("confluence_reviewer.database")
+
+# Колонки, добавленные к существующим таблицам после развёртывания.
+# create_all новые таблицы создаёт, но старые не изменяет — недостающие
+# колонки добавляем ALTER'ами (идемпотентно, sqlite и postgres).
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "validation_reports": [
+        ("template_version_id", "INTEGER REFERENCES template_versions(id) ON DELETE SET NULL"),
+        ("ai_prompt", "TEXT"),
+    ],
+}
+
+
+def _migrate_added_columns() -> None:
+    inspector = inspect(engine)
+    for table, columns in _ADDED_COLUMNS.items():
+        if not inspector.has_table(table):
+            continue  # таблицу создаст create_all уже с новыми колонками
+        existing = {col["name"] for col in inspector.get_columns(table)}
+        with engine.begin() as conn:
+            for name, ddl in columns:
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+                    logger.info("Миграция: добавлена колонка %s.%s", table, name)
 
 
 class Base(DeclarativeBase):
@@ -60,6 +86,7 @@ def init_db(retries: int = 15, delay: float = 2.0) -> None:
     for attempt in range(retries):
         try:
             Base.metadata.create_all(bind=engine)
+            _migrate_added_columns()
             return
         except Exception as exc:  # pragma: no cover - зависит от окружения
             last_error = exc

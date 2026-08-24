@@ -68,17 +68,19 @@ def seed_document(body: str = GOOD_BODY, title: str = "[СТ] Доработка
 
 
 class FakeAIValidator:
-    """Подмена ИИ-валидатора: считает вызовы, может возвращать ошибку."""
+    """Подмена ИИ-валидатора: считает вызовы, помнит промты, может возвращать ошибку."""
 
     calls = 0
+    prompts: list[str | None] = []
     result = AIValidationResult(
         passed=True, summary="ok", findings_markdown="✅ Замечаний нет.",
         findings_count=0, model="test",
     )
     error: AIValidationError | None = None
 
-    def validate(self, title: str, markdown: str) -> AIValidationResult:
+    def validate(self, title: str, markdown: str, system_prompt: str | None = None) -> AIValidationResult:
         type(self).calls += 1
+        type(self).prompts.append(system_prompt)
         if self.error is not None:
             raise self.error
         return self.result
@@ -86,6 +88,7 @@ class FakeAIValidator:
 
 def patch_ai(monkeypatch, passed=True, error=None):
     FakeAIValidator.calls = 0
+    FakeAIValidator.prompts = []
     FakeAIValidator.error = error
     FakeAIValidator.result = AIValidationResult(
         passed=passed,
@@ -252,7 +255,7 @@ def test_bulk_validation_endpoint_runs_all(client, monkeypatch):
     reports = iter([SimpleNamespace(id=101), SimpleNamespace(id=102)])
     seen_triggers: list[TriggerType] = []
 
-    async def fake_exec(document_id, trigger, force):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None):
         seen_triggers.append(trigger)
         return next(reports)
 
@@ -274,7 +277,7 @@ def test_bulk_validation_endpoint_runs_all(client, monkeypatch):
 def test_bulk_validation_conflict_and_document_error(client, monkeypatch):
     analyst_id, doc_ids = seed_analyst_with_documents(2)
 
-    async def slow_exec(document_id, trigger, force):
+    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None):
         await asyncio.sleep(0.3)
         if document_id == doc_ids[0]:
             raise RuntimeError("ИИ недоступен")
@@ -311,7 +314,7 @@ def test_bulk_validation_no_documents_and_unknown_analyst(client):
 def test_validate_endpoint_202_and_report(client, monkeypatch):
     doc_id = seed_document()
 
-    def fake_run(document_id, *, trigger, force=False):
+    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None):
         return SimpleNamespace(id=77)
 
     monkeypatch.setattr(tasks, "run_validation", fake_run)

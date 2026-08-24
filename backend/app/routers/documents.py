@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.confluence import ConfluenceError
 from app.database import get_db
-from app.models import Analyst, ConfluenceDocument, DocumentNote, TriggerType
+from app.models import Analyst, ConfluenceDocument, DocumentNote, TemplateVersion, TriggerType
 from app.schemas import (
     DocumentOut,
     DocumentPage,
@@ -16,15 +18,20 @@ from app.schemas import (
     NoteOut,
     NoteUpdate,
     SearchHit,
+    ValidationBatchRequest,
+    ValidationConfigOut,
+    ValidationOptions,
     ValidationReportOut,
 )
 from app.services import tasks
+from app.services.ai_validator import SYSTEM_PROMPT
 from app.services.comments import (
     CommentError,
     NoReportError,
     publish_report_comment,
 )
 from app.services.semantic_search import SemanticSearchError, SemanticSearcher
+from app.services.template_store import get_active, seed_if_missing
 from app.services.validation import DocumentNotFound, latest_report
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -213,6 +220,29 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
     return out
 
 
+@router.get("/validation-config", response_model=ValidationConfigOut)
+def get_validation_config(db: Session = Depends(get_db)):
+    """Конфиг диалога проверки: доступные шаблоны и стандартный промт ИИ.
+
+    Пока шаблон один (активная версия); структура списка рассчитана
+    на несколько — интерфейс выбора не изменится.
+    """
+    seed_if_missing(db)
+    active = get_active(db)
+    templates = []
+    if active is not None:
+        templates.append(
+            {
+                "id": active.id,
+                "name": active.name,
+                "description": active.description,
+                "is_default": True,
+                "section_count": len(json.loads(active.sections_json)),
+            }
+        )
+    return ValidationConfigOut(templates=templates, default_prompt=SYSTEM_PROMPT)
+
+
 @router.post(
     "/documents/{document_id}/validate",
     status_code=status.HTTP_202_ACCEPTED,
@@ -221,15 +251,65 @@ async def validate_document(
     document_id: int,
     db: Session = Depends(get_db),
     force: bool = Query(default=False, description="Перевалидировать безусловно"),
+    options: ValidationOptions | None = None,
 ):
-    """ФТ-CR-16: ручной запуск валидации (в фоне)."""
+    """ФТ-CR-16: ручной запуск валидации (в фоне).
+
+    Тело (опционально) — настройки из диалога проверки: template_id и ai_prompt.
+    """
     get_document_or_404(document_id, db)
+    _check_template_exists(options.template_id if options else None, db)
     started, message = tasks.start_validation(
-        document_id, trigger=TriggerType.MANUAL, force=force
+        document_id,
+        trigger=TriggerType.MANUAL,
+        force=force,
+        template_version_id=options.template_id if options else None,
+        ai_prompt=options.ai_prompt if options else None,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"detail": message, "document_id": document_id}
+
+
+def _check_template_exists(template_id: int | None, db: Session) -> None:
+    """Выбранная версия шаблона должна существовать (задел на несколько шаблонов)."""
+    if template_id is not None and db.get(TemplateVersion, template_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Шаблон (версия {template_id}) не найден",
+        )
+
+
+@router.post("/documents/validate-batch", status_code=status.HTTP_202_ACCEPTED)
+async def validate_documents_batch(payload: ValidationBatchRequest, db: Session = Depends(get_db)):
+    """Проверка выбранных документов (в фоне, последовательно).
+
+    Не-force: актуальные документы пропускаются идемпотентностью;
+    изменённый промт ИИ сам по себе принуждает к перепроверке.
+    """
+    _check_template_exists(payload.template_id, db)
+    found = set(
+        db.scalars(
+            select(ConfluenceDocument.id).where(ConfluenceDocument.id.in_(payload.document_ids))
+        ).all()
+    )
+    missing = sorted(set(payload.document_ids) - found)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Документы не найдены: {', '.join(map(str, missing))}",
+        )
+    # порядок = порядок выбора, дубликаты не проверяем дважды
+    doc_ids = list(dict.fromkeys(payload.document_ids))
+    started, message = tasks.start_bulk_validation(
+        doc_ids,
+        force=payload.force,
+        template_version_id=payload.template_id,
+        ai_prompt=payload.ai_prompt,
+    )
+    if not started:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
+    return {"status": "started", "message": message, "total": len(doc_ids)}
 
 
 @router.get("/documents/{document_id}/report", response_model=ValidationReportOut)

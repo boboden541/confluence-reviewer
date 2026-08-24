@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Концепт: выборочная проверка с выбором шаблона и промта</title>
+<style>
+  /* Токены из дизайн-системы приложения (styles.css) */
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtleest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --red-bg: #FFEBE6;
+    --red-text: #AE2E24;
+    --grey-bg: #F1F2F4;
+    --grey-text: #44546F;
+    --yellow-bg: #FFF7D6;
+    --yellow-text: #7F5F01;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 14px; color: var(--text); background: var(--bg); }
+
+  /* ===== рамка концепта: заголовок и пояснения ===== */
+  .concept-bar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 24px; font-size: 13px; }
+  .concept-bar b { color: #fff; }
+  .concept-head { max-width: 1060px; margin: 20px auto 0; padding: 0 16px; }
+  .concept-head h1 { font-size: 20px; margin-bottom: 4px; }
+  .concept-head p { color: var(--text-subtle); margin-bottom: 8px; }
+  .concept-steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+  .concept-steps span { background: var(--blue-subtle-bg); color: var(--blue); border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 600; }
+
+  /* ===== фрагмент приложения ===== */
+  .page { max-width: 1060px; margin: 0 auto 60px; padding: 0 16px; }
+  .breadcrumbs { font-size: 12px; color: var(--text-subtle); margin-bottom: 12px; }
+  .breadcrumbs .sep { margin: 0 6px; color: var(--text-subtleest); }
+  .breadcrumbs a { color: var(--blue); text-decoration: none; }
+  .page-card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 20px 24px 24px; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-meta { font-size: 12px; color: var(--text-subtle); margin-top: 4px; }
+
+  /* кнопки */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius); border: none; font: inherit; font-size: 14px; cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; font-weight: 500; }
+  .btn.primary:hover { background: var(--blue-hover); }
+  .btn.primary:disabled, .btn.subtle:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.subtle { background: var(--grey-bg); color: var(--text-subtle); font-weight: 500; }
+  .btn.subtle:hover:not(:disabled) { background: #EBECF0; }
+  .btn.ghost { background: transparent; color: var(--text-subtle); padding: 0 10px; }
+  .btn.ghost:hover { color: var(--text); text-decoration: underline; }
+
+  /* полоса выбора */
+  .selection-bar { display: none; align-items: center; gap: 10px; background: var(--blue-subtle-bg); border-radius: var(--radius); padding: 6px 12px; margin-bottom: 12px; }
+  .selection-bar.show { display: flex; }
+  .selection-bar .count { font-weight: 600; color: var(--blue); font-size: 13px; }
+
+  /* прогресс массовой проверки (уже есть в приложении) */
+  .progress-line { display: none; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 13px; color: var(--text-subtle); }
+  .progress-line.show { display: flex; }
+  .progress-bar { flex: 1; height: 6px; background: var(--border-subtle); border-radius: 3px; overflow: hidden; }
+  .progress-bar i { display: block; height: 100%; background: var(--blue); width: 0; transition: width 0.3s; }
+
+  /* таблица */
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; vertical-align: middle; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-subtle); }
+  tbody tr:hover { background: var(--row-hover); }
+  td.cell-subtle { color: var(--text-subtleest); font-size: 13px; }
+  .doc-link { background: none; border: none; color: var(--blue); font: inherit; cursor: pointer; padding: 0; text-align: left; }
+  .doc-link:hover { text-decoration: underline; }
+
+  /* лузенги (как в приложении) */
+  .lozenge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: none; }
+  .lozenge.success { background: var(--green-bg); color: var(--green-text); }
+  .lozenge.error { background: var(--red-bg); color: var(--red-text); }
+  .lozenge.default { background: var(--grey-bg); color: var(--grey-text); }
+  .lozenge.new { background: var(--blue-subtle-bg); color: var(--blue); }
+  .lozenge.moved { background: var(--yellow-bg); color: var(--yellow-text); }
+
+  /* чекбоксы */
+  .cb { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
+
+  /* ===== модальное окно настроек проверки ===== */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(9, 30, 66, 0.54); z-index: 50; align-items: flex-start; justify-content: center; padding: 6vh 16px; }
+  .overlay.show { display: flex; }
+  .dialog { background: var(--surface); border-radius: var(--radius-page); box-shadow: 0 8px 24px rgba(9, 30, 66, 0.25); width: 680px; max-width: 100%; max-height: 88vh; overflow-y: auto; padding: 24px 28px; }
+  .dialog h2 { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .dialog .sub { color: var(--text-subtle); font-size: 13px; margin-bottom: 20px; }
+
+  .zone-label { margin: 22px 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-subtleest); display: flex; align-items: center; gap: 10px; }
+  .zone-label::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+
+  /* выбор шаблона: карточки-радио */
+  .tpl { display: flex; gap: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 10px 14px; cursor: pointer; margin-bottom: 8px; }
+  .tpl:hover { background: var(--row-hover); }
+  .tpl input { margin-top: 3px; }
+  .tpl .name { font-weight: 600; }
+  .tpl .desc { font-size: 12px; color: var(--text-subtle); margin-top: 2px; }
+  .tpl.selected { border-color: var(--blue); background: var(--blue-subtle-bg); }
+  .tpl.disabled { opacity: 0.55; cursor: not-allowed; }
+  .tpl.disabled:hover { background: transparent; }
+
+  /* промт */
+  .prompt-note { font-size: 12px; color: var(--text-subtle); margin-bottom: 8px; }
+  textarea.prompt { width: 100%; height: 190px; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; resize: vertical; background: #FAFBFC; }
+  textarea.prompt:focus { outline: 2px solid var(--blue-subtle-bg); border-color: var(--blue); }
+  .prompt-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 6px; min-height: 28px; }
+
+  /* футер диалога */
+  .dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-subtle); }
+
+  /* блок «что утверждаем» */
+  .notes { max-width: 1060px; margin: 0 auto 60px; padding: 0 16px; }
+  .notes-card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 20px 24px; }
+  .notes-card h3 { font-size: 15px; margin-bottom: 10px; }
+  .notes-card ol { margin-left: 20px; display: grid; gap: 6px; font-size: 13px; color: var(--text-subtle); }
+  .notes-card b { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="concept-bar">🎨 <b>Концепт фичи</b> · выборочная проверка документов с выбором шаблона и промта ИИ — на утверждение, не продакшн</div>
+
+<div class="concept-head">
+  <h1>Выбор документов + диалог настроек проверки</h1>
+  <p>Интерактивный макет: отметьте документы чекбоксами → нажмите «Проверить выбранные» → выберите шаблон и промт → запустите. Прогресс внизу таблицы — демонстрационный.</p>
+  <div class="concept-steps">
+    <span>1. Чекбоксы в таблице</span>
+    <span>2. Кнопка «Проверить выбранные»</span>
+    <span>3. Диалог: шаблон</span>
+    <span>4. Диалог: промт ИИ (предзаполнен)</span>
+    <span>5. Прогресс проверки</span>
+  </div>
+</div>
+
+<div class="page">
+  <nav class="breadcrumbs">
+    <a href="#">Ревью требований</a><span class="sep">/</span>Аналитики<span class="sep">/</span>Иван Тестов
+  </nav>
+
+  <div class="page-card">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Документы · Иван Тестов</h1>
+        <div class="page-meta">Всего документов: 5</div>
+      </div>
+      <!-- кнопка активна только при выборе; прежняя «Проверить все» уходит —
+           «выбрать все» делает чекбокс в шапке таблицы -->
+      <button class="btn primary" id="btn-run" disabled onclick="openDialog()">▶ Проверить выбранные</button>
+    </div>
+
+    <div class="selection-bar" id="sel-bar">
+      <span class="count" id="sel-count">Выбрано: 0</span>
+      <button class="btn ghost" onclick="clearSelection()">Снять выделение</button>
+      <button class="btn ghost" onclick="selectAll(true)">Выбрать все (по фильтру)</button>
+    </div>
+
+    <div class="progress-line" id="progress">
+      <span id="progress-label">Проверка 0 из 0…</span>
+      <div class="progress-bar"><i id="progress-fill"></i></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" class="cb" id="cb-all" onchange="selectAll(this.checked)"></th>
+          <th>Название</th>
+          <th>Статус проверки</th>
+          <th>Изменён</th>
+          <th title="Заметка руководителя">📝</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr data-id="1">
+          <td><input type="checkbox" class="cb row-cb" onchange="onRowToggle(this)"></td>
+          <td><button class="doc-link">[СТ] GDS-15 Загрузка кино</button></td>
+          <td><span class="lozenge error">не пройдено</span></td>
+          <td class="cell-subtle">18.08.2026</td>
+          <td class="cell-subtle">—</td>
+        </tr>
+        <tr data-id="2">
+          <td><input type="checkbox" class="cb row-cb" onchange="onRowToggle(this)"></td>
+          <td><button class="doc-link">[СТ] GDS-16 Онлайн-очередь кассы</button></td>
+          <td><span class="lozenge success">пройдено</span></td>
+          <td class="cell-subtle">15.08.2026</td>
+          <td class="cell-subtle">📝</td>
+        </tr>
+        <tr data-id="3">
+          <td><input type="checkbox" class="cb row-cb" onchange="onRowToggle(this)"></td>
+          <td><button class="doc-link">[СТ] GDS-17 Возврат билетов</button></td>
+          <td><span class="lozenge default">не проверено</span></td>
+          <td class="cell-subtle">21.08.2026</td>
+          <td class="cell-subtle">—</td>
+        </tr>
+        <tr data-id="4">
+          <td><input type="checkbox" class="cb row-cb" onchange="onRowToggle(this)"></td>
+          <td><button class="doc-link">[СТ] GDS-18 API методы ticketscloud</button></td>
+          <td><span class="lozenge error">не пройдено</span></td>
+          <td class="cell-subtle">20.08.2026</td>
+          <td class="cell-subtle">—</td>
+        </tr>
+        <tr data-id="5">
+          <td><input type="checkbox" class="cb row-cb" onchange="onRowToggle(this)"></td>
+          <td><button class="doc-link">[СТ] GDS-19 Мобильные push-уведомления</button></td>
+          <td><span class="lozenge default">не проверено</span></td>
+          <td class="cell-subtle">22.08.2026</td>
+          <td class="cell-subtle">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ======== ДИАЛОГ НАСТРОЕК ПРОВЕРКИ ======== -->
+<div class="overlay" id="overlay" onclick="if (event.target === this) closeDialog()">
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="Настройки проверки">
+    <h2>Проверка документов</h2>
+    <div class="sub">Будет проверено: <b id="dlg-count">0</b> · по выбору шаблона и промта ИИ</div>
+
+    <div class="zone-label">Шаблон требований</div>
+    <label class="tpl selected" id="tpl-1">
+      <input type="radio" name="tpl" checked onchange="pickTpl(1)">
+      <span>
+        <span class="name">Шаблон системных требований [СТ] (MTSLIVE) <span class="lozenge new">по умолчанию</span></span>
+        <div class="desc">Обязательные и необязательные разделы: Введение, Общее описание, Предлагаемое решение, Функциональные требования… — восстановлен из шаблона Confluence.</div>
+      </span>
+    </label>
+    <label class="tpl disabled" id="tpl-2" title="Появится, когда в системе будет несколько шаблонов">
+      <input type="radio" name="tpl" disabled>
+      <span>
+        <span class="name">Другие шаблоны <span class="lozenge moved">скоро</span></span>
+        <div class="desc">Сейчас в системе один шаблон. Архитектура проверки уже рассчитана на несколько — список расширится без изменения интерфейса.</div>
+      </span>
+    </label>
+
+    <div class="zone-label">Промт ИИ-проверки (GLM)</div>
+    <div class="prompt-note">Предзаполнен стандартным промтом. Меняйте, если для этой партии нужен другой фокус (например, «смотри только на граничные случаи»). Изменение действует <b>только на этот запуск</b> и никуда не сохраняется.</div>
+    <textarea class="prompt" id="prompt" spellcheck="false"></textarea>
+    <div class="prompt-toolbar">
+      <button class="btn ghost" id="btn-restore" onclick="restorePrompt()" style="display:none">⟲ Вернуть стандартный промт</button>
+      <span class="lozenge moved" id="prompt-changed" style="display:none">промт изменён — применится к этому запуску</span>
+    </div>
+
+    <div class="dialog-foot">
+      <button class="btn subtle" onclick="closeDialog()">Отмена</button>
+      <button class="btn primary" onclick="launch()">▶ Запустить проверку — <span id="dlg-count2">0</span> док.</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== ЧТО УТВЕРЖДАЕМ ======== -->
+<div class="notes">
+  <div class="notes-card">
+    <h3>Решения, зашитые в концепт — обсудим при утверждении</h3>
+    <ol>
+      <li><b>Кнопка «Проверить все» уходит.</b> Вместо неё — чекбокс «выбрать все» в шапке таблицы (выбирает всё по текущему фильтру) + кнопка «Проверить выбранные», активная при выборе.</li>
+      <li><b>Промт всегда предзаполнен</b> стандартным (текущий SYSTEM_PROMPT GLM). Кнопка «Вернуть стандартный» появляется только после правок. Между запусками промт не сохраняется — каждый запуск начинается со стандартного.</li>
+      <li><b>Шаблон — радио-карточки.</b> Сейчас один (по умолчанию, отмечен), место под будущие зарезервировано и не мешает. Выбор шаблона уже сейчас передаётся в бэкенд — задел на несколько шаблонов.</li>
+      <li><b>Тот же диалог — для одиночной проверки.</b> Кнопка «Проверить» в строке документа открывает этот же диалог с N=1 (быстро: выбрать → запуск). Альтернатива — одиночную оставить мгновенной без диалога, скажите, если так удобнее.</li>
+      <li><b>Выбор и пагинация.</b> Выделение живёт до смены фильтра или страницы; при бесконечной догрузке новые строки приходят неотмеченными, «выбрать все» отмечает все загруженные по фильтру.</li>
+      <li><b>Прогресс</b> — существующая полоса «Проверка k из N…», статусы в строках переключаются на «проверяется».</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+  // ===== стандартный промт — текущий SYSTEM_PROMPT из ai_validator.py =====
+  const DEFAULT_PROMPT = `Ты — опытный ведущий системный аналитик, ревьюер технических требований.
+
+Тебе дают документ требований (в Markdown), созданный аналитиком в Confluence.
+Оцени качество содержимого по трём критериям:
+
+1. «полнота» — описаны ли все сценарии использования доработки, граничные и
+   ошибочные ситуации, предусловия и постусловия. Разработчику не должно
+   понадобиться что-то додумывать.
+2. «непротиворечивость» — нет ли противоречий между разделами документа
+   (разные форматы данных, несовместимые правила, конфликтующие сценарии).
+3. «однозначность» — сможет ли разработчик реализовать требования без
+   дополнительных уточнений: нет ли расплывчатых формулировок
+   («по необходимости», «должно работать быстро»), неопределённых терминов,
+   требований без критериев проверки.
+
+Правила:
+- Оценивай только содержимое, а не оформление и не соответствие шаблону —
+  структуру проверяет отдельный скрипт.
+- Ссылайся на раздел документа, к которому относится замечание.
+- Не выдумывай проблем: замечание только если из текста это действительно следует.
+- minor — стилистические шероховатости; major — существенный пробел или риск;
+  critical — документ невозможно реализовать или требования противоречат друг другу.
+
+Ответ строго в JSON без markdown-обёртки:
+{
+  "passed": true|false,
+  "summary": "краткое заключение в 1-3 предложениях",
+  "findings": [
+    {
+      "criterion": "полнота|непротиворечивость|однозначность|другое",
+      "severity": "critical|major|minor",
+      "message": "конкретное замечание с указанием раздела"
+    }
+  ]
+}
+Если замечаний нет — "passed": true и пустой список findings.`;
+
+  const promptEl = document.getElementById("prompt");
+  promptEl.value = DEFAULT_PROMPT;
+  const selected = new Set();
+  const runBtn = document.getElementById("btn-run");
+  const selBar = document.getElementById("sel-bar");
+  const cbAll = document.getElementById("cb-all");
+
+  function refreshSelection() {
+    const n = selected.size;
+    runBtn.disabled = n === 0;
+    runBtn.textContent = n > 0 ? `▶ Проверить выбранные (${n})` : "▶ Проверить выбранные";
+    selBar.classList.toggle("show", n > 0);
+    document.getElementById("sel-count").textContent = `Выбрано: ${n}`;
+    cbAll.checked = n === document.querySelectorAll(".row-cb").length;
+  }
+
+  function onRowToggle(cb) {
+    const id = cb.closest("tr").dataset.id;
+    cb.checked ? selected.add(id) : selected.delete(id);
+    refreshSelection();
+  }
+
+  function selectAll(on) {
+    document.querySelectorAll(".row-cb").forEach((cb) => {
+      cb.checked = on;
+      on ? selected.add(cb.closest("tr").dataset.id) : selected.delete(cb.closest("tr").dataset.id);
+    });
+    refreshSelection();
+  }
+
+  function clearSelection() { selectAll(false); }
+
+  // ===== диалог =====
+  const overlay = document.getElementById("overlay");
+  function openDialog() {
+    document.getElementById("dlg-count").textContent = selected.size;
+    document.getElementById("dlg-count2").textContent = selected.size;
+    overlay.classList.add("show");
+  }
+  function closeDialog() { overlay.classList.remove("show"); }
+
+  function pickTpl(i) {
+    document.getElementById("tpl-1").classList.toggle("selected", i === 1);
+  }
+
+  promptEl.addEventListener("input", () => {
+    const changed = promptEl.value !== DEFAULT_PROMPT;
+    document.getElementById("btn-restore").style.display = changed ? "" : "none";
+    document.getElementById("prompt-changed").style.display = changed ? "" : "none";
+  });
+  function restorePrompt() {
+    promptEl.value = DEFAULT_PROMPT;
+    promptEl.dispatchEvent(new Event("input"));
+  }
+
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDialog(); });
+
+  // ===== демонстрационный запуск =====
+  function launch() {
+    closeDialog();
+    const progress = document.getElementById("progress");
+    const fill = document.getElementById("progress-fill");
+    const label = document.getElementById("progress-label");
+    progress.classList.add("show");
+    const ids = [...selected];
+    // демо: статусы по очереди становятся «проверяется», затем финальными
+    let i = 0;
+    const step = () => {
+      if (i > 0) {
+        const prev = document.querySelector(`tr[data-id="${ids[i - 1]}"] .lozenge`);
+        prev.className = "lozenge " + (Number(ids[i - 1]) % 2 ? "success" : "error");
+        prev.textContent = Number(ids[i - 1]) % 2 ? "пройдено" : "не пройдено";
+      }
+      if (i >= ids.length) {
+        label.textContent = `Готово: проверено ${ids.length}`;
+        fill.style.width = "100%";
+        setTimeout(() => progress.classList.remove("show"), 2500);
+        return;
+      }
+      const cur = document.querySelector(`tr[data-id="${ids[i]}"] .lozenge`);
+      cur.className = "lozenge new";
+      cur.textContent = "проверяется";
+      label.textContent = `Проверка ${i + 1} из ${ids.length}…`;
+      fill.style.width = `${Math.round(((i + 1) / ids.length) * 100)}%`;
+      i++;
+      setTimeout(step, 700);
+    };
+    step();
+  }
+</script>
+</body>
+</html>
