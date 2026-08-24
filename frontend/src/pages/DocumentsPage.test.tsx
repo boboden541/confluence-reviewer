@@ -402,12 +402,83 @@ describe("DocumentsPage", () => {
 
     fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
     const dialog = await screen.findByRole("dialog");
+    // крошка с названием документа ведёт на полную страницу
     fireEvent.click(
-      within(dialog).getByRole("button", { name: /Открыть на отдельной странице/ }),
+      within(dialog).getByRole("link", { name: "[СТ] GDS-15 Загрузка кино" }),
     );
 
     expect(await screen.findByText("Полная страница документа")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("resizes the side panel with arrow keys and remembers the width", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.style.width).toBe("640px");
+
+    const handle = within(dialog).getByRole("separator");
+    fireEvent.keyDown(handle, { key: "ArrowLeft" }); // влево — шире
+    expect(dialog.style.width).toBe("672px");
+    fireEvent.keyDown(handle, { key: "ArrowRight" }); // вправо — уже
+    expect(dialog.style.width).toBe("640px");
+
+    // выбранная ширина переживает перезагрузку
+    expect(localStorage.getItem("cr-drawer-w")).toBe("640");
+  });
+
+  it("resizes the side panel by dragging the left handle", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+    const dialog = await screen.findByRole("dialog");
+    const handle = within(dialog).getByRole("separator");
+
+    // jsdom без PointerEvent: fireEvent теряет clientX, собираем события сами.
+    // Viewport 1024px; ручку тянут к clientX=224 → ширина 800.
+    const pointer = (type: string, x: number) => {
+      const Ctor = window.PointerEvent ?? window.MouseEvent;
+      return new Ctor(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        clientX: x,
+      } as PointerEventInit);
+    };
+    fireEvent(handle, pointer("pointerdown", 384));
+    fireEvent(handle, pointer("pointermove", 224));
+    fireEvent(handle, pointer("pointerup", 224));
+
+    expect(dialog.style.width).toBe("800px");
   });
 
   it("restores the open panel from the URL", async () => {

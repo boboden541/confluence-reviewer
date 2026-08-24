@@ -173,7 +173,17 @@ export default function DocumentReport({
         <Link to={`/analysts/${doc.analyst_id}`}>{analystName}</Link>
         <span className="sep">/</span>
         <span className="crumb-current" title={doc.title}>
-          {doc.title}
+          {embedded ? (
+            <Link
+              className="crumb-link"
+              to={`/documents/${documentId}`}
+              title="Открыть на отдельной странице"
+            >
+              {doc.title}
+            </Link>
+          ) : (
+            doc.title
+          )}
         </span>
       </nav>
 
