@@ -88,14 +88,14 @@ describe("ReportPage", () => {
 
     // название видно и в крошках, и в заголовке страницы
     expect(await screen.findAllByText("[СТ] GDS-15 Загрузка кино")).toHaveLength(2);
-    expect(
-      screen.getByText(/Соответствие шаблону требований/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Качество содержимого \(ИИ\)/),
-    ).toBeInTheDocument();
+    // зоны «Проверки» и «Заметки» ориентируют в длинном содержимом
+    expect(screen.getByText("Проверки")).toBeInTheDocument();
+    expect(screen.getByText("Заметки руководителя")).toBeInTheDocument();
+    expect(screen.getByText(/Шаблон требований/)).toBeInTheDocument();
+    expect(screen.getByText(/Содержимое \(ИИ\)/)).toBeInTheDocument();
     expect(screen.getByText(/Отсутствует раздел/)).toBeInTheDocument();
-    expect(screen.getByText("не пройдено")).toBeInTheDocument();
+    // «не пройдено»: бейдж документа + карточка шаблона
+    expect(screen.getAllByText("не пройдено")).toHaveLength(2);
   });
 
   it("renders findings as formatted markdown", async () => {
