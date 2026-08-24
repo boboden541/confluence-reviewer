@@ -113,7 +113,7 @@ def test_validation_uses_saved_template_and_keeps_repeatable_blocks(client, monk
     повторяемые блоки доработок переносятся из сид-версии без изменений."""
     monkeypatch.setattr(
         "app.services.validation.AIValidator",
-        lambda: type(
+        lambda *args, **kwargs: type(
             "StubAI",
             (),
             {

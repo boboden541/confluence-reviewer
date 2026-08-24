@@ -151,6 +151,8 @@ export interface ValidationReport {
   /** Чем проверяли: версия шаблона и пользовательский промт (null — стандартный) */
   template_version_id?: number | null;
   ai_prompt?: string | null;
+  /** Какой моделью ИИ проверяли (null — старые отчёты) */
+  ai_model_used?: string | null;
 }
 
 export interface SyncStatus {
@@ -200,6 +202,50 @@ export interface BatchValidationRequest {
   template_id?: number | null;
   /** null/undefined — стандартный промт; строка — пользовательский на этот запуск */
   ai_prompt?: string | null;
+}
+
+// --- настройки подключения ИИ (глобальные) ---
+
+export type AiProtocol = "anthropic" | "openai";
+
+/** Загрузочные дефолты из окружения — плейсхолдеры полей формы */
+export interface AiEnvInfo {
+  protocol: AiProtocol;
+  base_url: string;
+  model: string;
+  api_key_set: boolean;
+}
+
+export interface AiConnectionConfig {
+  /** Сохранённые значения: "" = берётся из env */
+  protocol: AiProtocol;
+  base_url: string;
+  model: string;
+  /** Маска сохранённого токена ("" — в БД не задан); открытым текстом не отдаётся */
+  api_key_masked: string;
+  updated_at: string | null;
+  env: AiEnvInfo;
+}
+
+/** PUT /api/ai-settings: api_key null — не менять, "" — очистить (→ env) */
+export interface AiConnectionUpdate {
+  protocol: AiProtocol;
+  base_url: string;
+  model: string;
+  api_key: string | null;
+}
+
+/** POST /api/ai-settings/test: текущие (возможно несохранённые) значения формы */
+export interface AiTestRequest {
+  protocol: AiProtocol;
+  base_url: string;
+  model: string;
+  api_key: string;
+}
+
+export interface AiTestResult {
+  ok: boolean;
+  message: string;
 }
 
 // --- Шаблон требований (редактор) ---

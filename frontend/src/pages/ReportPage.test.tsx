@@ -50,6 +50,7 @@ const REPORT = {
   overall_passed: false,
   error_message: null,
   comment_sent_at: null,
+  ai_model_used: "glm-4.5",
 };
 
 const NOTE = { document_id: 42, content: "", created_at: null, updated_at: null };
@@ -109,6 +110,9 @@ describe("ReportPage", () => {
     expect(screen.getByText(/Отсутствует раздел/)).toBeInTheDocument();
     // «не пройдено»: бейдж документа + карточка шаблона
     expect(screen.getAllByText("не пройдено")).toHaveLength(2);
+    // чем проверяли: модель ИИ видна в мете карточки «Содержимое (ИИ)»
+    const meta = document.querySelector(".report-meta")?.textContent ?? "";
+    expect(meta).toContain("модель: glm-4.5");
   });
 
   it("renders findings as formatted markdown", async () => {
@@ -285,7 +289,7 @@ describe("ReportPage", () => {
     // зоны диалога (одноимённая карточка есть и в самом отчёте — ищем внутри диалога)
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Шаблон требований")).toBeInTheDocument();
-    expect(within(dialog).getByText("Промт ИИ-проверки (GLM)")).toBeInTheDocument();
+    expect(within(dialog).getByText("Промт ИИ-проверки")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Запустить проверку — 1 док\./ }));
 

@@ -141,7 +141,7 @@ export default function ValidationDialog({
               </span>
             </label>
 
-            <div className="zone-label">Промт ИИ-проверки (GLM)</div>
+            <div className="zone-label">Промт ИИ-проверки</div>
             <div className="prompt-note">
               Предзаполнен стандартным промтом. Меняйте, если для этой партии нужен другой
               фокус. Изменение действует <b>только на этот запуск</b> и никуда не сохраняется.

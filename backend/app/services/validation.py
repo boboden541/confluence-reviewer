@@ -6,8 +6,8 @@
 не обновляется — повторный запуск повторит попытку).
 
 Идемпотентность (ФТ-CR-14): если документ не менялся в Confluence после
-последней успешной валидации, возвращается существующий отчёт без
-повторного вызова ИИ. force=true принуждает к перевалидации.
+последней успешной валидации и модель ИИ та же, возвращается существующий
+отчёт без повторного вызова ИИ. force=true принуждает к перевалидации.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from app.models import (
     ValidationReport,
     ValidationStatus,
 )
+from app.services.ai_settings import get_ai_connection
 from app.services.ai_validator import AIValidationError, AIValidator, SYSTEM_PROMPT
 from app.services.html_to_markdown import html_to_markdown
 from app.services.template_store import get_template_for_validation
@@ -94,13 +95,18 @@ def run_validation(
             raise DocumentNotFound(f"Документ {document_id} не найден")
 
         existing = _latest_report(db, doc.id)
+        # эффективное подключение ИИ: env + настройки из UI (по-полю)
+        connection = get_ai_connection(db)
         if (
             not force
             and existing is not None
             and existing.error_message is None
             and _is_up_to_date(doc)
+            # ФТ-CR-14: сменилась модель — кэшированный отчёт ей не соответствовал
+            # (NULL у старых отчётов ≠ модель → разовая ревалидация после апгрейда)
+            and existing.ai_model_used == connection.model
         ):
-            return existing  # ФТ-CR-14: ничего не изменилось — отчёт актуален
+            return existing  # ничего не изменилось — отчёт актуален
 
         doc.validation_status = ValidationStatus.IN_PROGRESS
         db.commit()
@@ -117,7 +123,9 @@ def run_validation(
 
         try:
             markdown = html_to_markdown(doc.content_html)
-            ai_result = AIValidator().validate(doc.title, markdown, custom_prompt)
+            ai_result = AIValidator(connection=connection).validate(
+                doc.title, markdown, custom_prompt
+            )
         except AIValidationError as exc:
             return _save_error(db, doc, trigger, str(exc))
 
@@ -133,6 +141,8 @@ def run_validation(
             template_version_id=used_template_id,
             # в отчёте храним только пользовательский промт (стандартный и так в коде)
             ai_prompt=custom_prompt if custom_prompt != SYSTEM_PROMPT else None,
+            # какой моделью проверяли — для отчёта и идемпотентности (ФТ-CR-14)
+            ai_model_used=ai_result.model,
         )
         db.add(report)
         doc.validation_status = ValidationStatus.PASSED if overall else ValidationStatus.FAILED

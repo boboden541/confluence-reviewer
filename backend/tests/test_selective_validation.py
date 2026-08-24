@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument
 from app.services import tasks
+from app.services.ai_settings import AIConnection
 from app.services.ai_validator import AIValidationResult, SYSTEM_PROMPT
 from app.services.validation import run_validation
 from app.utils import now_utc
@@ -78,6 +79,9 @@ class FakeAIValidator:
     calls = 0
     prompts: list[str | None] = []
 
+    def __init__(self, *args, **kwargs):
+        pass  # продакшн-код передаёт connection= — фейку он не нужен
+
     def validate(self, title, markdown, system_prompt=None):
         type(self).calls += 1
         type(self).prompts.append(system_prompt)
@@ -91,6 +95,18 @@ def fake_ai(monkeypatch):
     FakeAIValidator.calls = 0
     FakeAIValidator.prompts = []
     monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    # эффективная модель = модель фейка, иначе идемпотентность по модели (ФТ-CR-14)
+    monkeypatch.setattr(
+        "app.services.validation.get_ai_connection",
+        lambda db: AIConnection(
+            protocol="anthropic",
+            base_url="https://ai.test",
+            api_key="test-key",
+            model="t",
+            max_tokens=100,
+            timeout_seconds=1.0,
+        ),
+    )
     return FakeAIValidator
 
 

@@ -43,7 +43,10 @@ class Settings(BaseSettings):
     confluence_max_pages: int = 500
     confluence_request_delay: float = 0.2  # сек, НФТ-CR-6: <= 10 req/s
 
-    # ИИ-валидация (GLM через Anthropic-совместимый API)
+    # ИИ-валидация (Anthropic- или OpenAI-совместимый API). env — загрузочные
+    # дефолты: настройки из UI (таблица ai_connection_settings) перекрывают
+    # их по-полю, пустое поле в UI = значение из окружения
+    ai_protocol: str = "anthropic"  # anthropic | openai
     ai_base_url: str = "https://api.z.ai/api/anthropic"
     ai_api_key: str = ""
     ai_model: str = "glm-4.5"

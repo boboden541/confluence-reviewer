@@ -1,6 +1,12 @@
-"""Тесты ИИ-валидации через GLM (ФТ-CR-11) — фейковый клиент, без сети."""
+"""Тесты ИИ-валидации (ФТ-CR-11) — фейковые клиенты, без сети.
+
+Anthropic-совместимый протокол проверяется через подмену клиента,
+OpenAI-совместимый — через httpx.MockTransport.
+"""
 
 from __future__ import annotations
+
+import json
 
 import httpx
 import pytest
@@ -134,3 +140,148 @@ def test_extract_json_variants():
     assert _extract_json('```json\n{"a": 1}\n```') == {"a": 1}
     with pytest.raises(ValueError):
         _extract_json("совсем не JSON")
+
+
+# --- ping («Проверить подключение») ---
+
+
+def test_ping_anthropic():
+    validator, calls = make_validator("ok")
+    assert validator.ping() == "Модель glm-4.5 ответила"
+    assert calls[0]["max_tokens"] == 8  # мини-запрос, не полный прогон
+
+
+# --- OpenAI-совместимый протокол (httpx.MockTransport, без сети) ---
+
+
+def make_openai_validator(handler) -> tuple[AIValidator, list[httpx.Request]]:
+    """Валидатор с httpx-транспортом; requests накапливает отправленное."""
+    requests: list[httpx.Request] = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return handler(request)
+
+    settings = Settings(
+        ai_protocol="openai",
+        ai_base_url="https://ai.test/v1",
+        ai_api_key="sk-test",
+        ai_model="qwen2.5:7b",
+        _env_file=None,
+    )
+    http = httpx.Client(transport=httpx.MockTransport(transport))
+    return AIValidator(settings=settings, http_client=http), requests
+
+
+def ok_response(content, model="qwen2.5:7b") -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"model": model, "choices": [{"message": {"role": "assistant", "content": content}}]},
+    )
+
+
+def test_openai_request_shape():
+    validator, requests = make_openai_validator(lambda request: ok_response(PASSED_JSON))
+    result = validator.validate("[СТ] Документ", "# Введение")
+    assert result.passed
+    assert result.model == "qwen2.5:7b"
+
+    request = requests[0]
+    assert str(request.url) == "https://ai.test/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer sk-test"
+    body = json.loads(request.content)
+    assert body["model"] == "qwen2.5:7b"
+    assert body["max_tokens"] == 4000
+    assert body["messages"][0]["role"] == "system"
+    assert "системный аналитик" in body["messages"][0]["content"]
+    assert "[СТ] Документ" in body["messages"][1]["content"]
+
+
+def test_openai_content_as_parts():
+    # часть провайдеров отдаёт content списком частей (reasoning-блоки мешаем)
+    parts = [
+        {"type": "text", "text": '{"passed": '},
+        {"type": "reasoning", "text": "размышления"},
+        {"type": "text", "text": 'true, "summary": "ок", "findings": []}'},
+    ]
+    validator, _ = make_openai_validator(lambda request: ok_response(parts))
+    assert validator.validate("[СТ] Документ", "текст").passed
+
+
+@pytest.mark.parametrize("status,expected", [
+    (401, "Неверный API-ключ ИИ \\(401\\)"),
+    (403, "не имеет доступа"),
+    (404, "не найден"),
+    (429, "лимит запросов"),
+    (500, "Ошибка ИИ \\(HTTP 500\\)"),
+])
+def test_openai_error_mapping(monkeypatch, status, expected):
+    monkeypatch.setattr("app.services.ai_validator._RETRY_DELAYS", ())  # без пауз
+    validator, _ = make_openai_validator(
+        lambda request, status=status: httpx.Response(
+            status, json={"error": {"message": "boom"}}
+        )
+    )
+    with pytest.raises(AIValidationError, match=expected):
+        validator.validate("[СТ] Документ", "текст")
+
+
+def test_openai_bad_request_shows_excerpt(monkeypatch):
+    monkeypatch.setattr("app.services.ai_validator._RETRY_DELAYS", ())
+    validator, _ = make_openai_validator(
+        lambda request: httpx.Response(400, json={"error": {"message": "Unknown model"}})
+    )
+    with pytest.raises(AIValidationError, match=r"400.*Unknown model"):
+        validator.validate("[СТ] Документ", "текст")
+
+
+def test_openai_retry_with_max_completion_tokens():
+    calls: list[int] = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(
+                400,
+                json={"error": {"message": "Use 'max_completion_tokens' instead of 'max_tokens'"}},
+            )
+        return ok_response(PASSED_JSON)
+
+    validator, _ = make_openai_validator(handler)
+    assert validator.validate("[СТ] Документ", "текст").passed
+    assert len(calls) == 2  # одна повторная попытка с переименованным полем
+
+
+def test_openai_timeout_and_connect_error():
+    def raise_timeout(request):
+        raise httpx.ConnectTimeout("too slow")
+
+    validator, _ = make_openai_validator(raise_timeout)
+    with pytest.raises(AIValidationError, match="время ожидания"):
+        validator.validate("[СТ] Документ", "текст")
+
+    def raise_connect(request):
+        raise httpx.ConnectError("no route")
+
+    validator, _ = make_openai_validator(raise_connect)
+    with pytest.raises(AIValidationError, match="связи"):
+        validator.validate("[СТ] Документ", "текст")
+
+
+def test_openai_empty_content_raises():
+    # reasoning-модель съела бюджет токенов — текста нет
+    validator, _ = make_openai_validator(lambda request: ok_response(None))
+    with pytest.raises(AIValidationError, match="пустой"):
+        validator.validate("[СТ] Документ", "текст")
+
+
+def test_ping_openai():
+    bodies: list[dict] = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return ok_response("ok")
+
+    validator, _ = make_openai_validator(handler)
+    assert validator.ping() == "Модель qwen2.5:7b ответила"
+    assert bodies[0]["max_tokens"] == 8
