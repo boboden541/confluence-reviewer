@@ -497,6 +497,59 @@ button.nav-item {
   flex-wrap: wrap;
 }
 
+/* автор документа: аватар-инициал + имя + email — сразу видно, чей документ открыт */
+.doc-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.doc-author .author-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--blue-subtle-bg);
+  color: var(--blue-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.doc-author .author-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.doc-author .author-name {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.doc-author .author-email {
+  font-size: 12px;
+}
+
+/* последняя крошка (название документа) — в одну строку, с обрезкой */
+.breadcrumbs .crumb-current {
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46ch;
+}
+
+/* название документа-кнопка в таблице списков */
+.doc-link {
+  font-size: inherit;
+  text-align: left;
+}
+
 /* ===== кнопки ADS ===== */
 
 .btn {
@@ -1234,6 +1287,68 @@ textarea.text-input {
   font-weight: 600;
 }
 
+/* ===== выдвижная панель просмотра документа (справа) ===== */
+
+.drawer-backdrop {
+  display: none;
+}
+
+.drawer-backdrop.show {
+  display: block;
+  position: fixed;
+  inset: 56px 0 0 0;
+  background: rgba(9, 30, 66, 0.35);
+  z-index: 70;
+}
+
+.drawer {
+  position: fixed;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  /* не шире экрана и не на весь экран: список документов остаётся виден */
+  width: min(640px, calc(100vw - 200px));
+  background: var(--surface);
+  z-index: 75;
+  box-shadow: -6px 0 24px rgba(9, 30, 66, 0.18);
+  display: flex;
+  flex-direction: column;
+  animation: drawer-in 0.18s ease;
+}
+
+.drawer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: #FAFBFC;
+  flex-shrink: 0;
+}
+
+.drawer-body {
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+}
+
+/* заголовок в панели компактнее страницы */
+.drawer-body .page-title {
+  font-size: 19px;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 /* ===== адаптив ===== */
 
 /* планшет и меньше: сайдбар уезжает off-canvas, открывается бургером */
@@ -1332,6 +1447,11 @@ textarea.text-input {
   .login {
     margin-top: 8vh;
     max-width: calc(100vw - 24px);
+  }
+
+  /* панель просмотра на телефоне — во всю ширину */
+  .drawer {
+    width: 100vw;
   }
 }
 

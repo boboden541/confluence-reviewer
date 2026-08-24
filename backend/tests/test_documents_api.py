@@ -99,6 +99,14 @@ def test_get_document_detail(client):
     assert client.get("/api/documents/99999").status_code == 404
 
 
+def test_get_document_detail_contains_author(client):
+    """Автор документа виден сразу на странице отчёта: имя и email аналитика."""
+    analyst_id, doc_ids = seed_analyst_with_docs(1)
+    body = client.get(f"/api/documents/{doc_ids[0]}").json()
+    assert body["analyst_name"] == "Тест"
+    assert body["analyst_email"] == "t@mts.ru"
+
+
 def _global_search_seed() -> tuple[int, int]:
     """Два аналитика с документами, у которых пересекаются названия."""
     with SessionLocal() as db:

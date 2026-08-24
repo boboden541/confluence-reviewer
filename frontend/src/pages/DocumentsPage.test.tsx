@@ -1,8 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import DocumentsPage from "./DocumentsPage";
 import { AUTH_STORAGE_KEY } from "../api";
+
+const DOC_DETAIL = {
+  id: 11,
+  confluence_page_id: "2380439645",
+  title: "[СТ] GDS-15 Загрузка кино",
+  url: "https://confluence.mts.ru/x/1",
+  created_in_confluence_at: "2026-07-01T00:00:00",
+  last_modified_in_confluence_at: "2026-08-10T00:00:00",
+  validation_status: "failed",
+  last_validated_at: "2026-08-11T00:00:00",
+  has_note: true,
+  content_html: "<h1>Введение</h1>",
+  sync_error: null,
+  analyst_id: 5,
+  analyst_name: "Никулин Владислав",
+  analyst_email: "nikulinva@mts.ru",
+};
+
+const DOC_REPORT = {
+  id: 9,
+  document_id: 11,
+  triggered_by: "manual",
+  created_at: "2026-08-11T12:00:00",
+  template_passed: true,
+  template_findings: "—",
+  ai_passed: true,
+  ai_findings: "✅ Замечаний к содержимому нет.",
+  overall_passed: true,
+  error_message: null,
+  comment_sent_at: null,
+};
+
+const DOC_NOTE = { document_id: 11, content: "", created_at: null, updated_at: null };
 
 function mockFetch(responses: Record<string, unknown>) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
@@ -269,6 +302,134 @@ describe("DocumentsPage", () => {
       );
       expect(call).toBeDefined();
     });
+  });
+
+  it("opens the document in a side panel on title click", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/documents/:documentId" element={<div>Полная страница</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+
+    // панель открылась, документ в ней загружен (отчёт и заметки на месте)
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Качество содержимого/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "▶ Проверить" })).toBeInTheDocument();
+  });
+
+  it("closes the side panel with Escape", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+    await screen.findByRole("dialog");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("closes the side panel by clicking the backdrop", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+    await screen.findByRole("dialog");
+
+    fireEvent.click(container.querySelector(".drawer-backdrop")!);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens the full page from the side panel", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/documents/:documentId" element={<div>Полная страница документа</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Открыть на отдельной странице/ }),
+    );
+
+    expect(await screen.findByText("Полная страница документа")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("restores the open panel from the URL", async () => {
+    // адрес с ?doc=11 (после F5) сразу открывает панель — состояние в адресе
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/documents/11": DOC_DETAIL,
+      "/api/documents/11/report": DOC_REPORT,
+      "/api/documents/11/note": DOC_NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5?doc=11"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Соответствие шаблону/)).toBeInTheDocument();
   });
 
   it("starts bulk validation for the analyst", async () => {

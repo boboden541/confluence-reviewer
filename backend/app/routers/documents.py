@@ -204,7 +204,13 @@ def search_documents(
 @router.get("/documents/{document_id}", response_model=DocumentOut)
 def get_document(document_id: int, db: Session = Depends(get_db)):
     """Объект документа (страница просмотра отчёта)."""
-    return DocumentOut.model_validate(get_document_or_404(document_id, db))
+    doc = get_document_or_404(document_id, db)
+    analyst = db.get(Analyst, doc.analyst_id)
+    out = DocumentOut.model_validate(doc)
+    # автор — из карточки аналитика; «?» если карточку удалили, а документы остались
+    out.analyst_name = analyst.full_name if analyst else "?"
+    out.analyst_email = analyst.email if analyst else None
+    return out
 
 
 @router.post(
