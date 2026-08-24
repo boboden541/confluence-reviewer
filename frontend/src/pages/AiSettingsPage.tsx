@@ -165,15 +165,15 @@ export default function AiSettingsPage() {
     }
   };
 
-  const keyPlaceholder = clearKey
-    ? "токен будет удалён"
-    : apiKey
-      ? ""
-      : cfg?.api_key_masked
-        ? `сохранён ${cfg.api_key_masked} — пусто = не менять`
-        : cfg?.env.api_key_set
-          ? "не задан здесь — используется из окружения"
-          : "не задан";
+  // «изменено: 21.08.2026, 14:02» — без секунд
+  const formatUpdatedAt = (iso: string) =>
+    new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   return (
     <section className="page">
@@ -190,11 +190,7 @@ export default function AiSettingsPage() {
             <span className="title-icon">⚙️</span> Подключение ИИ
           </h1>
           <div className="page-meta">
-            <span className="muted">
-              Применяется ко всем ИИ-проверкам документов
-              {cfg?.updated_at &&
-                ` · изменено: ${new Date(cfg.updated_at).toLocaleString("ru-RU")}`}
-            </span>
+            Применяется ко всем ИИ-проверкам документов
           </div>
         </div>
       </div>
@@ -204,138 +200,211 @@ export default function AiSettingsPage() {
       {!cfg && !error && <p className="muted">Загрузка…</p>}
 
       {cfg && (
-        <form className="panel" onSubmit={onSave}>
-          <div className="zone-label">Протокол API</div>
-          {PROTOCOL_CARDS.map((card) => (
-            <label
-              key={card.id}
-              className={protocol === card.id ? "tpl selected" : "tpl"}
-            >
-              <input
-                type="radio"
-                name="ai-protocol"
-                checked={protocol === card.id}
-                onChange={() => switchProtocol(card.id)}
-              />
-              <span>
-                <span className="name">{card.name}</span>
-                <div className="desc">{card.desc}</div>
-              </span>
-            </label>
-          ))}
-
-          <div className="form-row">
-            <span className="field">
-              <label htmlFor="ai-preset">Пресет провайдера</label>
-              <select
-                id="ai-preset"
-                className="select-input"
-                value={presetId}
-                onChange={(e) => applyPreset(e.target.value)}
-              >
-                <option value="">— выбрать —</option>
-                {PRESETS.filter((p) => p.protocol === protocol).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <span className="field-hint">
-                Заполняет URL и модель — значения можно поправить руками
-              </span>
+        <>
+          {/* якорь: чем проверяют прямо сейчас — эффективные значения (сохранённое || env) */}
+          <div className="current-conn">
+            <span className="lbl">Сейчас проверяют через:</span>
+            <span>
+              <span className="dot">●</span>{" "}
+              {cfg.model || cfg.env.model} ·{" "}
+              <code>{cfg.base_url || cfg.env.base_url}</code>
             </span>
-          </div>
-
-          <div className="form-row">
-            <span className="field">
-              <label htmlFor="ai-base-url">Базовый URL</label>
-              <input
-                id="ai-base-url"
-                className="text-input"
-                style={{ width: "360px" }}
-                placeholder={cfg.env.base_url}
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-              />
-              <span className="field-hint">пусто — из окружения (.env)</span>
+            <span>
+              ·{" "}
+              {cfg.api_key_masked
+                ? "токен из базы"
+                : cfg.env.api_key_set
+                  ? "токен из окружения"
+                  : "токен не задан"}
             </span>
-            <span className="field">
-              <label htmlFor="ai-model">Модель</label>
-              <input
-                id="ai-model"
-                className="text-input"
-                style={{ width: "220px" }}
-                placeholder={cfg.env.model}
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              />
-              <span className="field-hint">пусто — из окружения (.env)</span>
-            </span>
-          </div>
-
-          <div className="form-row">
-            <span className="field">
-              <label htmlFor="ai-key">API-токен</label>
-              <input
-                id="ai-key"
-                className="text-input"
-                type="password"
-                style={{ width: "320px" }}
-                autoComplete="new-password"
-                placeholder={keyPlaceholder}
-                value={apiKey}
-                onChange={(e) => {
-                  setApiKey(e.target.value);
-                  setClearKey(false);
-                }}
-              />
-              <span className="field-hint">
-                {clearKey
-                  ? "Сохранённый токен будет удалён — проверки пойдут с ключом из окружения"
-                  : "Хранится в БД и отдаётся только маской; пусто — не менять"}
-              </span>
-            </span>
-            {cfg.api_key_masked && (
-              <button
-                type="button"
-                className="btn ghost"
-                style={{ marginBottom: "14px" }}
-                onClick={() => {
-                  setClearKey((v) => !v);
-                  setApiKey("");
-                }}
-              >
-                {clearKey ? "Отменить удаление" : "Очистить сохранённый токен"}
-              </button>
+            {cfg.updated_at && (
+              <span>· изменено: {formatUpdatedAt(cfg.updated_at)}</span>
             )}
           </div>
 
-          <div className="head-actions">
-            <button
-              type="button"
-              className="btn subtle"
-              onClick={onTest}
-              disabled={testing}
-            >
-              {testing ? "Проверяем…" : "⇄ Проверить подключение"}
-            </button>
-            <button type="submit" className="btn primary" disabled={busySave}>
-              {busySave ? "Сохранение…" : "Сохранить"}
-            </button>
-          </div>
-
-          {testResult && (
-            <div className={`alert ${testResult.ok ? "ok" : "error"}`}>
-              {testResult.message}
+          <form className="settings-form" onSubmit={onSave}>
+            {/* 01 · протокол */}
+            <div className="step">
+              <div className="step-head">
+                <span className="step-num">01</span>
+                <span className="step-title">Протокол API</span>
+              </div>
+              <p className="step-sub">
+                Определяет формат запросов к провайдеру. Если не уверены —
+                оставьте как есть.
+              </p>
+              <div className="protocol-grid">
+                {PROTOCOL_CARDS.map((card) => (
+                  <label
+                    key={card.id}
+                    className={protocol === card.id ? "tpl selected" : "tpl"}
+                  >
+                    <input
+                      type="radio"
+                      name="ai-protocol"
+                      checked={protocol === card.id}
+                      onChange={() => switchProtocol(card.id)}
+                    />
+                    <span className="proto-mark">
+                      {card.id === "anthropic" ? "A" : "O"}
+                    </span>
+                    <span>
+                      <span className="name">{card.name}</span>
+                      <div className="desc">{card.desc}</div>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
-          )}
-        </form>
+
+            {/* 02 · провайдер и модель */}
+            <div className="step">
+              <div className="step-head">
+                <span className="step-num">02</span>
+                <span className="step-title">Провайдер и модель</span>
+              </div>
+              <p className="step-sub">
+                Выберите пресет — поля заполнятся сами, значения можно поправить
+                руками. Оставьте поле пустым, чтобы брать значение из окружения
+                (<code>.env</code>).
+              </p>
+              <div className="field" style={{ marginBottom: 18 }}>
+                <label htmlFor="ai-preset">Пресет провайдера</label>
+                <select
+                  id="ai-preset"
+                  className="select-input"
+                  value={presetId}
+                  onChange={(e) => applyPreset(e.target.value)}
+                >
+                  <option value="">— выбрать —</option>
+                  {PRESETS.filter((p) => p.protocol === protocol).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="fields-grid">
+                <div className="field">
+                  <label htmlFor="ai-base-url">Базовый URL</label>
+                  <input
+                    id="ai-base-url"
+                    className="text-input"
+                    placeholder={cfg.env.base_url}
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                  />
+                  <span className="field-hint">
+                    пусто — из окружения: <code>AI_BASE_URL</code>
+                  </span>
+                </div>
+                <div className="field">
+                  <label htmlFor="ai-model">Модель</label>
+                  <input
+                    id="ai-model"
+                    className="text-input"
+                    placeholder={cfg.env.model}
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                  />
+                  <span className="field-hint">
+                    пусто — <code>AI_MODEL</code>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 03 · токен */}
+            <div className="step">
+              <div className="step-head">
+                <span className="step-num">03</span>
+                <span className="step-title">API-токен</span>
+              </div>
+              <p className="step-sub">
+                Хранится в базе и отдаётся только маской. Оставьте поле пустым —
+                ничего не изменится; чтобы вернуться к ключу из окружения,
+                удалите сохранённый токен.
+              </p>
+              <div className="field">
+                <label htmlFor="ai-key">Новый токен</label>
+                <input
+                  id="ai-key"
+                  className="text-input"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={
+                    clearKey ? "токен будет удалён" : "введите, чтобы заменить"
+                  }
+                  value={apiKey}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setClearKey(false);
+                  }}
+                />
+                {cfg.api_key_masked && !clearKey && (
+                  <div className="key-status">
+                    <span>Сохранён:</span>
+                    <span className="mask">{cfg.api_key_masked}</span>
+                    <button
+                      type="button"
+                      className="btn ghost danger"
+                      onClick={() => {
+                        setClearKey(true);
+                        setApiKey("");
+                      }}
+                    >
+                      Удалить сохранённый токен
+                    </button>
+                  </div>
+                )}
+                {clearKey && (
+                  <div className="key-status">
+                    <span>
+                      Сохранённый токен будет удалён — проверки пойдут с ключом
+                      из окружения
+                    </span>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => setClearKey(false)}
+                    >
+                      Отменить удаление
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* действия: тест с inline-результатом слева, сохранение справа */}
+            <div className="form-foot">
+              <button
+                type="button"
+                className="btn subtle"
+                onClick={onTest}
+                disabled={testing}
+              >
+                {testing ? "Проверяем…" : "⇄ Проверить подключение"}
+              </button>
+              {testResult && (
+                <span
+                  className={`test-result ${testResult.ok ? "ok" : "error"}`}
+                >
+                  {testResult.ok ? "✓" : "✗"} {testResult.message}
+                </span>
+              )}
+              <span className="spacer" />
+              <button type="submit" className="btn primary" disabled={busySave}>
+                {busySave ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </form>
+        </>
       )}
 
-      <p className="muted">
-        Пустые поля берутся из окружения (.env). Поиск по смыслу всегда
-        использует AI_BASE_URL / AI_SEARCH_MODEL из окружения и этой
-        страницей не переключается.
+      <p className="muted foot-note">
+        Пустые поля берутся из окружения (<code>.env</code>). Поиск по смыслу
+        всегда использует <code>AI_BASE_URL</code> / <code>AI_SEARCH_MODEL</code>{" "}
+        из окружения и этой страницей не переключается.
       </p>
     </section>
   );

@@ -68,17 +68,24 @@ describe("AiSettingsPage", () => {
     localStorage.clear();
   });
 
-  it("renders env placeholders and hints when nothing is saved", async () => {
+  it("renders env placeholders, steps and the current-connection summary", async () => {
     mockFetch({ "/api/ai-settings": CONFIG });
     renderPage();
 
     expect(await screen.findByRole("heading", { name: /Подключение ИИ/ })).toBeInTheDocument();
+    // шаги ориентируют в форме
+    expect(screen.getByText("Протокол API")).toBeInTheDocument();
+    expect(screen.getByText("Провайдер и модель")).toBeInTheDocument();
+    expect(screen.getByText("API-токен")).toBeInTheDocument();
+    // плейсхолдеры показывают, что подхватится из окружения
     expect(screen.getByPlaceholderText("https://api.z.ai/api/anthropic")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("glm-4.5")).toBeInTheDocument();
-    // токен из окружения — плейсхолдер поля говорит об этом
-    expect(
-      screen.getByPlaceholderText("не задан здесь — используется из окружения"),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("введите, чтобы заменить")).toBeInTheDocument();
+    // сводка: эффективные значения (env) и источник токена
+    const summary = document.querySelector(".current-conn")?.textContent ?? "";
+    expect(summary).toContain("glm-4.5");
+    expect(summary).toContain("https://api.z.ai/api/anthropic");
+    expect(summary).toContain("токен из окружения");
   });
 
   it("saves with null api_key when token untouched, shows mask after reload", async () => {
@@ -100,7 +107,9 @@ describe("AiSettingsPage", () => {
       });
     });
     expect(await screen.findByText("Настройки сохранены — применятся к следующим проверкам")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/сохранён sk-…ken/)).toBeInTheDocument();
+    // маска — строкой статуса под полем, с кнопкой удаления
+    expect(screen.getByText("sk-…ken")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удалить сохранённый токен" })).toBeInTheDocument();
   });
 
   it("sends the typed token on save", async () => {
@@ -110,7 +119,7 @@ describe("AiSettingsPage", () => {
     });
     renderPage();
 
-    fireEvent.change(await screen.findByLabelText("API-токен"), {
+    fireEvent.change(await screen.findByLabelText("Новый токен"), {
       target: { value: "sk-new-typed-token" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -120,7 +129,28 @@ describe("AiSettingsPage", () => {
     });
   });
 
-  it("test connection posts current form values and shows the result", async () => {
+  it("deleting the saved token sends an empty api_key", async () => {
+    const withKey = { ...CONFIG, api_key_masked: "sk-…ken" };
+    const fetchMock = mockFetch({
+      "/api/ai-settings": withKey,
+      "PUT /api/ai-settings": { ...withKey, api_key_masked: "" },
+    });
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Удалить сохранённый токен" }),
+    );
+    // режим удаления объясняет последствия и отменяется
+    expect(await screen.findByText(/будет удалён/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отменить удаление" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      expect(putCall(fetchMock)?.api_key).toBe(""); // "" → очистить, проверки пойдут с env-ключом
+    });
+  });
+
+  it("test connection posts current form values and shows an inline result", async () => {
     const fetchMock = mockFetch({
       "/api/ai-settings": CONFIG,
       "POST /api/ai-settings/test": { ok: true, message: "Модель glm-4.5 ответила" },
@@ -137,10 +167,13 @@ describe("AiSettingsPage", () => {
         api_key: "", // пустая строка → бэкенд возьмёт сохранённый/env ключ
       });
     });
-    expect(await screen.findByText("Модель glm-4.5 ответила")).toBeInTheDocument();
+    // результат — плашка в строке действий, не баннер на всю страницу
+    expect(await screen.findByText(/Модель glm-4.5 ответила/)).toBeInTheDocument();
+    expect(document.querySelector(".test-result.ok")).not.toBeNull();
+    expect(document.querySelector(".alert.ok")).toBeNull();
   });
 
-  it("test connection failure shows an error alert, not a page error", async () => {
+  it("test connection failure shows an error pill, not a page error", async () => {
     mockFetch({
       "/api/ai-settings": CONFIG,
       "POST /api/ai-settings/test": { ok: false, message: "Неверный API-ключ ИИ (401)" },
@@ -149,7 +182,8 @@ describe("AiSettingsPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "⇄ Проверить подключение" }));
 
-    expect(await screen.findByText("Неверный API-ключ ИИ (401)")).toBeInTheDocument();
+    expect(await screen.findByText(/Неверный API-ключ ИИ \(401\)/)).toBeInTheDocument();
+    expect(document.querySelector(".test-result.error")).not.toBeNull();
     expect(screen.queryByText("Настройки сохранены")).not.toBeInTheDocument();
   });
 

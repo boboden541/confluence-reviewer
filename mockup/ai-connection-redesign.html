@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Макет · Подключение ИИ — редизайн</title>
+  <style>
+    /* ===== токены дизайн-системы (из styles.css) ===== */
+    :root {
+      --nav-bg: #071D49;
+      --nav-icon: #BCD0F7;
+      --blue: #0C66E4;
+      --blue-hover: #0055CC;
+      --blue-subtle-bg: #E9F2FF;
+      --text: #172B4D;
+      --text-subtle: #44546F;
+      --text-subtlest: #626F86;
+      --bg: #F1F2F4;
+      --surface: #FFFFFF;
+      --border: #D0D5DD;
+      --border-subtle: #EBECF0;
+      --row-hover: #F8F9FA;
+      --green-bg: #DCFFF1;
+      --green-text: #216E4E;
+      --red-bg: #FFEBE6;
+      --red-text: #AE2E24;
+      --grey-bg: #F1F2F4;
+      --radius: 4px;
+      --radius-page: 8px;
+      --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* ===== каркас: topbar + sidebar (как в приложении) ===== */
+    .topbar {
+      height: 56px;
+      background: var(--nav-bg);
+      color: #DEEBFF;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+    }
+
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 500;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: var(--radius);
+    }
+
+    .logo-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius);
+      background: #2684FF;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .topbar-search {
+      flex: 1;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .topbar-search input {
+      width: 100%;
+      height: 32px;
+      border: none;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      padding: 0 12px;
+      font-size: 14px;
+      font-family: var(--font);
+      outline: none;
+    }
+
+    .topbar-search input::placeholder {
+      color: #A6C1E8;
+    }
+
+    .topbar-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: #2684FF;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      margin-left: 4px;
+    }
+
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 56px);
+    }
+
+    .sidebar {
+      width: 256px;
+      background: var(--surface);
+      border-right: 1px solid var(--border-subtle);
+      padding: 12px 8px;
+      flex-shrink: 0;
+    }
+
+    .space-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      margin-bottom: 10px;
+    }
+
+    .space-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius);
+      background: #0C66E4;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .space-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-subtlest);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 12px 10px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      user-select: none;
+    }
+
+    a.nav-item:hover {
+      background: var(--row-hover);
+      text-decoration: none;
+    }
+
+    .nav-item.active {
+      background: var(--blue-subtle-bg);
+      color: var(--blue-hover);
+      font-weight: 600;
+    }
+
+    .nav-item .ic {
+      width: 18px;
+      text-align: center;
+      color: var(--text-subtle);
+      font-size: 14px;
+    }
+
+    .nav-item.active .ic {
+      color: var(--blue-hover);
+    }
+
+    .content {
+      flex: 1;
+      min-width: 0;
+      padding: 24px 32px 64px;
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+
+    /* ===== страница ===== */
+    .page {
+      background: var(--surface);
+      border-radius: var(--radius-page);
+      box-shadow: var(--shadow);
+      padding: 28px 36px 36px;
+    }
+
+    .breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-bottom: 8px;
+    }
+
+    .breadcrumbs .sep {
+      color: var(--text-subtlest);
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.2px;
+    }
+
+    .page-title .title-icon {
+      color: var(--text-subtle);
+      margin-right: 6px;
+      font-weight: 400;
+    }
+
+    .page-meta {
+      color: var(--text-subtle);
+      font-size: 13px;
+      margin: 6px 0 0;
+    }
+
+    /* сводка «чем проверяют прямо сейчас» — якорь для глаза в самом верху */
+    .current-conn {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin: 20px 0 24px;
+      padding: 12px 16px;
+      background: var(--grey-bg);
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--text-subtle);
+    }
+
+    .current-conn .lbl {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .current-conn .dot {
+      color: var(--green-text);
+      font-weight: 700;
+    }
+
+    .current-conn code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: var(--surface);
+      padding: 1px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* ===== форма: ограниченная ширина, секции-шаги ===== */
+    .settings-form {
+      max-width: 760px;
+    }
+
+    .step {
+      padding: 24px 0 28px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .step:first-child {
+      padding-top: 4px;
+    }
+
+    .step:last-of-type {
+      border-bottom: none;
+    }
+
+    .step-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .step-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--blue);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.5px;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .step-sub {
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-bottom: 18px;
+      max-width: 560px;
+      line-height: 1.5;
+    }
+
+    /* карточки протокола: две в ряд, крупные, со значком */
+    .protocol-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .tpl {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      border: 2px solid var(--border-subtle);
+      border-radius: var(--radius-page);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+
+    .tpl:hover {
+      background: var(--row-hover);
+    }
+
+    .tpl.selected {
+      border-color: var(--blue);
+      background: var(--blue-subtle-bg);
+    }
+
+    .tpl input {
+      accent-color: var(--blue);
+      margin-top: 3px;
+    }
+
+    .tpl .proto-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      flex-shrink: 0;
+      background: var(--grey-bg);
+      color: var(--text-subtle);
+    }
+
+    .tpl.selected .proto-mark {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .tpl .name {
+      font-weight: 600;
+    }
+
+    .tpl .desc {
+      font-size: 12.5px;
+      color: var(--text-subtle);
+      margin-top: 3px;
+      line-height: 1.45;
+    }
+
+    /* поля: сеткой, без инлайн-ширин */
+    .fields-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-subtle);
+    }
+
+    .text-input,
+    .select-input {
+      height: 38px;
+      width: 100%;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 10px;
+      font-size: 14px;
+      font-family: var(--font);
+      color: var(--text);
+      outline: none;
+      background: #FAFBFC;
+    }
+
+    .select-input {
+      cursor: pointer;
+    }
+
+    .text-input:focus,
+    .select-input:focus {
+      border-color: var(--blue);
+      background: #fff;
+    }
+
+    .text-input::placeholder {
+      color: var(--text-subtlest);
+    }
+
+    .field-hint {
+      font-size: 12.5px;
+      color: var(--text-subtlest);
+      line-height: 1.45;
+    }
+
+    .field-hint code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px;
+    }
+
+    /* статус сохранённого токена — строка под полем, а не кнопка сбоку */
+    .key-status {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      font-size: 13px;
+      color: var(--text-subtle);
+    }
+
+    .key-status .mask {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px;
+      background: var(--grey-bg);
+      padding: 2px 8px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    /* ===== кнопки ===== */
+    .btn {
+      height: 36px;
+      padding: 0 14px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 14px;
+      font-family: var(--font);
+      cursor: pointer;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn.primary:hover {
+      background: var(--blue-hover);
+    }
+
+    .btn.subtle {
+      background: var(--surface);
+      color: var(--blue-hover);
+      box-shadow: inset 0 0 0 1px var(--border);
+      font-weight: 400;
+    }
+
+    .btn.subtle:hover {
+      background: var(--row-hover);
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .form-foot {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding-top: 22px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .form-foot .spacer {
+      flex: 1;
+    }
+
+    .btn.ghost {
+      background: transparent;
+      border: none;
+      color: var(--text-subtle);
+      padding: 0 10px;
+      height: 30px;
+      font-size: 13px;
+    }
+
+    .btn.ghost:hover {
+      background: var(--grey-bg);
+      color: var(--text);
+    }
+
+    .btn.ghost.danger {
+      color: var(--red-text);
+    }
+
+    .btn.ghost.danger:hover {
+      background: var(--red-bg);
+    }
+
+    /* inline-результат проверки: компактная плашка рядом с кнопкой */
+    .test-result {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+    }
+
+    .test-result.ok {
+      background: var(--green-bg);
+      color: var(--green-text);
+    }
+
+    .test-result.error {
+      background: var(--red-bg);
+      color: var(--red-text);
+    }
+
+    .alert {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      margin: 0 0 16px;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+
+    .alert.ok {
+      background: var(--green-bg);
+      color: var(--green-text);
+    }
+
+    .alert.error {
+      background: var(--red-bg);
+      color: var(--red-text);
+    }
+
+    .muted {
+      color: var(--text-subtle);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .foot-note {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+      max-width: 760px;
+    }
+
+    @media (max-width: 768px) {
+      .content {
+        padding: 16px;
+      }
+
+      .page {
+        padding: 18px 16px 28px;
+      }
+
+      .protocol-grid,
+      .fields-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="topbar">
+    <a class="topbar-logo"><span class="logo-mark">CR</span><span>Ревью требований</span></a>
+    <div class="topbar-search"><input type="text" placeholder="Поиск по документам…"></div>
+    <button class="topbar-avatar">Р</button>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="space-head">
+        <span class="space-icon">Б</span>
+        <span class="space-name">БФТ · Ревью</span>
+      </div>
+      <div class="nav-label">Работа</div>
+      <a class="nav-item"><span class="ic">👥</span> Аналитики</a>
+      <div class="nav-label">Настройка</div>
+      <a class="nav-item"><span class="ic">📋</span> Шаблон требований</a>
+      <a class="nav-item active"><span class="ic">⚙️</span> Подключение ИИ</a>
+    </aside>
+
+    <main class="content">
+      <section class="page">
+        <nav class="breadcrumbs">
+          <a href="#">Ревью требований</a>
+          <span class="sep">/</span>
+          <span>Настройка</span>
+          <span class="sep">/</span>
+          <span>Подключение ИИ</span>
+        </nav>
+
+        <h1 class="page-title"><span class="title-icon">⚙️</span> Подключение ИИ</h1>
+        <div class="page-meta">Применяется ко всем ИИ-проверкам документов</div>
+
+        <!-- якорь: чем проверяют прямо сейчас, до всяких форм -->
+        <div class="current-conn">
+          <span class="lbl">Сейчас проверяют через:</span>
+          <span><span class="dot">●</span> glm-4.5 · <code>https://api.z.ai/api/anthropic</code></span>
+          <span>· токен из окружения</span>
+          <span>· изменено: 21.08.2026, 14:02</span>
+        </div>
+
+        <form class="settings-form" onsubmit="return false">
+
+          <!-- 01 · протокол -->
+          <div class="step">
+            <div class="step-head">
+              <span class="step-num">01</span>
+              <span class="step-title">Протокол API</span>
+            </div>
+            <p class="step-sub">Определяет формат запросов к провайдеру. Если не уверены — оставьте как есть.</p>
+            <div class="protocol-grid">
+              <label class="tpl selected" data-protocol="anthropic">
+                <input type="radio" name="ai-protocol" checked>
+                <span class="proto-mark">A</span>
+                <span>
+                  <span class="name">Anthropic-совместимый</span>
+                  <div class="desc">z.ai (GLM), DeepSeek, Kimi</div>
+                </span>
+              </label>
+              <label class="tpl" data-protocol="openai">
+                <input type="radio" name="ai-protocol">
+                <span class="proto-mark">O</span>
+                <span>
+                  <span class="name">OpenAI-совместимый</span>
+                  <div class="desc">OpenAI, OpenRouter, локальные Ollama / vLLM</div>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 02 · провайдер и модель -->
+          <div class="step">
+            <div class="step-head">
+              <span class="step-num">02</span>
+              <span class="step-title">Провайдер и модель</span>
+            </div>
+            <p class="step-sub">Выберите пресет — поля заполнятся сами, значения можно поправить руками. Оставьте поле
+              пустым, чтобы брать значение из окружения (<code>.env</code>).</p>
+
+            <div class="field" style="margin-bottom: 18px">
+              <label for="ai-preset">Пресет провайдера</label>
+              <select id="ai-preset" class="select-input">
+                <option value="">— выбрать —</option>
+                <option value="zai">z.ai · GLM</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="kimi">Kimi (Moonshot)</option>
+              </select>
+            </div>
+
+            <div class="fields-grid">
+              <div class="field">
+                <label for="ai-base-url">Базовый URL</label>
+                <input id="ai-base-url" class="text-input" placeholder="https://api.z.ai/api/anthropic">
+                <span class="field-hint">пусто — из окружения: <code>AI_BASE_URL</code></span>
+              </div>
+              <div class="field">
+                <label for="ai-model">Модель</label>
+                <input id="ai-model" class="text-input" placeholder="glm-4.5">
+                <span class="field-hint">пусто — <code>AI_MODEL</code></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 03 · токен -->
+          <div class="step">
+            <div class="step-head">
+              <span class="step-num">03</span>
+              <span class="step-title">API-токен</span>
+            </div>
+            <p class="step-sub">Хранится в базе и отдаётся только маской. Оставьте поле пустым — ничего не изменится;
+              чтобы вернуться к ключу из окружения, удалите сохранённый токен.</p>
+
+            <div class="field">
+              <label for="ai-key">Новый токен</label>
+              <input id="ai-key" class="text-input" type="password" autocomplete="new-password"
+                placeholder="введите, чтобы заменить">
+              <div class="key-status" style="margin-top: 10px">
+                <span>Сохранён:</span>
+                <span class="mask">sk-…654</span>
+                <button type="button" class="btn ghost danger">Удалить сохранённый токен</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- действия -->
+          <div class="form-foot">
+            <button type="button" class="btn subtle" id="btn-test">⇄ Проверить подключение</button>
+            <span class="test-result ok" id="test-result" hidden>✓ Модель glm-4.5 ответила</span>
+            <span class="spacer"></span>
+            <button type="button" class="btn primary" id="btn-save">Сохранить</button>
+          </div>
+        </form>
+
+        <p class="muted foot-note">
+          Пустые поля берутся из окружения (<code>.env</code>). Поиск по смыслу всегда использует
+          <code>AI_BASE_URL</code> / <code>AI_SEARCH_MODEL</code> из окружения и этой страницей не переключается.
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // лёгкая интерактивность для валидации макета
+    document.querySelectorAll(".tpl").forEach((card) => {
+      card.addEventListener("click", () => {
+        document.querySelectorAll(".tpl").forEach((c) => c.classList.remove("selected"));
+        card.classList.add("selected");
+        card.querySelector("input").checked = true;
+      });
+    });
+
+    const PRESETS = {
+      zai: ["https://api.z.ai/api/anthropic", "glm-4.5"],
+      deepseek: ["https://api.deepseek.com/anthropic", "deepseek-chat"],
+      kimi: ["https://api.moonshot.cn/anthropic", "kimi-k2-0905-preview"],
+    };
+    document.getElementById("ai-preset").addEventListener("change", (e) => {
+      const p = PRESETS[e.target.value];
+      if (!p) return;
+      document.getElementById("ai-base-url").value = p[0];
+      document.getElementById("ai-model").value = p[1];
+    });
+
+    const btnTest = document.getElementById("btn-test");
+    btnTest.addEventListener("click", () => {
+      btnTest.disabled = true;
+      btnTest.textContent = "Проверяем…";
+      setTimeout(() => {
+        btnTest.disabled = false;
+        btnTest.textContent = "⇄ Проверить подключение";
+        const res = document.getElementById("test-result");
+        res.hidden = false;
+      }, 700);
+    });
+  </script>
+</body>
+
+</html>
