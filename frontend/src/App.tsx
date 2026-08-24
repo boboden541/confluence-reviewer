@@ -12,6 +12,7 @@ import {
   type SyncStatus,
 } from "./api";
 import AnalystsPage from "./pages/AnalystsPage";
+import AiSettingsPage from "./pages/AiSettingsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
 import TemplatePage from "./pages/TemplatePage";
@@ -87,6 +88,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   const onAnalysts = location.pathname === "/";
   const onTemplate = location.pathname.startsWith("/template");
+  const onAiConnection = location.pathname.startsWith("/ai-connection");
   const activeAnalystId = Number(
     location.pathname.match(/^\/analysts\/(\d+)/)?.[1] ?? NaN,
   );
@@ -143,6 +145,13 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
         onClick={onClose}
       >
         <span className="ic">🧩</span> Шаблон требований
+      </Link>
+      <Link
+        to="/ai-connection"
+        className={`nav-item${onAiConnection ? " active" : ""}`}
+        onClick={onClose}
+      >
+        <span className="ic">⚙️</span> Подключение ИИ
       </Link>
 
       <div className="sync-status">
@@ -232,6 +241,7 @@ export default function App() {
             <Route path="/analysts/:analystId" element={<DocumentsPage />} />
             <Route path="/documents/:documentId" element={<ReportPage />} />
             <Route path="/template" element={<TemplatePage />} />
+            <Route path="/ai-connection" element={<AiSettingsPage />} />
           </Routes>
         </main>
       </div>

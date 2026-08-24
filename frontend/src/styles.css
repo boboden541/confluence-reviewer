@@ -795,6 +795,32 @@ td.actions-cell .btn + .btn {
   background: #fff;
 }
 
+/* полноширинный select — пара к .text-input в формах настроек */
+.select-input {
+  height: 32px;
+  min-width: 220px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 8px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  background: #FAFBFC;
+  cursor: pointer;
+}
+
+.select-input:focus {
+  border-color: var(--blue);
+  background: #fff;
+  outline: none;
+}
+
+/* мелкая приглушённая подпись под полем формы */
+.field-hint {
+  font-size: 11.5px;
+  color: var(--text-subtlest);
+}
+
 textarea.text-input {
   width: 100%;
   height: auto;

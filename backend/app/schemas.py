@@ -116,6 +116,8 @@ class ValidationReportOut(BaseModel):
     # чем проверяли: версия шаблона и пользовательский промт (NULL — стандартный)
     template_version_id: int | None = None
     ai_prompt: str | None = None
+    # какой моделью ИИ проверяли (NULL — старые отчёты)
+    ai_model_used: str | None = None
 
 
 # --- Настройки запуска проверки (диалог выбора шаблона и промта) ---
@@ -164,6 +166,91 @@ class ValidationConfigOut(BaseModel):
 
     templates: list[TemplateOptionOut]
     default_prompt: str
+
+
+# --- Настройки подключения ИИ (глобальные) ---
+
+
+class AIEnvInfo(BaseModel):
+    """Загрузочные дефолты из окружения — подсказки для полей UI."""
+
+    protocol: str
+    base_url: str
+    model: str
+    api_key_set: bool
+
+
+class AIConnectionOut(BaseModel):
+    """Сохранённые настройки подключения ИИ + дефолты env.
+
+    Сохранённые поля отдаются как есть ("" = берётся из env); токен —
+    только маской, открытым текстом не возвращается никогда.
+    """
+
+    protocol: str
+    base_url: str
+    model: str
+    api_key_masked: str
+    updated_at: datetime | None = None
+    env: AIEnvInfo
+
+
+class AIConnectionUpdate(BaseModel):
+    """PUT /api/ai-settings. api_key: None — не менять, "" — очистить
+    (fallback на env), строка — новое значение."""
+
+    protocol: str
+    base_url: str = Field(default="", max_length=512)
+    model: str = Field(default="", max_length=128)
+    api_key: str | None = Field(default=None, max_length=4096)
+
+    @field_validator("protocol")
+    @classmethod
+    def protocol_known(cls, value: str) -> str:
+        if value not in ("anthropic", "openai"):
+            raise ValueError("Протокол должен быть anthropic или openai")
+        return value
+
+    @field_validator("base_url")
+    @classmethod
+    def base_url_http(cls, value: str) -> str:
+        # пустое значение допустимо (= из env), непустое — только http(s)
+        cleaned = value.strip()
+        if cleaned and not cleaned.startswith(("http://", "https://")):
+            raise ValueError("Базовый URL должен начинаться с http:// или https://")
+        return cleaned.rstrip("/")
+
+    @field_validator("model")
+    @classmethod
+    def model_not_blank(cls, value: str) -> str:
+        # пустое значение допустимо (= из env), пробельная строка — нет
+        if value and not value.strip():
+            raise ValueError("Модель не может состоять из одних пробелов")
+        return value.strip()
+
+
+class AIConnectionTestRequest(BaseModel):
+    """POST /api/ai-settings/test: текущие (возможно несохранённые) значения
+    формы. Пустые поля разрешаются в сохранённое значение, затем в env."""
+
+    protocol: str
+    base_url: str = Field(default="", max_length=512)
+    model: str = Field(default="", max_length=128)
+    api_key: str = Field(default="", max_length=4096)
+
+    @field_validator("protocol")
+    @classmethod
+    def protocol_known(cls, value: str) -> str:
+        if value not in ("anthropic", "openai"):
+            raise ValueError("Протокол должен быть anthropic или openai")
+        return value
+
+
+class AIConnectionTestResult(BaseModel):
+    """Результат «Проверить подключение»: ошибка подключения — не сбой API."""
+
+    ok: bool
+    message: str
 
 
 # --- Шаблон требований (UI-редактор) ---

@@ -119,6 +119,9 @@ class ValidationReport(Base):
     )
     # Пользовательский промт ИИ этой проверки (NULL — стандартный промт)
     ai_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Какой моделью выполнялась ИИ-проверка (NULL — старые отчёты). Отличие
+    # эффективной модели от этого значения = перевалидация (ФТ-CR-14)
+    ai_model_used: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Когда замечания этого отчёта были опубликованы комментарием в Confluence (ФТ-CR-17)
     comment_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -146,6 +149,26 @@ class TemplateVersion(Base):
     repeatable_blocks_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
+class AIConnectionSettings(Base):
+    """Глобальные настройки подключения ИИ: одна строка (id=1).
+
+    Пустое поле = значение из окружения (env — загрузочный дефолт).
+    api_key хранится в БД (принятый компромисс внутреннего инструмента),
+    наружу отдаётся только маской (см. services.ai_settings.mask_api_key).
+    """
+
+    __tablename__ = "ai_connection_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # всегда 1
+    protocol: Mapped[str] = mapped_column(String(16), nullable=False, default="anthropic")
+    base_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    api_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
 
 
 class DocumentNote(Base):

@@ -93,6 +93,7 @@ def create_app(settings=None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    from app.routers.ai_settings import router as ai_settings_router
     from app.routers.analysts import router as analysts_router
     from app.routers.documents import router as documents_router
     from app.routers.health import router as health_router
@@ -104,6 +105,7 @@ def create_app(settings=None) -> FastAPI:
     app.include_router(documents_router)
     app.include_router(sync_router)
     app.include_router(templates_router)
+    app.include_router(ai_settings_router)
 
     return app
 

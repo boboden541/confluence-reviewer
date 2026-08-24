@@ -19,6 +19,7 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "validation_reports": [
         ("template_version_id", "INTEGER REFERENCES template_versions(id) ON DELETE SET NULL"),
         ("ai_prompt", "TEXT"),
+        ("ai_model_used", "VARCHAR(128)"),
     ],
 }
 

@@ -11,7 +11,9 @@ import pytest
 
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationStatus
+from app.config import get_settings
 from app.services import tasks
+from app.services.ai_settings import AIConnection
 from app.services.ai_validator import AIValidationError, AIValidationResult
 from app.services.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
@@ -78,6 +80,9 @@ class FakeAIValidator:
     )
     error: AIValidationError | None = None
 
+    def __init__(self, *args, **kwargs):
+        pass  # продакшн-код передаёт connection= — фейку он не нужен
+
     def validate(self, title: str, markdown: str, system_prompt: str | None = None) -> AIValidationResult:
         type(self).calls += 1
         type(self).prompts.append(system_prompt)
@@ -98,6 +103,19 @@ def patch_ai(monkeypatch, passed=True, error=None):
         model="test",
     )
     monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    # эффективная модель должна совпадать с моделью фейка — иначе
+    # идемпотентность по модели (ФТ-CR-14) потребует ревалидации
+    monkeypatch.setattr(
+        "app.services.validation.get_ai_connection",
+        lambda db: AIConnection(
+            protocol="anthropic",
+            base_url="https://ai.test",
+            api_key="test-key",
+            model=FakeAIValidator.result.model,
+            max_tokens=100,
+            timeout_seconds=1.0,
+        ),
+    )
 
 
 def doc_by_id(doc_id: int) -> ConfluenceDocument:
@@ -185,6 +203,28 @@ def test_force_revalidates_even_unchanged(monkeypatch):
     second = run_validation(doc_id, force=True)
     assert FakeAIValidator.calls == 2
     assert second.id != first.id
+
+
+def test_model_change_revalidates_unchanged_document(monkeypatch):
+    """Смена эффективной модели ИИ = кэшированный отчёт ей не соответствовал."""
+    patch_ai(monkeypatch, passed=True)
+    doc_id = seed_document()
+    first = run_validation(doc_id)
+    assert first.ai_model_used == "test"  # чем проверяли — зафиксировано в отчёте
+
+    second = run_validation(doc_id)  # та же модель — идемпотентно
+    assert second.id == first.id
+
+    monkeypatch.setattr(
+        "app.services.validation.get_ai_connection",
+        lambda db: AIConnection(
+            protocol="anthropic", base_url="https://ai.test", api_key="k",
+            model="other-model", max_tokens=100, timeout_seconds=1.0,
+        ),
+    )
+    third = run_validation(doc_id)
+    assert third.id != first.id  # другая модель → новая проверка
+    assert FakeAIValidator.calls == 2
 
 
 def test_document_not_found():
