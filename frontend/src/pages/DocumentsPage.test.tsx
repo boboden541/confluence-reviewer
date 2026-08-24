@@ -326,8 +326,8 @@ describe("DocumentsPage", () => {
 
     // панель открылась, документ в ней загружен (отчёт и заметки на месте)
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Качество содержимого/)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "▶ Проверить" })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Содержимое/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Проверить" })).toBeInTheDocument();
   });
 
   it("closes the side panel with Escape", async () => {
@@ -500,7 +500,7 @@ describe("DocumentsPage", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Соответствие шаблону/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Шаблон требований/)).toBeInTheDocument();
   });
 
   it("starts bulk validation for the analyst", async () => {

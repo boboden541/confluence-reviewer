@@ -485,18 +485,8 @@ export default function DocumentsPage() {
               onKeyDown={onResizeKey}
               onDoubleClick={() => setDrawerW(clampDrawerW(DRAWER_DEFAULT_W))}
             />
-            <div className="drawer-toolbar">
-              <button
-                type="button"
-                className="btn small subtle drawer-close"
-                aria-label="Закрыть панель"
-                onClick={closeDrawer}
-              >
-                ✕
-              </button>
-            </div>
             <div className="drawer-body">
-              <DocumentReport documentId={drawerDocId} embedded />
+              <DocumentReport documentId={drawerDocId} embedded onClose={closeDrawer} />
             </div>
           </aside>
         </>

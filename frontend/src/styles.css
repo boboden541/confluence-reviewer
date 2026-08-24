@@ -862,8 +862,8 @@ textarea.text-input {
 /* ===== отрендеренный markdown отчётов ===== */
 
 .markdown {
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .markdown > :first-child {
@@ -877,23 +877,23 @@ textarea.text-input {
 .markdown h3,
 .markdown h4,
 .markdown h5 {
-  margin: 14px 0 6px;
+  margin: 16px 0 8px;
   font-size: 15px;
   font-weight: 600;
 }
 
 .markdown ul,
 .markdown ol {
-  margin: 6px 0;
+  margin: 8px 0;
   padding-left: 20px;
 }
 
 .markdown li {
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 .markdown p {
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .markdown code {
@@ -1330,17 +1330,6 @@ textarea.text-input {
   animation: drawer-in 0.18s ease;
 }
 
-.drawer-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: #FAFBFC;
-  flex-shrink: 0;
-}
-
 /* ручка изменения ширины на левом краю панели */
 .drawer-resize {
   position: absolute;
@@ -1389,12 +1378,8 @@ body.drawer-resizing * {
 
 .drawer-body {
   overflow-y: auto;
-  padding: 16px 20px 32px;
-}
-
-/* заголовок в панели компактнее страницы */
-.drawer-body .page-title {
-  font-size: 19px;
+  /* поля задаёт сам контент — липкая шапка должна идти во всю ширину */
+  padding: 0;
 }
 
 @keyframes drawer-in {
@@ -1407,6 +1392,176 @@ body.drawer-resizing * {
     transform: none;
     opacity: 1;
   }
+}
+
+/* ===== просмотр документа: липкая шапка, зоны, карточки-статусы ===== */
+
+.doc-report.embedded {
+  padding: 0 24px 40px;
+}
+
+/* липкая шапка панели: крошки и закрытие всегда наверху */
+.drawer-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  margin: 0 -24px;
+  padding: 12px 24px 10px;
+  background: var(--surface);
+}
+
+.drawer-sticky-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.drawer-crumbs {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-crumbs .breadcrumbs {
+  margin-bottom: 0;
+}
+
+/* шапка документа уехала при прокрутке — проявляем компактный ряд */
+.drawer-sticky.pinned {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 12px rgba(9, 30, 66, 0.08);
+}
+
+.drawer-sticky-doc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.sticky-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-report.embedded .doc-header {
+  padding-top: 14px;
+}
+
+.doc-report.embedded .page-title {
+  font-size: 20px;
+}
+
+.doc-report .page-meta {
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.doc-actions {
+  margin-top: 6px;
+}
+
+/* зонный ярлык — ориентир «где я» без лишних рамок */
+.zone-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-subtle);
+}
+
+.zone-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* карточка проверки: цветная полоса статуса + лузенг в заголовке */
+.report-card {
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-page);
+  padding: 12px 20px 16px;
+  margin-bottom: 16px;
+  background: var(--surface);
+}
+
+.report-card.pass {
+  border-left-color: var(--green-text);
+}
+
+.report-card.fail {
+  border-left-color: var(--red-text);
+}
+
+.report-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.report-card-head h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.report-meta {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.empty-hint {
+  padding: 18px 20px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-page);
+  color: var(--text-subtle);
+  margin-bottom: 16px;
+}
+
+.notes-zone .text-input {
+  width: 100%;
+}
+
+.notes-actions {
+  margin-top: 12px;
+}
+
+/* тихие вторичные кнопки в ряду действий */
+.btn.ghost {
+  background: transparent;
+  border: none;
+  color: var(--text-subtle);
+  padding: 0 10px;
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--grey-bg);
+  color: var(--text);
+}
+
+.btn.ghost.danger {
+  color: var(--red-text);
+}
+
+.btn.ghost.danger:hover:not(:disabled) {
+  background: var(--red-bg);
 }
 
 /* ===== адаптив ===== */
@@ -1517,6 +1672,15 @@ body.drawer-resizing * {
 
   .drawer-resize {
     display: none;
+  }
+
+  .doc-report.embedded {
+    padding: 0 16px 32px;
+  }
+
+  .drawer-sticky {
+    margin: 0 -16px;
+    padding: 10px 16px 8px;
   }
 }
 

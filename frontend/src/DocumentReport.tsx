@@ -21,17 +21,29 @@ function formatDateTime(value: string | null): string {
   return new Date(value).toLocaleString("ru-RU");
 }
 
+// результат конкретной проверки (шаблон/ИИ), а не статус документа целиком
+function CheckBadge({ passed }: { passed: boolean | null }) {
+  if (passed == null) return <span className="lozenge default">не запускалась</span>;
+  return passed ? (
+    <span className="lozenge success">пройдено</span>
+  ) : (
+    <span className="lozenge error">не пройдено</span>
+  );
+}
+
 /**
- * Просмотр документа: шапка с автором, отчёты проверок, заметки.
+ * Просмотр документа: шапка с автором, зоны «Проверки» и «Заметки».
  * Используется в двух режимах: отдельная страница (/documents/:id)
- * и выдвижная панель справа (embedded — без «Назад», компактнее).
+ * и выдвижная панель справа (embedded — с липкой шапкой и onClose).
  */
 export default function DocumentReport({
   documentId,
   embedded = false,
+  onClose,
 }: {
   documentId: number;
   embedded?: boolean;
+  onClose?: () => void;
 }) {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [report, setReport] = useState<ValidationReport | null>(null);
@@ -41,6 +53,11 @@ export default function DocumentReport({
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // в панели шапка документа уезжает при прокрутке — «липкая» строка
+  // с крошками и названием всегда сверху
+  const [pinned, setPinned] = useState(false);
+  const headerRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -63,11 +80,35 @@ export default function DocumentReport({
   useEffect(() => {
     setDoc(null);
     setReport(null);
+    setPinned(false);
     load();
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
   }, [load]);
+
+  // блок шапки ушёл выше границы прокрутки — показываем компактный ряд.
+  // scroll-listener, а не IntersectionObserver: корневые отступы IO в Chrome
+  // не принимают calc(), а фикс в пикселях ненадёжен при ресайзе панели.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!embedded || !el) return;
+    const scroller = el.closest(".drawer-body");
+    if (!scroller || !scroller.clientHeight) return; // jsdom — без геометрии
+    const update = () => {
+      // шапка считается уехавшей, когда её низ скрылся за липкой строкой
+      const headerBottom = el.getBoundingClientRect().bottom;
+      const stickyLine = scroller.getBoundingClientRect().top + 48;
+      setPinned(headerBottom < stickyLine);
+    };
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [embedded, doc]);
 
   const runValidation = async (force: boolean) => {
     setBusy(true);
@@ -165,135 +206,179 @@ export default function DocumentReport({
   const analystName = doc.analyst_name || "Аналитик";
   const analystInitial = analystName.trim().charAt(0).toUpperCase() || "?";
 
+  const crumbs = (
+    <nav className="breadcrumbs">
+      <Link to="/">Аналитики</Link>
+      <span className="sep">/</span>
+      <Link to={`/analysts/${doc.analyst_id}`}>{analystName}</Link>
+      <span className="sep">/</span>
+      <span className="crumb-current" title={doc.title}>
+        {embedded ? (
+          <Link
+            className="crumb-link"
+            to={`/documents/${documentId}`}
+            title="Открыть на отдельной странице"
+          >
+            {doc.title}
+          </Link>
+        ) : (
+          doc.title
+        )}
+      </span>
+    </nav>
+  );
+
   return (
     <div className={embedded ? "doc-report embedded" : "doc-report"}>
-      <nav className="breadcrumbs">
-        <Link to="/">Аналитики</Link>
-        <span className="sep">/</span>
-        <Link to={`/analysts/${doc.analyst_id}`}>{analystName}</Link>
-        <span className="sep">/</span>
-        <span className="crumb-current" title={doc.title}>
-          {embedded ? (
-            <Link
-              className="crumb-link"
-              to={`/documents/${documentId}`}
-              title="Открыть на отдельной странице"
-            >
-              {doc.title}
-            </Link>
-          ) : (
-            doc.title
+      {embedded ? (
+        <div className={pinned ? "drawer-sticky pinned" : "drawer-sticky"}>
+          <div className="drawer-sticky-row">
+            <div className="drawer-crumbs">{crumbs}</div>
+            {onClose && (
+              <button
+                type="button"
+                className="btn small subtle drawer-close"
+                aria-label="Закрыть панель"
+                onClick={onClose}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {pinned && (
+            <div className="drawer-sticky-doc">
+              <span className="sticky-title" title={doc.title}>
+                {doc.title}
+              </span>
+              <StatusBadge status={doc.validation_status} />
+            </div>
           )}
-        </span>
-      </nav>
+        </div>
+      ) : (
+        crumbs
+      )}
 
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">
-            <span className="title-icon">📄</span>
-            {doc.title}
-          </h1>
-          <div className="doc-author">
-            <span className="author-avatar" aria-hidden="true">
-              {analystInitial}
-            </span>
-            <span className="author-info">
-              <Link className="author-name" to={`/analysts/${doc.analyst_id}`}>
-                {analystName}
-              </Link>
-              {doc.analyst_email && (
-                <span className="muted author-email">{doc.analyst_email}</span>
-              )}
-            </span>
+      <div className="doc-header" ref={headerRef}>
+        <div className="page-head">
+          <div>
+            <h1 className="page-title">{doc.title}</h1>
+            <div className="doc-author">
+              <span className="author-avatar" aria-hidden="true">
+                {analystInitial}
+              </span>
+              <span className="author-info">
+                <Link className="author-name" to={`/analysts/${doc.analyst_id}`}>
+                  {analystName}
+                </Link>
+                {doc.analyst_email && (
+                  <span className="muted author-email">{doc.analyst_email}</span>
+                )}
+              </span>
+            </div>
+            <div className="page-meta">
+              <a href={doc.url} target="_blank" rel="noreferrer">
+                Открыть в Confluence ↗
+              </a>
+              {" · создан "}
+              {formatDateTime(doc.created_in_confluence_at)}
+              {" · изменён "}
+              {formatDateTime(doc.last_modified_in_confluence_at)}
+            </div>
           </div>
-          <div className="page-meta">
-            <a href={doc.url} target="_blank" rel="noreferrer">
-              Открыть в Confluence ↗
-            </a>
-            {" · создан "}
-            {formatDateTime(doc.created_in_confluence_at)}
-            {" · изменён "}
-            {formatDateTime(doc.last_modified_in_confluence_at)}
+          <div className="head-actions">
+            <StatusBadge status={doc.validation_status} />
           </div>
         </div>
-        <div className="head-actions">
-          <StatusBadge status={doc.validation_status} />
+
+        {error && <div className="alert error">{error}</div>}
+        {info && <div className="alert ok">{info}</div>}
+
+        {/* одна главная кнопка; вторичные — тише (ghost) */}
+        <div className="head-actions doc-actions">
+          <button
+            className="btn primary"
+            onClick={() => runValidation(false)}
+            disabled={busy || checking}
+          >
+            {checking ? "Проверяется…" : <><span aria-hidden="true">▶</span> Проверить</>}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => runValidation(true)}
+            disabled={busy || checking}
+            title="Проверить заново, даже если документ не менялся"
+          >
+            <span aria-hidden="true">⟳</span> Проверить заново
+          </button>
+          <button
+            className="btn ghost"
+            onClick={sendComment}
+            disabled={busy || !report || !!report.error_message || !!report.comment_sent_at}
+            title={
+              !report
+                ? "Сначала выполните проверку"
+                : report.comment_sent_at
+                  ? "Комментарий уже опубликован"
+                  : "Опубликовать замечания комментарием на странице Confluence"
+            }
+          >
+            {report?.comment_sent_at
+              ? `Отправлено ${formatDateTime(report.comment_sent_at)}`
+              : <><span aria-hidden="true">↗</span> Отправить замечания</>}
+          </button>
         </div>
       </div>
 
-      {error && <div className="alert error">{error}</div>}
-      {info && <div className="alert ok">{info}</div>}
-
-      <div className="head-actions" style={{ marginBottom: "16px" }}>
-        <button className="btn primary" onClick={() => runValidation(false)} disabled={busy || checking}>
-          {checking ? "Проверяется…" : "▶ Проверить"}
-        </button>
-        <button className="btn subtle" onClick={() => runValidation(true)} disabled={busy || checking}>
-          ⟳ Проверить заново
-        </button>
-        <button
-          className="btn subtle"
-          onClick={sendComment}
-          disabled={busy || !report || !!report.error_message || !!report.comment_sent_at}
-          title={
-            !report
-              ? "Сначала выполните проверку"
-              : report.comment_sent_at
-                ? "Комментарий уже опубликован"
-                : ""
-          }
-        >
-          {report?.comment_sent_at
-            ? `Отправлено ${formatDateTime(report.comment_sent_at)}`
-            : "Отправить замечания в Confluence"}
-        </button>
-      </div>
+      <div className="zone-label">Проверки</div>
 
       {!report && (
-        <div className="panel">
-          <p className="table-empty">
-            Документ ещё не проверялся. Нажмите «Проверить», чтобы запустить
-            проверку шаблона и ИИ-анализ содержимого.
-          </p>
+        <div className="empty-hint">
+          Документ ещё не проверялся. Нажмите «Проверить», чтобы запустить
+          проверку шаблона и ИИ-анализ содержимого.
         </div>
       )}
 
       {report?.error_message && (
-        <div className="panel">
-          <h2>❌ Ошибка проверки</h2>
+        <div className="report-card fail">
+          <div className="report-card-head">
+            <h2>Ошибка проверки</h2>
+            <span className="lozenge moved">сбой</span>
+          </div>
           <div className="markdown error">{report.error_message}</div>
         </div>
       )}
 
       {report && !report.error_message && (
         <>
-          <div className="panel">
-            <h2>
-              {report.template_passed ? "✅" : "❌"} Соответствие шаблону требований
-            </h2>
+          <div className={report.template_passed ? "report-card pass" : "report-card fail"}>
+            <div className="report-card-head">
+              <h2>Шаблон требований</h2>
+              <CheckBadge passed={report.template_passed} />
+            </div>
             <div className="markdown">
               <Markdown text={report.template_findings || "—"} />
             </div>
           </div>
 
-          <div className="panel">
-            <h2>
-              {report.ai_passed == null ? "—️" : report.ai_passed ? "✅" : "❌"} Качество
-              содержимого (ИИ)
-            </h2>
+          <div className={report.ai_passed ? "report-card pass" : "report-card fail"}>
+            <div className="report-card-head">
+              <h2>Содержимое (ИИ)</h2>
+              <CheckBadge passed={report.ai_passed} />
+            </div>
             <div className="markdown">
               <Markdown text={report.ai_findings || "—"} />
             </div>
-            <div className="muted" style={{ marginTop: "10px" }}>
-              Отчёт сформирован {formatDateTime(report.created_at)} (запуск:{" "}
-              {report.triggered_by === "auto" ? "автоматический" : "ручной"})
+            <div className="muted report-meta">
+              Отчёт сформирован {formatDateTime(report.created_at)} · запуск:{" "}
+              {report.triggered_by === "auto" ? "автоматический" : "ручной"}
             </div>
           </div>
         </>
       )}
 
-      <div className="panel">
-        <h2>📝 Заметки руководителя (Markdown)</h2>
+      <div className="zone-label">Заметки руководителя</div>
+
+      <div className="notes-zone">
         <textarea
           className="text-input"
           rows={5}
@@ -311,16 +396,16 @@ export default function DocumentReport({
             </div>
           </div>
         )}
-        <div className="head-actions" style={{ marginTop: "12px" }}>
+        <div className="head-actions notes-actions">
           <button
-            className="btn primary"
+            className="btn small primary"
             onClick={saveNote}
             disabled={busy || note === noteOriginal}
           >
             Сохранить заметку
           </button>
           <button
-            className="btn subtle danger"
+            className="btn small ghost danger"
             onClick={deleteNote}
             disabled={busy || (!noteOriginal && !note)}
           >
