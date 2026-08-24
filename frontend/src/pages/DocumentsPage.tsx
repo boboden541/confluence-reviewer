@@ -137,11 +137,14 @@ export default function DocumentsPage() {
     localStorage.setItem("cr-drawer-w", String(drawerW));
   }, [drawerW]);
 
-  // Esc закрывает панель
+  // Esc закрывает панель; если поверх открыт модальный диалог (настройки
+  // проверки из панели) — Esc закрывает его, а не панель под ним
   useEffect(() => {
     if (drawerDocId == null) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeDrawer();
+      if (e.key !== "Escape") return;
+      if (document.querySelector(".overlay")) return;
+      closeDrawer();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
