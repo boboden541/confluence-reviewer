@@ -544,6 +544,18 @@ button.nav-item {
   max-width: 46ch;
 }
 
+/* в панели название документа в крошке открывает полную страницу */
+.breadcrumbs .crumb-link {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.breadcrumbs .crumb-link:hover {
+  color: var(--blue-hover);
+  text-decoration-style: solid;
+}
+
 /* название документа-кнопка в таблице списков */
 .doc-link {
   font-size: inherit;
@@ -1308,6 +1320,8 @@ textarea.text-input {
   bottom: 0;
   /* не шире экрана и не на весь экран: список документов остаётся виден */
   width: min(640px, calc(100vw - 200px));
+  min-width: min(380px, 100vw);
+  max-width: calc(100vw - 48px);
   background: var(--surface);
   z-index: 75;
   box-shadow: -6px 0 24px rgba(9, 30, 66, 0.18);
@@ -1319,12 +1333,58 @@ textarea.text-input {
 .drawer-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-subtle);
   background: #FAFBFC;
   flex-shrink: 0;
+}
+
+/* ручка изменения ширины на левом краю панели */
+.drawer-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+
+.drawer-resize::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 3px;
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 2px;
+  background: var(--text-subtlest);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.drawer:hover .drawer-resize::after,
+.drawer-resize:focus-visible::after,
+body.drawer-resizing .drawer-resize::after {
+  opacity: 0.55;
+}
+
+.drawer-resize:focus-visible {
+  outline: 2px solid var(--blue-hover);
+  outline-offset: -2px;
+}
+
+/* во время перетаскивания — курсор и запрет выделения текста */
+body.drawer-resizing {
+  cursor: ew-resize;
+}
+
+body.drawer-resizing * {
+  user-select: none !important;
 }
 
 .drawer-body {
@@ -1449,9 +1509,14 @@ textarea.text-input {
     max-width: calc(100vw - 24px);
   }
 
-  /* панель просмотра на телефоне — во всю ширину */
+  /* панель просмотра на телефоне — во всю ширину, ручка не нужна */
   .drawer {
-    width: 100vw;
+    width: 100vw !important;
+    min-width: 100vw;
+  }
+
+  .drawer-resize {
+    display: none;
   }
 }
 

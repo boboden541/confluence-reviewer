@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -14,6 +21,12 @@ import DocumentReport from "../DocumentReport";
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
 const SEMANTIC_DEBOUNCE_MS = 800; // не дёргаем ИИ на каждое нажатие
+
+// Ширина панели просмотра: тянется за ручку на левом краю, запоминается
+const DRAWER_DEFAULT_W = 640;
+const DRAWER_MIN_W = 380;
+const clampDrawerW = (w: number) =>
+  Math.min(Math.max(w, DRAWER_MIN_W), Math.max(DRAWER_MIN_W, window.innerWidth - 80));
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -64,6 +77,32 @@ export default function DocumentsPage() {
     params.delete("doc");
     setSearchParams(params, { replace: true });
   };
+
+  // ширина панели: сохранённая пользователем или стандартная, подогнанная под экран
+  const [drawerW, setDrawerW] = useState(() => {
+    const saved = Number(localStorage.getItem("cr-drawer-w"));
+    return Number.isFinite(saved) && saved >= DRAWER_MIN_W ? clampDrawerW(saved) : DRAWER_DEFAULT_W;
+  });
+  const [resizing, setResizing] = useState(false);
+
+  // во время перетаскивания не выделяется текст страницы под панелью
+  useEffect(() => {
+    if (!resizing) return;
+    document.body.classList.add("drawer-resizing");
+    return () => document.body.classList.remove("drawer-resizing");
+  }, [resizing]);
+
+  // окно стало уже — панель не должна вылезать за экран
+  useEffect(() => {
+    const clamp = () => setDrawerW((w) => clampDrawerW(w));
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, []);
+
+  // выбранная ширина переживает перезагрузку
+  useEffect(() => {
+    localStorage.setItem("cr-drawer-w", String(drawerW));
+  }, [drawerW]);
 
   // Esc закрывает панель
   useEffect(() => {
@@ -184,6 +223,34 @@ export default function DocumentsPage() {
     observer.observe(el);
     observerRef.current = observer;
   }, []);
+
+  // Ручка на левом краю панели: влево — шире, вправо — уже.
+  // Pointer capture держит события на ручке, даже если курсор ушёл дальше.
+  const onResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setResizing(true);
+  };
+
+  const onResizeMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizing) setDrawerW(clampDrawerW(window.innerWidth - e.clientX));
+  };
+
+  const onResizeEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    setResizing(false);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  };
+
+  const onResizeKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setDrawerW((w) => clampDrawerW(w + 32));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setDrawerW((w) => clampDrawerW(w - 32));
+    }
+  };
 
   // Ручная проверка одного документа: запускаем и переходим к отчёту.
   const validateOne = async (documentId: number) => {
@@ -398,16 +465,27 @@ export default function DocumentsPage() {
       {drawerDocId != null && (
         <>
           <div className="drawer-backdrop show" onClick={closeDrawer} />
-          <aside className="drawer" role="dialog" aria-label="Просмотр документа">
+          <aside
+            className={resizing ? "drawer resizing" : "drawer"}
+            role="dialog"
+            aria-label="Просмотр документа"
+            style={{ width: drawerW }}
+          >
+            {/* ручка на левом краю: панель можно сделать шире или уже */}
+            <div
+              className="drawer-resize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Изменить ширину панели просмотра (стрелки ← →)"
+              tabIndex={0}
+              onPointerDown={onResizeStart}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+              onKeyDown={onResizeKey}
+              onDoubleClick={() => setDrawerW(clampDrawerW(DRAWER_DEFAULT_W))}
+            />
             <div className="drawer-toolbar">
-              <button
-                type="button"
-                className="btn small subtle"
-                onClick={() => navigate(`/documents/${drawerDocId}`)}
-                title="Полная страница документа"
-              >
-                <span aria-hidden="true">↗</span> Открыть на отдельной странице
-              </button>
               <button
                 type="button"
                 className="btn small subtle drawer-close"
