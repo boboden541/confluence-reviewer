@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, ApiError, type BatchValidationRequest, type ValidationConfig } from "./api";
 
 /**
@@ -78,7 +79,9 @@ export default function ValidationDialog({
     }
   };
 
-  return (
+  // Портал в body: fixed-геометрия оверлея не должна зависеть от
+  // содержащих блоков (анимация панели просмотра, transform-предки)
+  return createPortal(
     <div
       className="overlay"
       onClick={(e) => {
@@ -179,6 +182,7 @@ export default function ValidationDialog({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

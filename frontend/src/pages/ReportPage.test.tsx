@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ReportPage from "./ReportPage";
 import { AUTH_STORAGE_KEY } from "../api";
@@ -53,6 +53,19 @@ const REPORT = {
 };
 
 const NOTE = { document_id: 42, content: "", created_at: null, updated_at: null };
+
+const VALIDATION_CONFIG = {
+  templates: [
+    {
+      id: 1,
+      name: "Шаблон системных требований [СТ] (MTSLIVE)",
+      description: "Восстановлен из шаблона Confluence",
+      is_default: true,
+      section_count: 24,
+    },
+  ],
+  default_prompt: "Ты — опытный ведущий системный аналитик, ревьюер требований.",
+};
 
 function renderPage(initialEntries: string[] = ["/documents/42"]) {
   return render(
@@ -247,5 +260,80 @@ describe("ReportPage", () => {
     const links = await screen.findAllByRole("link", { name: "Иван Тестов" });
     fireEvent.click(links[0]);
     expect(await screen.findByText("Список документов")).toBeInTheDocument();
+  });
+
+  // Проверка и с детального просмотра идёт через диалог настроек —
+  // как и в списке документов (шаблон + промт ИИ перед запуском)
+  it("runs validation from the detail page through the settings dialog", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/documents/validate-batch": { status: "started", total: 1 },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Проверить заново/ }));
+
+    // диалог предзаполнен стандартным промтом и шаблоном по умолчанию
+    const prompt = await screen.findByRole("textbox", {
+      name: "Промт ИИ-проверки",
+    }) as HTMLTextAreaElement;
+    expect(prompt.value).toBe(VALIDATION_CONFIG.default_prompt);
+    // зоны диалога (одноимённая карточка есть и в самом отчёте — ищем внутри диалога)
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Шаблон требований")).toBeInTheDocument();
+    expect(within(dialog).getByText("Промт ИИ-проверки (GLM)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Запустить проверку — 1 док\./ }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/validate-batch" && init?.method === "POST",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        document_ids: [42],
+        force: true, // «Проверить заново» — перевалидировать безусловно
+        template_id: 1,
+        ai_prompt: null, // стандартный промт не отправляем
+      });
+    });
+    // диалог закрылся, страница ждёт завершения проверки
+    expect(await screen.findByText("Проверка запущена…")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("plain Проверить from the detail page launches without force", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/documents/validate-batch": { status: "started", total: 1 },
+    });
+
+    renderPage();
+
+    // главная кнопка «Проверить» (не «Проверить заново»)
+    fireEvent.click(await screen.findByRole("button", { name: /^Проверить$/ }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Запустить проверку — 1 док\./ }),
+    );
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/validate-batch" && init?.method === "POST",
+      );
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+        document_ids: [42],
+        force: false,
+      });
+    });
   });
 });

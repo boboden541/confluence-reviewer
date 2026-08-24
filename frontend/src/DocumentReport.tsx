@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Markdown from "./Markdown";
 import StatusBadge from "./StatusBadge";
+import ValidationDialog from "./ValidationDialog";
 import {
   api,
   ApiError,
@@ -59,6 +60,11 @@ export default function DocumentReport({
   const [pinned, setPinned] = useState(false);
   const headerRef = useRef<HTMLDivElement | null>(null);
 
+  // Проверка и отсюда идёт через диалог настроек (шаблон + промт ИИ) —
+  // как и в списке документов. «Проверить заново» = force.
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogForce, setDialogForce] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const documentResp = await api<DocumentDetail>(`/api/documents/${documentId}`);
@@ -110,16 +116,15 @@ export default function DocumentReport({
     };
   }, [embedded, doc]);
 
-  const runValidation = async (force: boolean) => {
+  // Диалог отработал: проверка ушла в фон — опрашиваем документ до завершения
+  const handleLaunched = () => {
+    setDialogOpen(false);
     setBusy(true);
     setInfo("Проверка запущена…");
     setError("");
-    try {
-      await api(`/api/documents/${documentId}/validate${force ? "?force=true" : ""}`, {
-        method: "POST",
-      });
-      if (timer.current) clearInterval(timer.current);
-      timer.current = setInterval(async () => {
+    if (timer.current) clearInterval(timer.current);
+    timer.current = setInterval(async () => {
+      try {
         const current = await api<DocumentDetail>(`/api/documents/${documentId}`);
         setDoc(current);
         if (current.validation_status !== "in_progress") {
@@ -129,12 +134,10 @@ export default function DocumentReport({
           setInfo("");
           await load();
         }
-      }, 1500);
-    } catch (exc) {
-      setBusy(false);
-      setInfo("");
-      setError(exc instanceof ApiError ? exc.message : "Не удалось запустить проверку");
-    }
+      } catch {
+        // документ недоступен — продолжаем опрос
+      }
+    }, 1500);
   };
 
   const sendComment = async () => {
@@ -297,14 +300,20 @@ export default function DocumentReport({
         <div className="head-actions doc-actions">
           <button
             className="btn primary"
-            onClick={() => runValidation(false)}
+            onClick={() => {
+              setDialogForce(false);
+              setDialogOpen(true);
+            }}
             disabled={busy || checking}
           >
             {checking ? "Проверяется…" : <><span aria-hidden="true">▶</span> Проверить</>}
           </button>
           <button
             className="btn ghost"
-            onClick={() => runValidation(true)}
+            onClick={() => {
+              setDialogForce(true);
+              setDialogOpen(true);
+            }}
             disabled={busy || checking}
             title="Проверить заново, даже если документ не менялся"
           >
@@ -416,6 +425,15 @@ export default function DocumentReport({
           {note !== noteOriginal && <span className="muted">Есть несохранённые изменения</span>}
         </div>
       </div>
+
+      {dialogOpen && (
+        <ValidationDialog
+          documentIds={[documentId]}
+          force={dialogForce}
+          onClose={() => setDialogOpen(false)}
+          onLaunched={handleLaunched}
+        />
+      )}
     </div>
   );
 }
