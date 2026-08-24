@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   AUTH_STORAGE_KEY,
@@ -9,6 +9,8 @@ import {
   UNAUTHORIZED_EVENT,
   api,
   type Analyst,
+  type DocumentListItem,
+  type DocumentPage,
   type SyncStatus,
 } from "./api";
 import AnalystsPage from "./pages/AnalystsPage";
@@ -69,13 +71,40 @@ export function LoginGate() {
   );
 }
 
-/** Сайдбар пространства: навигация + дерево документов аналитиков (стиль Confluence).
- *  На узких экранах прячется off-canvas и открывается кнопкой «Меню» в шапке. */
-function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Ветка документов аналитика в сайдбаре (кэш на монтирование). */
+interface DocBranch {
+  docs: DocumentListItem[];
+  total: number;
+  loading: boolean;
+  error: boolean;
+}
+
+// ширина сайдбара: тянем правый край, запоминаем выбор
+const SIDEBAR_W_KEY = "cr-sidebar-w";
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 256;
+
+function loadSidebarWidth(): number {
+  const saved = Number(localStorage.getItem(SIDEBAR_W_KEY));
+  return saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : SIDEBAR_DEFAULT;
+}
+
+/** Сайдбар пространства: навигация + дерево «Аналитики → аналитики → последние
+ *  5 документов» (стиль Confluence). Документы ветки грузятся лениво, при первом
+ *  раскрытии. На узких экранах прячется off-canvas и открывается кнопкой «Меню». */
+export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation();
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
-  const [docsOpen, setDocsOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(true);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [branches, setBranches] = useState<Record<number, DocBranch>>({});
   const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [width, setWidth] = useState<number>(loadSidebarWidth);
+  const [resizing, setResizing] = useState(false);
+  const widthRef = useRef(width);
+  // ветки, чьи документы уже грузятся/загружены: защита от повторных запросов
+  const loadedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     api<Analyst[]>("/api/analysts")
@@ -86,55 +115,204 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       .catch(() => setSync(null));
   }, []);
 
+  // документы ветки: грузим при первом раскрытии и кэшируем на монтирование;
+  // после ошибки разрешаем повторить — id выкидываем из защиты
+  const loadDocs = useCallback((analystId: number) => {
+    if (loadedRef.current.has(analystId)) return;
+    loadedRef.current.add(analystId);
+    setBranches((prev) => ({
+      ...prev,
+      [analystId]: { docs: [], total: 0, loading: true, error: false },
+    }));
+    api<DocumentPage>(`/api/analysts/${analystId}/documents?page=1&page_size=5`)
+      .then((page) =>
+        setBranches((prev) => ({
+          ...prev,
+          [analystId]: { docs: page.items, total: page.total, loading: false, error: false },
+        })),
+      )
+      .catch(() => {
+        loadedRef.current.delete(analystId);
+        setBranches((prev) => ({
+          ...prev,
+          [analystId]: { docs: [], total: 0, loading: false, error: true },
+        }));
+      });
+  }, []);
+
+  const toggleBranch = (analystId: number) => {
+    if (!expanded.has(analystId)) loadDocs(analystId);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(analystId)) next.delete(analystId);
+      else next.add(analystId);
+      return next;
+    });
+  };
+
   const onAnalysts = location.pathname === "/";
   const onTemplate = location.pathname.startsWith("/template");
   const onAiConnection = location.pathname.startsWith("/ai-connection");
   const activeAnalystId = Number(
     location.pathname.match(/^\/analysts\/(\d+)/)?.[1] ?? NaN,
   );
-  // раскрытое дерево документов: открыли аналитика — показываем его ветку
+  const activeDocId = Number(
+    location.pathname.match(/^\/documents\/(\d+)/)?.[1] ?? NaN,
+  );
+  // открыли страницу аналитика — раскрываем группу и его ветку в дереве
   useEffect(() => {
-    if (!Number.isNaN(activeAnalystId)) setDocsOpen(true);
-  }, [activeAnalystId]);
+    if (Number.isNaN(activeAnalystId)) return;
+    setGroupOpen(true);
+    setExpanded((prev) => {
+      if (prev.has(activeAnalystId)) return prev;
+      const next = new Set(prev);
+      next.add(activeAnalystId);
+      return next;
+    });
+    loadDocs(activeAnalystId);
+  }, [activeAnalystId, loadDocs]);
+
+  // --- ресайз: тянем правый край сайдбара, ширина запоминается ---
+  const applyWidth = (w: number) => {
+    const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
+    widthRef.current = clamped;
+    setWidth(clamped);
+  };
+  const persistWidth = () => {
+    localStorage.setItem(SIDEBAR_W_KEY, String(widthRef.current));
+  };
+  // Pointer capture держит события на ручке, даже если курсор ушёл дальше
+  // (как у ресайзера панели просмотра), и заодно даёт тач-перетаскивание.
+  const onResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setResizing(true);
+  };
+  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (resizing) applyWidth(e.clientX);
+  };
+  const onResizeEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    setResizing(false);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    persistWidth();
+  };
+  // клавиатура: вправо — шире, влево — уже
+  const onResizeKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      applyWidth(widthRef.current + 32);
+      persistWidth();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      applyWidth(widthRef.current - 32);
+      persistWidth();
+    }
+  };
+  // во время перетаскивания не выделяем текст страницы
+  useEffect(() => {
+    document.body.classList.toggle("sidebar-resizing", resizing);
+    return () => document.body.classList.remove("sidebar-resizing");
+  }, [resizing]);
 
   return (
-    <aside className={`sidebar${open ? " open" : ""}`}>
+    <aside
+      className={`sidebar${open ? " open" : ""}`}
+      style={{ "--sidebar-w": `${width}px` } as React.CSSProperties}
+    >
       <div className="space-head">
         <span className="space-icon">РТ</span>
         <span className="space-name">Ревью требований</span>
       </div>
 
       <div className="nav-label">Обзор</div>
-      <Link
-        to="/"
-        className={`nav-item${onAnalysts ? " active" : ""}`}
-        onClick={onClose}
-      >
-        <span className="ic">👥</span> Аналитики
-      </Link>
-
-      <button
-        type="button"
-        className="nav-item"
-        onClick={() => setDocsOpen((v) => !v)}
-        aria-expanded={docsOpen}
-      >
-        <span className="disclosure">{docsOpen ? "▾" : "▸"}</span>
-        <span className="ic">📄</span> Документы
-      </button>
-      {docsOpen && (
+      {/* группа: стрелка раскрывает дерево аналитиков, клик по названию —
+          страница списка аналитиков */}
+      <div className="nav-row">
+        <button
+          type="button"
+          className="disc"
+          onClick={() => setGroupOpen((v) => !v)}
+          aria-expanded={groupOpen}
+          aria-label="Список аналитиков в дереве"
+        >
+          {groupOpen ? "▾" : "▸"}
+        </button>
+        <Link
+          to="/"
+          className={`nav-item${onAnalysts ? " active" : ""}`}
+          aria-current={onAnalysts ? "page" : undefined}
+          onClick={onClose}
+        >
+          <span className="ic">👥</span> <span>Аналитики</span>
+        </Link>
+      </div>
+      {groupOpen && (
         <div className="nav-tree">
           {analysts.length === 0 && <div className="nav-empty">аналитики не заведены</div>}
-          {analysts.map((analyst) => (
-            <Link
-              key={analyst.id}
-              to={`/analysts/${analyst.id}`}
-              className={`nav-item${analyst.id === activeAnalystId ? " active" : ""}`}
-              onClick={onClose}
-            >
-              {analyst.full_name}
-            </Link>
-          ))}
+          {analysts.map((analyst) => {
+            const branch = branches[analyst.id];
+            const isOpen = expanded.has(analyst.id);
+            return (
+              <div className="nav-branch" key={analyst.id}>
+                <div className="nav-row">
+                  <button
+                    type="button"
+                    className="disc"
+                    onClick={() => toggleBranch(analyst.id)}
+                    aria-expanded={isOpen}
+                    aria-label={`Документы аналитика ${analyst.full_name}`}
+                  >
+                    {isOpen ? "▾" : "▸"}
+                  </button>
+                  <Link
+                    to={`/analysts/${analyst.id}`}
+                    className={`nav-item${analyst.id === activeAnalystId ? " active" : ""}`}
+                    aria-current={analyst.id === activeAnalystId ? "page" : undefined}
+                    onClick={onClose}
+                  >
+                    <span>{analyst.full_name}</span>
+                  </Link>
+                </div>
+                {isOpen && (
+                  <div className="nav-tree">
+                    {!branch || branch.loading ? (
+                      <div className="nav-empty">загрузка…</div>
+                    ) : branch.error ? (
+                      <div className="nav-empty">не удалось загрузить</div>
+                    ) : branch.docs.length === 0 ? (
+                      <div className="nav-empty">нет документов</div>
+                    ) : (
+                      <>
+                        {branch.docs.map((doc) => (
+                          <Link
+                            key={doc.id}
+                            to={`/documents/${doc.id}`}
+                            className={`nav-doc${doc.id === activeDocId ? " active" : ""}`}
+                            aria-current={doc.id === activeDocId ? "page" : undefined}
+                            onClick={onClose}
+                          >
+                            {/* маркер-точка декоративный — из accessible name ссылки исключён */}
+                            <span className="dot" aria-hidden="true">•</span>
+                            <span className="t">{doc.title}</span>
+                          </Link>
+                        ))}
+                        {branch.total > branch.docs.length && (
+                          <Link
+                            to={`/analysts/${analyst.id}`}
+                            className="nav-more"
+                            onClick={onClose}
+                          >
+                            Показать остальные документы · {branch.total - branch.docs.length}
+                          </Link>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -161,6 +339,25 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
             ? `⟳ Синхронизация: ${new Date(sync.finished_at).toLocaleString("ru-RU")}`
             : "⟳ Синхронизация ещё не запускалась"}
       </div>
+
+      {/* правый край: тянуть — менять ширину, двойной клик — стандартная */}
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Изменить ширину сайдбара (стрелки ← →)"
+        title="Потяните, чтобы изменить ширину; двойной клик — сброс"
+        tabIndex={0}
+        onPointerDown={onResizeStart}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+        onKeyDown={onResizeKey}
+        onDoubleClick={() => {
+          applyWidth(SIDEBAR_DEFAULT);
+          persistWidth();
+        }}
+      />
     </aside>
   );
 }
