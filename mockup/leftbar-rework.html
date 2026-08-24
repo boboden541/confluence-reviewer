@@ -1,0 +1,513 @@
+<!doctype html>
+<!-- Макет редизайна левого меню: одно дерево «Аналитики → аналитики → последние
+     5 документов» вместо двух дублирующих пунктов «Аналитики» + «Документы».
+     Токены и базовые классы совпадают с frontend/src/styles.css. -->
+<html lang="ru">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Макет · левое меню — дерево аналитиков</title>
+  <style>
+    :root {
+      --blue: #0C66E4;
+      --blue-hover: #0055CC;
+      --blue-subtle-bg: #E9F2FF;
+      --text: #172B4D;
+      --text-subtle: #44546F;
+      --text-subtlest: #626F86;
+      --bg: #F1F2F4;
+      --surface: #FFFFFF;
+      --border: #D0D5DD;
+      --border-subtle: #EBECF0;
+      --row-hover: #F8F9FA;
+      --grey-bg: #F1F2F4;
+      --radius: 4px;
+      --radius-page: 8px;
+      --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* как в styles.css: ссылки без подчёркивания */
+    a {
+      text-decoration: none;
+    }
+
+    /* рамка приложения: упрощённая шапка + layout, содержимое не меняется */
+    .topbar {
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      color: var(--text-subtle);
+      font-size: 13px;
+    }
+
+    .topbar .fake-search {
+      background: var(--grey-bg);
+      border-radius: var(--radius);
+      padding: 6px 12px;
+      width: 320px;
+      color: var(--text-subtlest);
+    }
+
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 56px);
+    }
+
+    .content {
+      flex: 1;
+      min-width: 0;
+      padding: 24px 32px 64px;
+    }
+
+    .placeholder {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-page);
+      padding: 48px 32px;
+      text-align: center;
+      color: var(--text-subtlest);
+      line-height: 1.6;
+    }
+
+    /* ===== сайдбар (как в styles.css) ===== */
+    .sidebar {
+      width: 256px;
+      background: var(--surface);
+      border-right: 1px solid var(--border-subtle);
+      padding: 12px 8px;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .space-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      margin-bottom: 10px;
+    }
+
+    .space-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius);
+      background: var(--blue);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .space-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-subtlest);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 12px 10px 4px;
+    }
+
+    /* строка пункта: как сейчас */
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px;
+      user-select: none;
+    }
+
+    a.nav-item:hover {
+      background: var(--row-hover);
+      text-decoration: none;
+    }
+
+    .nav-item.active {
+      background: var(--blue-subtle-bg);
+      color: var(--blue-hover);
+      font-weight: 600;
+    }
+
+    .nav-item .ic {
+      width: 18px;
+      text-align: center;
+      color: var(--text-subtle);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .nav-item.active .ic {
+      color: var(--blue-hover);
+    }
+
+    /* ===== НОВОЕ: строка «шеврон + ссылка» =====
+     чеврон раскрывает ветку, клик по названию — переход */
+    .nav-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .nav-row .disc {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-family: var(--font);
+      width: 24px;
+      height: 28px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--text-subtle);
+      border-radius: var(--radius);
+    }
+
+    .nav-row .disc:hover {
+      background: var(--row-hover);
+      color: var(--text-subtle);
+    }
+
+    .nav-row>.nav-item {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ===== НОВОЕ: дерево ===== */
+    /* список аналитиков под группой */
+    .nav-tree {
+      margin-left: 12px;
+    }
+
+    /* аналитик: имя-заголовок + серая панель его документов —
+       документы читаются отдельным блоком, а не сплошным списком */
+    .nav-branch {
+      margin: 0 0 10px;
+    }
+
+    .nav-branch>.nav-row .nav-item {
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+    }
+
+    .nav-branch>.nav-tree {
+      margin: 3px 0 0 14px;
+      background: var(--grey-bg);
+      border-radius: 6px;
+      padding: 3px;
+    }
+
+    /* лист-документ: маркер-точка отделяет каждый документ,
+       длинные названия обрезаются многоточием; без underline —
+       кликабельность показывает hover, а не подчёркивание */
+    a.nav-doc {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 5px 8px 4px;
+      font-size: 12.5px;
+      color: var(--text-subtle);
+      border-radius: var(--radius);
+      text-decoration: none;
+    }
+
+    a.nav-doc::before {
+      content: "•";
+      font-size: 10px;
+      color: var(--text-subtlest);
+      flex-shrink: 0;
+    }
+
+    a.nav-doc span {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    a.nav-doc:hover {
+      background: var(--surface);
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    a.nav-doc.active {
+      background: var(--blue-subtle-bg);
+      color: var(--blue-hover);
+    }
+
+    a.nav-doc.active::before {
+      color: var(--blue-hover);
+    }
+
+    /* «Показать остальные документы» — кнопка-действие: белая плашка
+       с рамкой и синим текстом, явно не строка списка */
+    a.nav-more {
+      display: block;
+      margin: 6px 4px 3px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      color: var(--blue);
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      text-decoration: none;
+    }
+
+    a.nav-more:hover {
+      background: var(--blue-subtle-bg);
+      border-color: var(--blue);
+      text-decoration: none;
+    }
+
+    .nav-empty {
+      font-size: 12.5px;
+      color: var(--text-subtlest);
+      padding: 4px 8px;
+    }
+
+    .sync-status {
+      margin: 16px 8px 0;
+      padding: 10px;
+      border-radius: var(--radius);
+      background: var(--blue-subtle-bg);
+      font-size: 12.5px;
+      color: var(--text-subtle);
+      line-height: 1.45;
+    }
+
+    /* ===== НОВОЕ: правый край колонки тянется — меняем ширину ===== */
+    .sidebar-resizer {
+      position: absolute;
+      top: 0;
+      right: -3px;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 5;
+      border-radius: 3px;
+    }
+
+    .sidebar-resizer:hover,
+    .sidebar-resizer.dragging {
+      background: var(--blue);
+    }
+
+    /* на узких экранах колонка off-canvas фиксированной ширины — не тянем */
+    @media (max-width: 980px) {
+      .sidebar-resizer {
+        display: none;
+      }
+    }
+
+    /* подпись под макетом */
+    .notes {
+      max-width: 900px;
+      margin: 20px auto;
+      padding: 0 20px;
+      color: var(--text-subtle);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .notes h2 {
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .notes code {
+      background: var(--grey-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="topbar">
+    <span>☰ Меню</span>
+    <div class="fake-search">Поиск по документам…</div>
+    <span style="margin-left:auto">user@bft.ru</span>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="space-head">
+        <span class="space-icon">РТ</span>
+        <span class="space-name">Ревью требований</span>
+      </div>
+
+      <div class="nav-label">Обзор</div>
+
+      <!-- группа «Аналитики»: чеврон раскрывает дерево, клик по названию —
+         страница списка аналитиков (как сейчас) -->
+      <div class="nav-row group">
+        <button class="disc" type="button" data-toggle="group-tree" aria-expanded="true">▾</button>
+        <a class="nav-item active" href="#">
+          <span class="ic">👥</span> Аналитики
+        </a>
+      </div>
+
+      <div class="nav-tree" id="group-tree">
+        <!-- раскрытый аналитик -->
+        <div class="nav-branch">
+          <div class="nav-row">
+            <button class="disc" type="button" data-toggle="docs-1" aria-expanded="true">▾</button>
+            <a class="nav-item active" href="#">Иванов Иван</a>
+          </div>
+          <div class="nav-tree" id="docs-1">
+            <a class="nav-doc active" href="#"><span>ТЗ Автоматизация отчётности</span></a>
+            <a class="nav-doc" href="#"><span>Требования к модулю интеграции с СМЭВ</span></a>
+            <a class="nav-doc" href="#"><span>BRD Платёжный шлюз</span></a>
+            <a class="nav-doc" href="#"><span>Архитектурные принципы ФТ-платформы</span></a>
+            <a class="nav-doc" href="#"><span>Регламент согласования ТЗ</span></a>
+            <a class="nav-more" href="#">Показать остальные документы · 12</a>
+          </div>
+        </div>
+
+        <!-- свёрнутые аналитики -->
+        <div class="nav-branch">
+          <div class="nav-row">
+            <button class="disc" type="button" data-toggle="docs-2" aria-expanded="false">▸</button>
+            <a class="nav-item" href="#">Петров Пётр</a>
+          </div>
+          <div class="nav-tree" id="docs-2" hidden>
+            <a class="nav-doc" href="#"><span>Модель данных АБС</span></a>
+            <a class="nav-doc" href="#"><span>FR Очередь операций</span></a>
+            <a class="nav-more" href="#">Показать остальные документы · 3</a>
+          </div>
+        </div>
+
+        <div class="nav-branch">
+          <div class="nav-row">
+            <button class="disc" type="button" data-toggle="docs-3" aria-expanded="false">▸</button>
+            <a class="nav-item" href="#">Сидорова Анна</a>
+          </div>
+          <div class="nav-tree" id="docs-3" hidden>
+            <a class="nav-doc" href="#"><span>NFR Производительность</span></a>
+            <a class="nav-more" href="#">Показать остальные документы · 8</a>
+          </div>
+        </div>
+
+        <!-- аналитик без документов -->
+        <div class="nav-branch">
+          <div class="nav-row">
+            <button class="disc" type="button" data-toggle="docs-4" aria-expanded="false">▸</button>
+            <a class="nav-item" href="#">Козлов Кирилл</a>
+          </div>
+          <div class="nav-tree" id="docs-4" hidden>
+            <div class="nav-empty">нет документов</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-label">Настройка</div>
+      <a class="nav-item" href="#"><span class="ic">🧩</span> Шаблон требований</a>
+      <a class="nav-item" href="#"><span class="ic">⚙️</span> Подключение ИИ</a>
+
+      <div class="sync-status">⟳ Синхронизация: 24.08.2026, 10:12</div>
+
+      <!-- правый край: тянуть мышью — ширина 200–480px, двойной клик — сброс -->
+      <div class="sidebar-resizer" title="Потяните, чтобы изменить ширину; двойной клик — сброс"></div>
+    </aside>
+
+    <main class="content">
+      <div class="placeholder">
+        Содержимое страницы не меняется — этот макет только про левое меню.<br>
+        Кликайте стрелки ▸/▾ — дерево раскрывается; тяните правый край колонки — она расширяется.
+      </div>
+
+      <div class="notes">
+        <h2>Как это работает</h2>
+        • Пункт «Документы» исчезает — вместо двух дублирующих путей одно дерево под «Аналитиками».<br>
+        • Клик по названию «Аналитики» — по-прежнему страница списка аналитиков (создание, синхронизация); дерево
+        раскрывается отдельной стрелкой.<br>
+        • Клик по имени аналитика — его страница документов; его документы лежат на серой панели — отдельный блок, а не
+        сплошной список.<br>
+        • Под аналитиком — последние <b>5 документов</b> по дате создания в Confluence, каждый с маркером-точкой; клик
+        по документу открывает его отчёт.<br>
+        • «Показать остальные документы · N» — отдельная кнопка под списком: появляется, только если документов больше
+        5, и ведёт на страницу аналитика.<br>
+        • Правый край колонки тянется мышью (200–480px), двойной клик — стандартная ширина; в приложении выбранная
+        ширина запоминается. На узких экранах колонка остаётся off-canvas фиксированной ширины.<br>
+        • Пока документы грузятся — «загрузка…», при ошибке — «не удалось загрузить» (клик по стрелке повторит попытку).
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // демо: раскрытие/свёртывание веток
+    document.querySelectorAll("[data-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tree = document.getElementById(btn.dataset.toggle);
+        const open = tree.hasAttribute("hidden");
+        if (open) tree.removeAttribute("hidden");
+        else tree.setAttribute("hidden", "");
+        btn.textContent = open ? "▾" : "▸";
+        btn.setAttribute("aria-expanded", String(open));
+      });
+    });
+
+    // демо: тянуть правый край — ширина 200–480px, двойной клик — сброс
+    const sidebar = document.querySelector(".sidebar");
+    const resizer = document.querySelector(".sidebar-resizer");
+    let dragging = false;
+    resizer.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      dragging = true;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      sidebar.style.width = Math.min(480, Math.max(200, e.clientX)) + "px";
+    });
+    window.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+    });
+    resizer.addEventListener("dblclick", () => {
+      sidebar.style.width = "256px";
+    });
+  </script>
+</body>
+
+</html>

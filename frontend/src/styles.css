@@ -303,11 +303,12 @@ a:hover {
 }
 
 .sidebar {
-  width: 256px;
+  width: var(--sidebar-w, 256px);
   background: var(--surface);
   border-right: 1px solid var(--border-subtle);
   padding: 12px 8px;
   flex-shrink: 0;
+  position: relative;
 }
 
 /* подложка под мобильным меню (активируется на узких экранах) */
@@ -388,40 +389,140 @@ button.nav-item:hover {
   color: var(--blue-hover);
 }
 
-.nav-item .disclosure {
-  font-size: 10px;
-  color: var(--text-subtlest);
-  margin-right: -2px;
+/* строка «шеврон + ссылка»: стрелка раскрывает ветку, клик по названию — переход */
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
-button.nav-item {
+.nav-row .disc {
   border: none;
   background: none;
-  width: 100%;
-  text-align: left;
   cursor: pointer;
   font-family: var(--font);
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-subtle);
+  border-radius: var(--radius);
 }
 
-.nav-tree {
-  margin-left: 14px;
-  border-left: 1px solid var(--border-subtle);
-  padding-left: 4px;
+.nav-row .disc:hover {
+  background: var(--row-hover);
 }
 
-.nav-tree .nav-item {
-  font-size: 13.5px;
-  padding: 5px 10px;
+.nav-row > .nav-item {
+  flex: 1;
+  min-width: 0;
+}
+
+/* длинные названия в строках дерева обрезаются многоточием */
+.nav-row > .nav-item > span:last-child {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* дерево аналитиков под группой «Аналитики» */
+.nav-tree {
+  margin-left: 12px;
+}
+
+/* аналитик: имя-заголовок + серая панель его документов —
+   документы читаются отдельным блоком, а не сплошным списком */
+.nav-branch {
+  margin: 0 0 10px;
+}
+
+.nav-branch > .nav-row .nav-item {
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.nav-branch > .nav-tree {
+  margin: 3px 0 0 14px;
+  background: var(--grey-bg);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+/* лист-документ: маркер-точка отделяет каждый документ, длинные
+   названия обрезаются многоточием; кликабельность показывает hover */
+a.nav-doc {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 8px 4px;
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  border-radius: var(--radius);
+}
+
+/* маркер-точка — реальный span (aria-hidden), а не ::before: текст
+   псевдоэлементов попадает в accessible name ссылки у скринридеров */
+a.nav-doc .dot {
+  font-size: 10px;
+  color: var(--text-subtlest);
+  flex-shrink: 0;
+}
+
+a.nav-doc .t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.nav-doc:hover {
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.nav-doc.active {
+  background: var(--blue-subtle-bg);
+  color: var(--blue-hover);
+}
+
+a.nav-doc.active .dot {
+  color: var(--blue-hover);
+}
+
+/* «Показать остальные документы» — кнопка-действие: белая плашка
+   с рамкой и синим текстом, явно не строка списка */
+a.nav-more {
   display: block;
+  margin: 6px 4px 3px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--blue);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+a.nav-more:hover {
+  background: var(--blue-subtle-bg);
+  border-color: var(--blue);
+  text-decoration: none;
 }
 
 .nav-empty {
   font-size: 12.5px;
   color: var(--text-subtlest);
-  padding: 4px 10px;
+  padding: 4px 8px;
 }
 
 .sync-status {
@@ -432,6 +533,35 @@ button.nav-item {
   font-size: 12.5px;
   color: var(--text-subtle);
   line-height: 1.45;
+}
+
+/* правый край сайдбара тянется — меняем ширину колонки;
+   touch-action: none отдаёт палец-жест ресайзу, а не скроллу страницы */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 5;
+  border-radius: 3px;
+}
+
+.sidebar-resizer:hover {
+  background: var(--blue);
+}
+
+.sidebar-resizer:focus-visible {
+  outline: 2px solid var(--blue-hover);
+  outline-offset: -2px;
+}
+
+/* во время перетаскивания не выделяем текст страницы */
+body.sidebar-resizing {
+  user-select: none;
+  cursor: col-resize;
 }
 
 .content {
@@ -1844,6 +1974,11 @@ body.drawer-resizing * {
 
   .sidebar.open {
     transform: none;
+  }
+
+  /* off-canvas колонка фиксированной ширины — не тянем */
+  .sidebar-resizer {
+    display: none;
   }
 
   .sidebar-backdrop.show {
