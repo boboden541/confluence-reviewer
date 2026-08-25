@@ -37,6 +37,31 @@ def _migrate_added_columns() -> None:
                     logger.info("Миграция: добавлена колонка %s.%s", table, name)
 
 
+# Колонки, ставшие nullable после развёртывания (семантика NULL — «проверка
+# не запускалась»). SQLite не умеет ALTER COLUMN — тестовая БД там каждый раз
+# создаётся заново уже по новой модели; для существующего postgres — DROP NOT NULL.
+_NULLABLE_COLUMNS: dict[str, list[str]] = {
+    "validation_reports": ["template_passed"],
+}
+
+
+def _migrate_nullable_columns() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+    inspector = inspect(engine)
+    for table, columns in _NULLABLE_COLUMNS.items():
+        if not inspector.has_table(table):
+            continue  # таблицу создаст create_all уже с nullable-колонкой
+        current = {col["name"]: col for col in inspector.get_columns(table)}
+        with engine.begin() as conn:
+            for name in columns:
+                if name in current and not current[name]["nullable"]:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ALTER COLUMN {name} DROP NOT NULL")
+                    )
+                    logger.info("Миграция: колонка %s.%s теперь nullable", table, name)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -88,6 +113,7 @@ def init_db(retries: int = 15, delay: float = 2.0) -> None:
         try:
             Base.metadata.create_all(bind=engine)
             _migrate_added_columns()
+            _migrate_nullable_columns()
             return
         except Exception as exc:  # pragma: no cover - зависит от окружения
             last_error = exc

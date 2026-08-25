@@ -359,7 +359,15 @@ export default function DocumentReport({
 
       {report && !report.error_message && (
         <>
-          <div className={report.template_passed ? "report-card pass" : "report-card fail"}>
+          <div
+            className={
+              report.template_passed == null
+                ? "report-card"
+                : report.template_passed
+                  ? "report-card pass"
+                  : "report-card fail"
+            }
+          >
             <div className="report-card-head">
               <h2>Шаблон требований</h2>
               <CheckBadge passed={report.template_passed} />
@@ -369,7 +377,15 @@ export default function DocumentReport({
             </div>
           </div>
 
-          <div className={report.ai_passed ? "report-card pass" : "report-card fail"}>
+          <div
+            className={
+              report.ai_passed == null
+                ? "report-card"
+                : report.ai_passed
+                  ? "report-card pass"
+                  : "report-card fail"
+            }
+          >
             <div className="report-card-head">
               <h2>Содержимое (ИИ)</h2>
               <CheckBadge passed={report.ai_passed} />
@@ -377,13 +393,14 @@ export default function DocumentReport({
             <div className="markdown">
               <Markdown text={report.ai_findings || "—"} />
             </div>
-            <div className="muted report-meta">
-              Отчёт сформирован {formatDateTime(report.created_at)} · запуск:{" "}
-              {report.triggered_by === "auto" ? "автоматический" : "ручной"}
-              {report.ai_prompt && " · промт ИИ: изменён"}
-              {report.ai_model_used && ` · модель: ${report.ai_model_used}`}
-              {report.template_version_id != null && ` · шаблон v${report.template_version_id}`}
-            </div>
+          </div>
+
+          <div className="muted report-meta">
+            Отчёт сформирован {formatDateTime(report.created_at)} · запуск:{" "}
+            {report.triggered_by === "auto" ? "автоматический" : "ручной"}
+            {report.ai_prompt && " · промт ИИ: изменён"}
+            {report.ai_model_used && ` · модель: ${report.ai_model_used}`}
+            {report.template_version_id != null && ` · шаблон v${report.template_version_id}`}
           </div>
         </>
       )}

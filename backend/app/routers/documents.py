@@ -32,7 +32,12 @@ from app.services.comments import (
 )
 from app.services.semantic_search import SemanticSearchError, SemanticSearcher
 from app.services.template_store import get_active, seed_if_missing
-from app.services.validation import DocumentNotFound, latest_report
+from app.services.validation import (
+    DocumentNotFound,
+    TEMPLATE_CHECK,
+    latest_report,
+    normalize_checks,
+)
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
@@ -255,16 +260,21 @@ async def validate_document(
 ):
     """ФТ-CR-16: ручной запуск валидации (в фоне).
 
-    Тело (опционально) — настройки из диалога проверки: template_id и ai_prompt.
+    Тело (опционально) — настройки из диалога проверки: критерии checks,
+    template_id и ai_prompt.
     """
     get_document_or_404(document_id, db)
-    _check_template_exists(options.template_id if options else None, db)
+    checks = options.checks if options else None
+    # существование версии проверяем, только если шаблонная проверка запрошена
+    if TEMPLATE_CHECK in normalize_checks(checks):
+        _check_template_exists(options.template_id if options else None, db)
     started, message = tasks.start_validation(
         document_id,
         trigger=TriggerType.MANUAL,
         force=force,
         template_version_id=options.template_id if options else None,
         ai_prompt=options.ai_prompt if options else None,
+        checks=checks,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
@@ -287,7 +297,9 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
     Не-force: актуальные документы пропускаются идемпотентностью;
     изменённый промт ИИ сам по себе принуждает к перепроверке.
     """
-    _check_template_exists(payload.template_id, db)
+    # существование версии проверяем, только если шаблонная проверка запрошена
+    if TEMPLATE_CHECK in normalize_checks(payload.checks):
+        _check_template_exists(payload.template_id, db)
     found = set(
         db.scalars(
             select(ConfluenceDocument.id).where(ConfluenceDocument.id.in_(payload.document_ids))
@@ -306,6 +318,7 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         force=payload.force,
         template_version_id=payload.template_id,
         ai_prompt=payload.ai_prompt,
+        checks=payload.checks,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)

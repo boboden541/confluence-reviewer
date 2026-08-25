@@ -29,12 +29,12 @@ def _db():
 
 def seed_doc_with_report(
     *,
-    template_passed=True,
+    template_passed: bool | None = True,
     ai_passed=True,
     error=None,
     comment_sent_at=None,
 ) -> tuple[int, int]:
-    """(document_id, report_id)."""
+    """(document_id, report_id). template_passed=None — проверка не запускалась."""
     with SessionLocal() as db:
         analyst = Analyst(full_name="Тест", email="c@mts.ru")
         db.add(analyst)
@@ -48,14 +48,24 @@ def seed_doc_with_report(
         )
         db.add(doc)
         db.flush()
+        if template_passed is None:
+            template_findings = ""  # проверка не запускалась
+        else:
+            template_findings = (
+                "✅ Шаблон ок" if template_passed else "### ❌ Критичные замечания\n- ❌ нет раздела"
+            )
         report = ValidationReport(
             document_id=doc.id,
             triggered_by=TriggerType.MANUAL,
             template_passed=template_passed,
-            template_findings="✅ Шаблон ок" if template_passed else "### ❌ Критичные замечания\n- ❌ нет раздела",
+            template_findings=template_findings,
             ai_passed=ai_passed,
             ai_findings="✅ Замечаний нет" if ai_passed else "- ❌ **[полнота, critical]** пробел",
-            overall_passed=bool(template_passed and ai_passed and not error),
+            overall_passed=bool(
+                (template_passed is None or template_passed)
+                and (ai_passed is None or ai_passed)
+                and not error
+            ),
             error_message=error,
             comment_sent_at=comment_sent_at,
         )
@@ -119,6 +129,17 @@ def test_build_comment_failed_report():
     assert "❌ Качество содержимого" in text
     assert "нет раздела" in text
     assert "critical" in text
+
+
+def test_build_comment_skips_template_block_when_not_run():
+    """Проверка шаблона не запускалась (NULL в отчёте) — блока шаблона в комментарии нет."""
+    doc_id, _ = seed_doc_with_report(template_passed=None)
+    with SessionLocal() as db:
+        doc = db.get(ConfluenceDocument, doc_id)
+        report = db.query(ValidationReport).first()
+        text = build_comment(report, doc)
+    assert "Соответствие шаблону" not in text
+    assert "Качество содержимого" in text
 
 
 # --- публикация ---

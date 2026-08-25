@@ -302,6 +302,7 @@ describe("ReportPage", () => {
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
         document_ids: [42],
         force: true, // «Проверить заново» — перевалидировать безусловно
+        checks: ["template", "ai"], // оба критерия включены по умолчанию
         template_id: 1,
         ai_prompt: null, // стандартный промт не отправляем
       });

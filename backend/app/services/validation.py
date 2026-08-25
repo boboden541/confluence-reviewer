@@ -1,13 +1,15 @@
-"""Оркестрация валидации документа: шаблон + ИИ (ФТ-CR-12..ФТ-CR-16).
+"""Оркестрация валидации документа: шаблон и/или ИИ (ФТ-CR-12..ФТ-CR-16).
 
-Последовательность: статус in_progress → проверка шаблона (скрипт) →
-ИИ-проверка содержимого → итоговый отчёт и статус passed/failed.
-Технический сбой → статус error и отчёт с текстом ошибки (last_validated_at
-не обновляется — повторный запуск повторит попытку).
+Последовательность: статус in_progress → выбранные проверки (шаблон —
+скрипт, содержимое — ИИ) → итоговый отчёт и статус passed/failed. Критерии
+задаются на запуск (checks); не запущенная проверка оставляет в отчёте NULL
+(«не запускалась»). Технический сбой → статус error и отчёт с текстом ошибки
+(last_validated_at не обновляется — повторный запуск повторит попытку).
 
 Идемпотентность (ФТ-CR-14): если документ не менялся в Confluence после
-последней успешной валидации и модель ИИ та же, возвращается существующий
-отчёт без повторного вызова ИИ. force=true принуждает к перевалидации.
+последней успешной валидации, модель ИИ та же и все запрошенные проверки
+выполнены в кэшированном отчёте, возвращается существующий отчёт без
+повторного вызова ИИ. force=true принуждает к перевалидации.
 """
 
 from __future__ import annotations
@@ -31,6 +33,23 @@ from app.services.template_validator import validate_template
 from app.utils import now_utc
 
 logger = logging.getLogger("confluence_reviewer.validation")
+
+# Критерии проверки: структура по шаблону / содержимое (ИИ)
+TEMPLATE_CHECK = "template"
+AI_CHECK = "ai"
+ALL_CHECKS = (TEMPLATE_CHECK, AI_CHECK)
+
+
+def normalize_checks(checks: list[str] | None) -> set[str]:
+    """None → оба критерия (обратная совместимость запуска без опций).
+
+    Непустой список — как передан; пустой набор невозможен через API
+    (422 в схеме), прямой вызов с [] — ошибка программирования.
+    """
+    result = set(checks) if checks is not None else set(ALL_CHECKS)
+    if not result:
+        raise ValueError("Должен быть выбран хотя бы один критерий проверки")
+    return result
 
 
 class DocumentNotFound(LookupError):
@@ -78,15 +97,27 @@ def run_validation(
     force: bool = False,
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
+    checks: list[str] | None = None,
 ) -> ValidationReport:
-    """Прогнать проверки документа и сохранить отчёт.
+    """Прогнать выбранные проверки документа и сохранить отчёт.
+
+    checks — критерии этого запуска: ["template"], ["ai"] или оба (None —
+    оба, обратная совместимость). Не запущенная проверка оставляет в отчёте
+    NULL («не запускалась»); итог = AND по запущенным проверкам. Последующий
+    запуск с большим набором критериев всегда полный: NULL-проверка не
+    проходит кэш идемпотентности.
 
     template_version_id / ai_prompt — настройки из диалога проверки:
-    конкретная версия шаблона и промт ИИ на этот запуск. Изменённый
-    промт — всегда перевалидация (иначе отчёт вернулся бы из кэша
-    идемпотентности, и настройка не применилась бы).
+    конкретная версия шаблона и промт ИИ на этот запуск. Промт применяется
+    только при запущенной ИИ-проверке. Изменённый промт — всегда
+    перевалидация (иначе отчёт вернулся бы из кэша идемпотентности,
+    и настройка не применилась бы).
     """
-    custom_prompt = ai_prompt if ai_prompt and ai_prompt.strip() else None
+    requested = normalize_checks(checks)
+    run_template, run_ai = TEMPLATE_CHECK in requested, AI_CHECK in requested
+    # промт имеет смысл только для запускаемой ИИ-проверки: без неё
+    # не применяется и не принуждает к перевалидации
+    custom_prompt = ai_prompt if run_ai and ai_prompt and ai_prompt.strip() else None
     force = force or (custom_prompt is not None and custom_prompt != SYSTEM_PROMPT)
 
     with SessionLocal() as db:
@@ -95,54 +126,78 @@ def run_validation(
             raise DocumentNotFound(f"Документ {document_id} не найден")
 
         existing = _latest_report(db, doc.id)
-        # эффективное подключение ИИ: env + настройки из UI (по-полю)
-        connection = get_ai_connection(db)
+        # эффективное подключение ИИ: env + настройки из UI (по-полё);
+        # нужно только для ИИ-проверки (её результат и кэш по модели)
+        connection = get_ai_connection(db) if run_ai else None
         if (
             not force
             and existing is not None
             and existing.error_message is None
             and _is_up_to_date(doc)
-            # ФТ-CR-14: сменилась модель — кэшированный отчёт ей не соответствовал
-            # (NULL у старых отчётов ≠ модель → разовая ревалидация после апгрейда)
-            and existing.ai_model_used == connection.model
+            # запрошенная проверка должна быть выполнена в кэше: пропущенная
+            # в том запуске = NULL (ФТ-CR-14)
+            and (not run_template or existing.template_passed is not None)
+            and (
+                not run_ai
+                or (
+                    existing.ai_passed is not None
+                    # сменилась модель — кэшированный отчёт ей не соответствовал
+                    # (NULL у старых отчётов ≠ модель → разовая ревалидация)
+                    and existing.ai_model_used == connection.model
+                )
+            )
         ):
             return existing  # ничего не изменилось — отчёт актуален
 
         doc.validation_status = ValidationStatus.IN_PROGRESS
         db.commit()
 
-        # Шаблон требований — выбранная версия или активная (редактируется через UI)
-        template = get_template_for_validation(db, template_version_id)
-        if template is None:
-            return _save_error(db, doc, trigger, "Шаблон требований не настроен")
-        template_dict, used_template_id = template
-        try:
-            template_result = validate_template(doc.title, doc.content_html, template_dict)
-        except Exception as exc:  # noqa: BLE001 — любая ошибка = статус error
-            return _save_error(db, doc, trigger, f"Ошибка проверки шаблона: {exc}")
+        template_passed: bool | None = None
+        template_findings = ""
+        used_template_id: int | None = None
+        if run_template:
+            # Шаблон требований — выбранная версия или активная (редактируется через UI)
+            template = get_template_for_validation(db, template_version_id)
+            if template is None:
+                return _save_error(db, doc, trigger, "Шаблон требований не настроен")
+            template_dict, used_template_id = template
+            try:
+                template_result = validate_template(doc.title, doc.content_html, template_dict)
+            except Exception as exc:  # noqa: BLE001 — любая ошибка = статус error
+                return _save_error(db, doc, trigger, f"Ошибка проверки шаблона: {exc}")
+            template_passed = template_result.passed
+            template_findings = template_result.findings_markdown
 
-        try:
-            markdown = html_to_markdown(doc.content_html)
-            ai_result = AIValidator(connection=connection).validate(
-                doc.title, markdown, custom_prompt
-            )
-        except AIValidationError as exc:
-            return _save_error(db, doc, trigger, str(exc))
+        ai_passed: bool | None = None
+        ai_findings: str | None = None
+        ai_model_used: str | None = None
+        if run_ai:
+            try:
+                markdown = html_to_markdown(doc.content_html)
+                ai_result = AIValidator(connection=connection).validate(
+                    doc.title, markdown, custom_prompt
+                )
+            except AIValidationError as exc:
+                return _save_error(db, doc, trigger, str(exc))
+            ai_passed = ai_result.passed
+            ai_findings = ai_result.findings_markdown
+            ai_model_used = ai_result.model
 
-        overall = template_result.passed and ai_result.passed
+        # итог = AND по запущенным проверкам (пустой набор невозможен — см. normalize_checks)
+        overall = all(passed for passed in (template_passed, ai_passed) if passed is not None)
         report = ValidationReport(
             document_id=doc.id,
             triggered_by=trigger,
-            template_passed=template_result.passed,
-            template_findings=template_result.findings_markdown,
-            ai_passed=ai_result.passed,
-            ai_findings=ai_result.findings_markdown,
+            template_passed=template_passed,
+            template_findings=template_findings,
+            ai_passed=ai_passed,
+            ai_findings=ai_findings,
             overall_passed=overall,
             template_version_id=used_template_id,
             # в отчёте храним только пользовательский промт (стандартный и так в коде)
             ai_prompt=custom_prompt if custom_prompt != SYSTEM_PROMPT else None,
             # какой моделью проверяли — для отчёта и идемпотентности (ФТ-CR-14)
-            ai_model_used=ai_result.model,
+            ai_model_used=ai_model_used,
         )
         db.add(report)
         doc.validation_status = ValidationStatus.PASSED if overall else ValidationStatus.FAILED

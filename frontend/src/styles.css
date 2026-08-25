@@ -2193,6 +2193,12 @@ body.drawer-resizing * {
   background: transparent;
 }
 
+/* зона выключенного критерия проверки в диалоге: приглушена и не кликается */
+.zone-off {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .tpl .name {
   font-weight: 600;
 }
@@ -2238,19 +2244,28 @@ textarea.prompt:focus {
   flex-wrap: wrap;
 }
 
+/* липкий футер: кнопка запуска остаётся видимой при внутреннем скролле диалога */
 .dialog-foot {
+  position: sticky;
+  bottom: -24px; /* компенсирует нижний паддинг .dialog */
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 24px;
-  padding-top: 16px;
+  padding: 16px 0 24px;
   border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
 }
 
 @media (max-width: 768px) {
   .dialog {
     width: 100%;
     padding: 18px 16px;
+  }
+
+  .dialog-foot {
+    bottom: -18px;
+    padding: 16px 0 18px;
   }
 
   .selection-bar {
