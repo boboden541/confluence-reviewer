@@ -35,11 +35,13 @@ def build_comment(report: ValidationReport, document: ConfluenceDocument) -> str
     lines.append(f"Отчёт от {report.created_at:%d.%m.%Y %H:%M} UTC (запуск: {_trigger(report.triggered_by)}).")
     lines.append("")
 
-    lines.append(("✅" if report.template_passed else "❌") + " Соответствие шаблону требований: "
-                 + ("пройдено" if report.template_passed else "не пройдено"))
-    if report.template_findings:
-        lines.append(report.template_findings)
-    lines.append("")
+    # блок шаблона — только если проверка запускалась (NULL = не запускалась)
+    if report.template_passed is not None:
+        lines.append(("✅" if report.template_passed else "❌") + " Соответствие шаблону требований: "
+                     + ("пройдено" if report.template_passed else "не пройдено"))
+        if report.template_findings:
+            lines.append(report.template_findings)
+        lines.append("")
 
     if report.ai_passed is not None:
         lines.append(("✅" if report.ai_passed else "❌") + " Качество содержимого (ИИ-проверка): "

@@ -98,6 +98,7 @@ async def _execute_validation(
     force: bool,
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
+    checks: list[str] | None = None,
 ) -> Any:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     return await asyncio.to_thread(
@@ -107,6 +108,7 @@ async def _execute_validation(
         force=force,
         template_version_id=template_version_id,
         ai_prompt=ai_prompt,
+        checks=checks,
     )
 
 
@@ -117,10 +119,11 @@ def start_validation(
     force: bool = False,
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
+    checks: list[str] | None = None,
 ) -> tuple[bool, str]:
     """Запустить валидацию документа в фоне (ФТ-CR-16). True — запущена.
 
-    template_version_id / ai_prompt — настройки из диалога проверки.
+    template_version_id / ai_prompt / checks — настройки из диалога проверки.
     """
     current = _validation_state.get(document_id)
     if current and current.get("status") == "running":
@@ -134,7 +137,7 @@ def start_validation(
         }
         try:
             report = await _execute_validation(
-                document_id, trigger, force, template_version_id, ai_prompt
+                document_id, trigger, force, template_version_id, ai_prompt, checks
             )
             _validation_state[document_id].update(
                 status="done", report_id=report.id, finished_at=now_utc().isoformat()
@@ -167,6 +170,7 @@ def start_bulk_validation(
     force: bool = False,
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
+    checks: list[str] | None = None,
 ) -> tuple[bool, str]:
     """Проверить документы последовательно, в фоне (выбор пользователя
     в списке или «все документы аналитика»).
@@ -199,7 +203,7 @@ def start_bulk_validation(
                 }
                 try:
                     report = await _execute_validation(
-                        doc_id, TriggerType.MANUAL, force, template_version_id, ai_prompt
+                        doc_id, TriggerType.MANUAL, force, template_version_id, ai_prompt, checks
                     )
                     _validation_state[doc_id].update(
                         status="done", report_id=report.id, finished_at=now_utc().isoformat()

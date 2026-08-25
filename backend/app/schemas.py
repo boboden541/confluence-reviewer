@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -106,7 +107,8 @@ class ValidationReportOut(BaseModel):
     document_id: int
     triggered_by: TriggerType
     created_at: datetime
-    template_passed: bool
+    # NULL — проверка шаблона не запускалась (выбор критериев в диалоге проверки)
+    template_passed: bool | None = None
     template_findings: str
     ai_passed: bool | None = None
     ai_findings: str | None = None
@@ -120,20 +122,39 @@ class ValidationReportOut(BaseModel):
     ai_model_used: str | None = None
 
 
-# --- Настройки запуска проверки (диалог выбора шаблона и промта) ---
+# --- Настройки запуска проверки (диалог выбора критериев, шаблона и промта) ---
+
+# Критерии проверки: структура по шаблону / содержимое (ИИ)
+CheckName = Literal["template", "ai"]
 
 
 class ValidationOptions(BaseModel):
-    """Настройки одного запуска проверки: шаблон + промт ИИ.
+    """Настройки одного запуска проверки: критерии + шаблон + промт ИИ.
 
     Все поля опциональны — запуск без тела остаётся совместимым
-    (активный шаблон, стандартный промт).
+    (оба критерия, активный шаблон, стандартный промт).
     """
 
-    template_id: int | None = Field(default=None, description="Версия шаблона требований")
+    checks: list[CheckName] | None = Field(
+        default=None, description="Что проверить на этом запуске: template / ai; None — оба"
+    )
+    template_id: int | None = Field(
+        default=None, description="Версия шаблона требований (используется при checks template)"
+    )
     ai_prompt: str | None = Field(
         default=None, max_length=32_000, description="Промт ИИ на этот запуск"
     )
+
+    @field_validator("checks")
+    @classmethod
+    def checks_present(cls, value: list[CheckName] | None) -> list[CheckName] | None:
+        # пустой список = ничего не выбрано; дубликаты схлопываем, порядок сохраняем
+        if value is not None:
+            unique = list(dict.fromkeys(value))
+            if not unique:
+                raise ValueError("Выберите хотя бы один критерий: template или ai")
+            return unique
+        return value
 
     @field_validator("ai_prompt")
     @classmethod

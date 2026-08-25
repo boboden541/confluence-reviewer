@@ -141,7 +141,8 @@ export interface ValidationReport {
   document_id: number;
   triggered_by: "auto" | "manual";
   created_at: string;
-  template_passed: boolean;
+  /** null — проверка шаблона не запускалась (выбор критериев в диалоге) */
+  template_passed: boolean | null;
   template_findings: string;
   ai_passed: boolean | null;
   ai_findings: string | null;
@@ -199,6 +200,8 @@ export interface ValidationConfig {
 export interface BatchValidationRequest {
   document_ids: number[];
   force?: boolean;
+  /** Какие критерии запускать; отсутствует = оба (обратная совместимость) */
+  checks?: Array<"template" | "ai">;
   template_id?: number | null;
   /** null/undefined — стандартный промт; строка — пользовательский на этот запуск */
   ai_prompt?: string | null;
