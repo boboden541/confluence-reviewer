@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import DocumentsPage from "./DocumentsPage";
 import { AUTH_STORAGE_KEY } from "../api";
+import { emitServerEvent } from "../events";
 
 const DOC_DETAIL = {
   id: 11,
@@ -718,5 +719,76 @@ describe("DocumentsPage", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("page=2"))).toBe(
       true,
     );
+  });
+
+  it("живые события bulk: прогресс без перезагрузки, список обновляется по финалу", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+    const initialLoads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/api/analysts/5/documents"),
+    ).length;
+
+    // прогон пошёл — строка прогресса появилась сама
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+    });
+    expect(await screen.findByText("Проверка 1 из 2…")).toBeInTheDocument();
+
+    // финал — список перечитан, прогресс исчез
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: 5, total: 2, done: 2,
+      started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:01:00", error: null,
+    });
+    await waitFor(() => {
+      const loads = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/api/analysts/5/documents"),
+      ).length;
+      expect(loads).toBe(initialLoads + 1);
+    });
+    expect(screen.queryByText("Проверка 1 из 2…")).not.toBeInTheDocument();
+  });
+
+  it("снимок финала при подключении не дёргает список лишний раз", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5"]}>
+        <Routes>
+          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+    const initialLoads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/api/analysts/5/documents"),
+    ).length;
+
+    // стрим (пере)подключился, backend прислал состояние «прогон уже завершён»
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: null, total: 0, done: 0,
+      started_at: null, finished_at: "2026-08-26T09:00:00", error: null,
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    const loads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/api/analysts/5/documents"),
+    ).length;
+    expect(loads).toBe(initialLoads);
   });
 });

@@ -9,6 +9,7 @@ import {
   type DocumentDetail,
   type ValidationReport,
 } from "./api";
+import { on } from "./events";
 
 interface Note {
   document_id: number;
@@ -53,7 +54,6 @@ export default function DocumentReport({
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // в панели шапка документа уезжает при прокрутке — «липкая» строка
   // с крошками и названием всегда сверху
@@ -88,9 +88,6 @@ export default function DocumentReport({
     setReport(null);
     setPinned(false);
     load();
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
   }, [load]);
 
   // блок шапки ушёл выше границы прокрутки — показываем компактный ряд.
@@ -116,28 +113,23 @@ export default function DocumentReport({
     };
   }, [embedded, doc]);
 
-  // Диалог отработал: проверка ушла в фон — опрашиваем документ до завершения
+  // Итог проверки приходит событием (SSE): документ обновится сам, кем бы
+  // проверка ни была запущена — отсюда, из списка или другой вкладки.
+  useEffect(() => {
+    return on("validation", (e) => {
+      if (e.document_id !== documentId || e.status === "running") return;
+      setBusy(false);
+      setInfo("");
+      void load();
+    });
+  }, [documentId, load]);
+
+  // Диалог отработал: проверка ушла в фон, ждём событие завершения
   const handleLaunched = () => {
     setDialogOpen(false);
     setBusy(true);
     setInfo("Проверка запущена…");
     setError("");
-    if (timer.current) clearInterval(timer.current);
-    timer.current = setInterval(async () => {
-      try {
-        const current = await api<DocumentDetail>(`/api/documents/${documentId}`);
-        setDoc(current);
-        if (current.validation_status !== "in_progress") {
-          if (timer.current) clearInterval(timer.current);
-          timer.current = null;
-          setBusy(false);
-          setInfo("");
-          await load();
-        }
-      } catch {
-        // документ недоступен — продолжаем опрос
-      }
-    }, 1500);
   };
 
   const sendComment = async () => {

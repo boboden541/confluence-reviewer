@@ -19,6 +19,7 @@ import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
 import TemplatePage from "./pages/TemplatePage";
 import GlobalSearch from "./GlobalSearch";
+import { on, startEvents, stopEvents } from "./events";
 
 export function LoginGate() {
   const navigate = useNavigate();
@@ -106,14 +107,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   // ветки, чьи документы уже грузятся/загружены: защита от повторных запросов
   const loadedRef = useRef<Set<number>>(new Set());
 
-  useEffect(() => {
+  const loadAnalysts = useCallback(() => {
     api<Analyst[]>("/api/analysts")
       .then(setAnalysts)
       .catch(() => setAnalysts([]));
+  }, []);
+
+  useEffect(() => {
+    loadAnalysts();
     api<SyncStatus>("/api/sync/status")
       .then(setSync)
       .catch(() => setSync(null));
-  }, []);
+  }, [loadAnalysts]);
 
   // документы ветки: грузим при первом раскрытии и кэшируем на монтирование;
   // после ошибки разрешаем повторить — id выкидываем из защиты
@@ -139,6 +144,28 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         }));
       });
   }, []);
+
+  // живые события синхронизации (в т.ч. плановой по расписанию): статус в
+  // футере — всегда актуальный; дерево аналитиков обновляем по завершении
+  // реально наблюдаемого прогона (снимок при подключении — не повод
+  // перезагружать ветки)
+  useEffect(() => {
+    let sawRun = false;
+    return on("sync", (e) => {
+      setSync(e);
+      if (e.running) {
+        sawRun = true;
+        return;
+      }
+      if (!sawRun) return;
+      sawRun = false;
+      loadAnalysts();
+      // раскрытые ветки: перечитаем последние документы аналитиков
+      const loaded = [...loadedRef.current];
+      loadedRef.current.clear();
+      loaded.forEach((id) => loadDocs(id));
+    });
+  }, [loadAnalysts, loadDocs]);
 
   const toggleBranch = (analystId: number) => {
     if (!expanded.has(analystId)) loadDocs(analystId);
@@ -378,6 +405,13 @@ export default function App() {
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
+
+  // SSE-стрим событий фоновых задач: итог проверок и синхронизаций
+  // приходит на открытые страницы сам. Живёт, пока пользователь в сервисе.
+  useEffect(() => {
+    if (authed) startEvents();
+    else stopEvents();
+  }, [authed]);
 
   // буква аватара — первый символ логина
   useEffect(() => {
