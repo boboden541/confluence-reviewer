@@ -43,7 +43,9 @@ export function hasCredentials(): boolean {
   return localStorage.getItem(AUTH_STORAGE_KEY) !== null;
 }
 
-function authHeaders(): Record<string, string> {
+// наружу — для SSE-стрима событий (events.ts): EventSource не умеет
+// Authorization-заголовок, стрим читаем обычным fetch
+export function authHeaders(): Record<string, string> {
   const creds = localStorage.getItem(AUTH_STORAGE_KEY);
   return creds ? { Authorization: `Basic ${creds}` } : {};
 }

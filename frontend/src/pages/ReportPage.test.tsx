@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ReportPage from "./ReportPage";
 import { AUTH_STORAGE_KEY } from "../api";
+import { emitServerEvent } from "../events";
 
 function mockFetch(responses: Record<string, unknown>) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
@@ -340,5 +341,72 @@ describe("ReportPage", () => {
         force: false,
       });
     });
+  });
+
+  it("событие завершения проверки обновляет отчёт без перезагрузки", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/validation-config": VALIDATION_CONFIG,
+      "/api/documents/validate-batch": { status: "started", total: 1 },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/documents/42"]}>
+        <Routes>
+          <Route path="/documents/:documentId" element={<ReportPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // запускаем проверку через диалог — отчёт уходит в фон
+    fireEvent.click(await screen.findByRole("button", { name: /^Проверить$/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Запустить проверку — 1 док\./ }),
+    );
+    expect(await screen.findByText("Проверка запущена…")).toBeInTheDocument();
+
+    const reportLoads = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url) === "/api/documents/42/report")
+        .length;
+    const before = reportLoads();
+
+    // backend закончил — страница сама перечитала документ и отчёт
+    emitServerEvent("validation", {
+      type: "validation", document_id: 42, status: "done", report_id: 9,
+    });
+    await waitFor(() => {
+      expect(reportLoads()).toBeGreaterThan(before);
+    });
+    expect(screen.queryByText("Проверка запущена…")).not.toBeInTheDocument();
+  });
+
+  it("чужие документы не дёргают перезагрузку отчёта", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/documents/42"]}>
+        <Routes>
+          <Route path="/documents/:documentId" element={<ReportPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Шаблон требований")).toBeInTheDocument();
+    const reportLoads = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url) === "/api/documents/42/report")
+        .length;
+    const before = reportLoads();
+
+    emitServerEvent("validation", {
+      type: "validation", document_id: 999, status: "done", report_id: 1,
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(reportLoads()).toBe(before);
   });
 });

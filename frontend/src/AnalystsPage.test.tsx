@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import AnalystsPage from "./pages/AnalystsPage";
 import { AUTH_STORAGE_KEY } from "./api";
+import { emitServerEvent } from "./events";
 
 function mockFetch(responses: Record<string, unknown>) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
@@ -285,5 +286,72 @@ describe("AnalystsPage", () => {
     expect(
       fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE"),
     ).toHaveLength(0);
+  });
+
+  it("живые события sync: итог приходит сам, без перезагрузки страницы", async () => {
+    const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Алиев Рустам Азадович")).toBeInTheDocument();
+    const initialLoads = fetchMock.mock.calls.filter(
+      ([url]) => String(url) === "/api/analysts",
+    ).length;
+
+    // синхронизация пошла (кем угодно — кнопкой, другой вкладкой, расписанием)
+    emitServerEvent("sync", {
+      type: "sync", running: true, started_at: "2026-08-26T10:00:00",
+      finished_at: null, error: null, last_results: [],
+    });
+    expect(
+      await screen.findByRole("button", { name: "Синхронизация…" }),
+    ).toBeInTheDocument();
+
+    // завершилась — сводка и свежий список
+    emitServerEvent("sync", {
+      type: "sync", running: false, started_at: "2026-08-26T10:00:00",
+      finished_at: "2026-08-26T10:01:00", error: null,
+      last_results: [
+        { analyst_id: 1, analyst_name: "Алиев Рустам Азадович", created: 1, updated: 2, error: null },
+      ],
+    });
+    expect(
+      await screen.findByText("Синхронизация завершена: новых 1, обновлено 2"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      const loads = fetchMock.mock.calls.filter(
+        ([url]) => String(url) === "/api/analysts",
+      ).length;
+      expect(loads).toBe(initialLoads + 1);
+    });
+  });
+
+  it("снимок «уже завершено» при подключении не показывает сводку", async () => {
+    mockFetch({ "/api/analysts": ANALYSTS });
+
+    render(
+      <MemoryRouter>
+        <AnalystsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Алиев Рустам Азадович")).toBeInTheDocument();
+
+    // стрим подключился, backend прислал состояние прошлого прогона
+    emitServerEvent("sync", {
+      type: "sync", running: false, started_at: "2026-08-25T10:00:00",
+      finished_at: "2026-08-25T10:01:00", error: null,
+      last_results: [
+        { analyst_id: 1, analyst_name: "Алиев Рустам Азадович", created: 5, updated: 0, error: null },
+      ],
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(
+      screen.queryByText(/Синхронизация завершена/),
+    ).not.toBeInTheDocument();
   });
 });

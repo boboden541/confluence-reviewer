@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "./App";
 import type { Analyst } from "./api";
+import { emitServerEvent } from "./events";
 
 // мок: ключи вида "METHOD /path" точечно, голый путь — для GET
 function mockFetch(responses: Record<string, unknown>) {
@@ -323,5 +324,35 @@ describe("Sidebar", () => {
     expect(
       (container.querySelector(".sidebar") as HTMLElement).style.getPropertyValue("--sidebar-w"),
     ).toBe("256px");
+  });
+
+  it("живые события sync меняют статус в футере сайдбара", async () => {
+    const fetchMock = mockFetch(baseMocks());
+    renderSidebar();
+
+    expect(
+      await screen.findByText("⟳ Синхронизация ещё не запускалась"),
+    ).toBeInTheDocument();
+
+    // плановая синхронизация стартовала — футер ожил сам
+    emitServerEvent("sync", {
+      type: "sync", running: true, started_at: "2026-08-26T10:00:00",
+      finished_at: null, error: null, last_results: [],
+    });
+    expect(await screen.findByText("⟳ Идёт синхронизация…")).toBeInTheDocument();
+
+    const analystLoads = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url) === "/api/analysts").length;
+    const before = analystLoads();
+
+    // завершилась — время последнего прогона и свежий список аналитиков
+    emitServerEvent("sync", {
+      type: "sync", running: false, started_at: "2026-08-26T10:00:00",
+      finished_at: "2026-08-26T10:05:00", error: null, last_results: [],
+    });
+    await waitFor(() => {
+      expect(analystLoads()).toBeGreaterThan(before);
+    });
+    expect(screen.getByText(/⟳ Синхронизация: 26\.08\.2026/)).toBeInTheDocument();
   });
 });

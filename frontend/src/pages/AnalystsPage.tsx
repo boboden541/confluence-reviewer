@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, type Analyst, type SyncStatus } from "../api";
+import { api, ApiError, type Analyst } from "../api";
+import { on } from "../events";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -22,7 +23,6 @@ export default function AnalystsPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -32,37 +32,36 @@ export default function AnalystsPage() {
     }
   }, []);
 
-  const pollWhileRunning = useCallback(() => {
-    if (timer.current) clearInterval(timer.current);
-    timer.current = setInterval(async () => {
-      try {
-        const status = await api<SyncStatus>("/api/sync/status");
-        if (!status.running) {
-          if (timer.current) clearInterval(timer.current);
-          timer.current = null;
-          setSyncing(false);
-          setBusyAnalyst(null);
-          const failures = (status.last_results ?? []).filter((r) => r.error);
-          const created = (status.last_results ?? []).reduce((acc, r) => acc + r.created, 0);
-          const updated = (status.last_results ?? []).reduce((acc, r) => acc + r.updated, 0);
-          setInfo(
-            failures.length
-              ? `Синхронизация завершена с ошибками: ${failures.map((f) => `${f.analyst_name}: ${f.error}`).join("; ")}`
-              : `Синхронизация завершена: новых ${created}, обновлено ${updated}`,
-          );
-          await load();
-        }
-      } catch {
-        // статус недоступен — продолжаем опрос до таймаута интервала
+  // Итог синхронизации приходит событием (SSE): запущенная откуда угодно —
+  // кнопкой здесь, из другой вкладки или плановая по расписанию — она сама
+  // обновит страницу. «Завершение» из снимка при подключении игнорируем:
+  // это состояние прошлого прогона, а не новость.
+  useEffect(() => {
+    let sawRun = false;
+    return on("sync", (e) => {
+      if (e.running) {
+        sawRun = true;
+        setSyncing(true);
+        return;
       }
-    }, 1000);
+      setSyncing(false);
+      if (!sawRun) return;
+      sawRun = false;
+      setBusyAnalyst(null);
+      const failures = (e.last_results ?? []).filter((r) => r.error);
+      const created = (e.last_results ?? []).reduce((acc, r) => acc + r.created, 0);
+      const updated = (e.last_results ?? []).reduce((acc, r) => acc + r.updated, 0);
+      setInfo(
+        failures.length
+          ? `Синхронизация завершена с ошибками: ${failures.map((f) => `${f.analyst_name}: ${f.error}`).join("; ")}`
+          : `Синхронизация завершена: новых ${created}, обновлено ${updated}`,
+      );
+      void load();
+    });
   }, [load]);
 
   useEffect(() => {
     load();
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
   }, [load]);
 
   const syncAnalyst = async (id: number) => {
@@ -72,7 +71,6 @@ export default function AnalystsPage() {
     try {
       await api(`/api/analysts/${id}/sync`, { method: "POST" });
       setSyncing(true);
-      pollWhileRunning();
     } catch (exc) {
       setBusyAnalyst(null);
       setError(exc instanceof ApiError ? exc.message : "Не удалось запустить синхронизацию");
@@ -85,7 +83,6 @@ export default function AnalystsPage() {
     try {
       await api("/api/sync/all", { method: "POST" });
       setSyncing(true);
-      pollWhileRunning();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось запустить синхронизацию");
     }

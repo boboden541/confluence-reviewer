@@ -18,6 +18,7 @@ import {
 import StatusBadge from "../StatusBadge";
 import DocumentReport from "../DocumentReport";
 import ValidationDialog from "../ValidationDialog";
+import { on } from "../events";
 
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
@@ -55,7 +56,6 @@ export default function DocumentsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
-  const bulkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   // защита от устаревших ответов: сменили режим/фильтр — старый ответ
   // не должен затирать новое состояние списка
@@ -222,11 +222,35 @@ export default function DocumentsPage() {
       .catch(() => setAnalyst(null));
   }, [analystId]);
 
+  // Прогресс и завершение проверки приходят событиями (SSE): строка «k из N…»
+  // живёт на событиях bulk, список обновляется по финалу наблюдаемого прогона.
+  // Синхронизация тоже меняет список — обновляем и её итог.
   useEffect(() => {
+    let sawBulkRun = false;
+    let sawSyncRun = false;
+    const offBulk = on("bulk", (e) => {
+      setBulk(e.running ? e : null);
+      if (e.running) {
+        sawBulkRun = true;
+        return;
+      }
+      if (sawBulkRun) {
+        sawBulkRun = false;
+        void load(1, false);
+      }
+    });
+    const offSync = on("sync", (e) => {
+      if (e.running) sawSyncRun = true;
+      else if (sawSyncRun) {
+        sawSyncRun = false;
+        void load(1, false);
+      }
+    });
     return () => {
-      if (bulkTimer.current) clearInterval(bulkTimer.current);
+      offBulk();
+      offSync();
     };
-  }, []);
+  }, [load]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {
@@ -302,29 +326,11 @@ export default function DocumentsPage() {
     setDialogOpen(true);
   };
 
-  // Опрос прогресса фоновой проверки: строка «k из N…», по завершении — обновить список.
-  const startBulkPolling = () => {
-    if (bulkTimer.current) clearInterval(bulkTimer.current);
-    bulkTimer.current = setInterval(async () => {
-      try {
-        const status = await api<BulkValidationStatus>("/api/sync/bulk-validation");
-        setBulk(status);
-        if (!status.running) {
-          if (bulkTimer.current) clearInterval(bulkTimer.current);
-          bulkTimer.current = null;
-          await load(1, false);
-        }
-      } catch {
-        // статус недоступен — продолжаем опрос
-      }
-    }, 1000);
-  };
-
-  // Диалог отработал: проверка ушла в фон, выделение больше не нужно
+  // Диалог отработал: проверка ушла в фон (итог придёт событием bulk),
+  // выделение больше не нужно
   const handleLaunched = () => {
     setDialogOpen(false);
     setSelected(new Set());
-    startBulkPolling();
   };
 
   // Смена фильтра: обновляем стейт и адрес (replace — история не засоряется).
