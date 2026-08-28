@@ -54,13 +54,37 @@ UI доступен на `http://localhost:8080` (логин/пароль — `A
 1. **CONNECT-прокси на хосте** (`tools/connect_proxy.py`, только stdlib):
    соединения устанавливаются от хоста, проходят по VPN-маршруту и получают
    настоящий сертификат. TLS остаётся сквозным — проверка сертификатов не отключается.
+   Слушает `127.0.0.1:3128`, пропускает только CONNECT на `:443`.
+
+   Для постоянной работы прокси ставится LaunchAgent'ом: автостарт при входе
+   в систему и автоперезапуск после падения/kill — перезагрузка ноутбука
+   перестаёт быть инцидентом («VPN включён, но ИИ из контейнера недоступен» —
+   это всегда был мёртвый прокси, а не VPN).
+
+   Важно (TCC macOS): launchd-процессам запрещено читать `~/Desktop`,
+   `~/Documents` и `~/Downloads` — агент с путём к репозиторию внутри этих
+   каталогов молча падает с «Operation not permitted». Поэтому агент
+   запускает **копию** скрипта из незащищённого `~/Library/Application Support`
+   (при изменении `tools/connect_proxy.py` пересинхронизируйте копию).
 
    ```bash
-   python3 tools/connect_proxy.py &   # слушает 127.0.0.1:3128, только CONNECT на :443
+   mkdir -p "$HOME/Library/Application Support/confluence-reviewer"
+   cp tools/connect_proxy.py "$HOME/Library/Application Support/confluence-reviewer/"
+   cp tools/com.confluence-reviewer.connect-proxy.plist ~/Library/LaunchAgents/
+   sed -i '' "s|__HOME__|$HOME|" ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist
    ```
 
-   Для автозапуска — шаблон LaunchAgent в `tools/com.confluence-reviewer.connect-proxy.plist`:
-   скопировать в `~/Library/LaunchAgents/` и `launchctl load ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist`.
+   Проверка: `lsof -nP -iTCP:3128 -sTCP:LISTEN` (агент слушает), лог —
+   `/tmp/confluence-reviewer-proxy.log`. Управление: `launchctl print` (статус),
+   `launchctl kickstart -k` (перезапуск), `launchctl bootout` (остановить) —
+   все с суффиксом `gui/$(id -u)/com.confluence-reviewer.connect-proxy`.
+
+   Разовый запуск без агента (быстро проверить):
+
+   ```bash
+   python3 tools/connect_proxy.py &
+   ```
 
 2. **Корпоративные корневые CA** — экспортировать из системного keychain в
    `docker/ca/mts-root-cas.pem` (каталог в `.gitignore`):
