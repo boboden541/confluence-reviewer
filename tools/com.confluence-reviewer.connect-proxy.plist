@@ -1,27 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Шаблон LaunchAgent для автозапуска CONNECT-прокси (см. README, раздел
-     «Корпоративная сеть»). Установка:
-     cp tools/com.confluence-reviewer.connect-proxy.plist ~/Library/LaunchAgents/
-     launchctl load ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist
-     Удаление: launchctl unload … && rm ~/Library/LaunchAgents/… -->
+<!-- Шаблон LaunchAgent для автозапуска CONNECT-прокси (README, раздел
+     «Корпоративная сеть (MTS)»).
+
+     Запускает КОПИЮ tools/connect_proxy.py из ~/Library/Application Support:
+     TCC macOS запрещает launchd-процессам читать ~/Desktop, ~/Documents
+     и ~/Downloads — агент с путём к репозиторию внутри этих каталогов молча
+     падает с «Operation not permitted» и крутится в перезапусках.
+     При изменении tools/connect_proxy.py пересинхронизируйте копию (см. README).
+
+     Перед установкой подставьте свой домашний каталог вместо __HOME__
+     (launchd не раскрывает ~ и переменные окружения).
+
+     Установка:
+       cp tools/com.confluence-reviewer.connect-proxy.plist ~/Library/LaunchAgents/
+       sed -i '' "s|__HOME__|$HOME|" ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist
+     Статус:  launchctl print gui/$(id -u)/com.confluence-reviewer.connect-proxy
+     Рестарт: launchctl kickstart -k gui/$(id -u)/com.confluence-reviewer.connect-proxy
+     Удаление:
+       launchctl bootout gui/$(id -u)/com.confluence-reviewer.connect-proxy
+       rm ~/Library/LaunchAgents/com.confluence-reviewer.connect-proxy.plist -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
     <string>com.confluence-reviewer.connect-proxy</string>
+
+    <!-- путь к копии фиксирован: не зависит от расположения репозитория -->
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>__REPO__/tools/connect_proxy.py</string>
-        <string>--bind</string>
-        <string>127.0.0.1</string>
-        <string>--port</string>
-        <string>3128</string>
+        <string>__HOME__/Library/Application Support/confluence-reviewer/connect_proxy.py</string>
     </array>
+
+    <!-- стартовать при входе в систему -->
     <key>RunAtLoad</key>
     <true/>
+
+    <!-- держать живым: краш или kill — launchd перезапустит сам -->
     <key>KeepAlive</key>
     <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
     <key>StandardOutPath</key>
     <string>/tmp/confluence-reviewer-proxy.log</string>
     <key>StandardErrorPath</key>
