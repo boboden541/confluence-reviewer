@@ -20,6 +20,11 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         ("template_version_id", "INTEGER REFERENCES template_versions(id) ON DELETE SET NULL"),
         ("ai_prompt", "TEXT"),
         ("ai_model_used", "VARCHAR(128)"),
+        # Критерии ИИ-проверки, из которых собран промт прогона (JSON-список кодов)
+        ("ai_criteria_codes", "TEXT"),
+        # Хэш эффективного промта (override или собранного из критериев):
+        # смена промта критерия меняет хэш → документ перевалидируется (ФТ-CR-14)
+        ("ai_prompt_hash", "VARCHAR(64)"),
     ],
 }
 

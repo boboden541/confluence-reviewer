@@ -113,9 +113,9 @@ def _parse_findings(raw) -> list[AIFinding]:
         message = str(item.get("message") or "").strip()
         if not message:
             continue
-        criterion = str(item.get("criterion") or "другое").strip().lower()
-        if criterion not in CRITERIA:
-            criterion = "другое"
+        # критерий — название из промта прогона (критерии настраиваются
+        # в справочнике, зашитой тройки больше нет); длинный мусор обрезаем
+        criterion = (str(item.get("criterion") or "").strip().lower() or "другое")[:64]
         severity = str(item.get("severity") or "minor").strip().lower()
         if severity not in SEVERITIES:
             severity = "minor"

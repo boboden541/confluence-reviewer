@@ -141,7 +141,7 @@ def test_validation_lifecycle_streamed(live_server, monkeypatch):
     doc_id = seed_document()
 
     async def fake_exec(document_id, trigger, force, template_version_id=None,
-                        ai_prompt=None, checks=None):
+                        ai_prompt=None, checks=None, criterion_ids=None):
         return SimpleNamespace(id=77)
 
     monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
@@ -164,7 +164,7 @@ def test_bulk_events_for_valid_docs(live_server, monkeypatch):
     seen: list[int] = []
 
     async def fake_exec(document_id, trigger, force, template_version_id=None,
-                        ai_prompt=None, checks=None):
+                        ai_prompt=None, checks=None, criterion_ids=None):
         seen.append(document_id)
         return SimpleNamespace(id=document_id)
 

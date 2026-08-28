@@ -1,12 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, ApiError, type BatchValidationRequest, type ValidationConfig } from "./api";
+import {
+  api,
+  ApiError,
+  type BatchValidationRequest,
+  type CriterionOption,
+  type ValidationConfig,
+} from "./api";
+
+/** Сборка промта — та же схема, что на бэкенде (services.criteria.assemble_prompt):
+ *  каркас + нумерованные блоки отмеченных критериев. */
+export function assemblePrompt(
+  head: string,
+  criteria: CriterionOption[],
+  tail: string,
+): string {
+  const blocks = criteria.map((c, i) => `${i + 1}. «${c.name}» — ${c.prompt}`);
+  return head + blocks.join("\n") + tail;
+}
 
 /**
  * Диалог настроек проверки перед запуском: выбор критериев (шаблон и/или
- * наполнение), шаблона требований и промта ИИ (предзаполнен стандартным).
- * Настройки действуют один запуск и нигде не сохраняются — каждый запуск
- * начинается со стандартных.
+ * наполнение), шаблона требований и ИИ-критериев. Промт ИИ под замком
+ * собирается из отмеченных критериев живьём (снял галочку — блок исчез,
+ * нумерация пересобралась); снятие замка замораживает текст и превращает
+ * его в override на этот запуск. Настройки нигде не сохраняются — каждый
+ * запуск начинается со стандартных.
  */
 export default function ValidationDialog({
   documentIds,
@@ -22,6 +41,11 @@ export default function ValidationDialog({
 }) {
   const [config, setConfig] = useState<ValidationConfig | null>(null);
   const [templateId, setTemplateId] = useState<number | null>(null);
+  // отмеченные ИИ-критерии (все активные по умолчанию) и замок промта
+  const [criteriaOn, setCriteriaOn] = useState<Set<number>>(new Set());
+  const [promptLocked, setPromptLocked] = useState(true);
+  // текст промта значим только при снятом замке (замороженная копия);
+  // под замком textarea показывает собранное превью и пересобирается сама
   const [prompt, setPrompt] = useState("");
   // критерии проверки: оба включены по умолчанию, минимум один обязателен
   const [checkTemplate, setCheckTemplate] = useState(true);
@@ -30,7 +54,7 @@ export default function ValidationDialog({
   const [busy, setBusy] = useState(false);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
-  // конфиг грузится на каждое открытие: шаблон могли отредактировать
+  // конфиг грузится на каждое открытие: шаблон и критерии могли изменить
   useEffect(() => {
     let alive = true;
     api<ValidationConfig>("/api/validation-config")
@@ -38,7 +62,7 @@ export default function ValidationDialog({
         if (!alive) return;
         setConfig(cfg);
         setTemplateId(cfg.templates.find((t) => t.is_default)?.id ?? cfg.templates[0]?.id ?? null);
-        setPrompt(cfg.default_prompt);
+        setCriteriaOn(new Set(cfg.criteria.map((c) => c.id)));
       })
       .catch((exc) => {
         if (alive) setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить настройки");
@@ -58,9 +82,28 @@ export default function ValidationDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const promptChanged = config !== null && prompt !== config.default_prompt;
+  // живое превью под замком: пересобирается на каждую смену галочек
+  const selectedCriteria = useMemo(
+    () => (config?.criteria ?? []).filter((c) => criteriaOn.has(c.id)),
+    [config, criteriaOn],
+  );
+  const assembled = useMemo(
+    () =>
+      config
+        ? assemblePrompt(config.prompt_head, selectedCriteria, config.prompt_tail)
+        : "",
+    [config, selectedCriteria],
+  );
+
   const n = documentIds.length;
   const noChecks = !checkTemplate && !checkAi;
+  const noCriteria = checkAi && (config?.criteria.length ?? 0) > 0 && criteriaOn.size === 0;
+
+  const unlockPrompt = () => {
+    // замораживаем текущее собранное превью — дальше текст редактируется руками
+    setPrompt(assembled);
+    setPromptLocked(false);
+  };
 
   const launch = async () => {
     setBusy(true);
@@ -76,8 +119,9 @@ export default function ValidationDialog({
         force,
         checks,
         template_id: checkTemplate ? templateId : null,
-        // стандартный промт не отправляем — бэкенд проверит идемпотентность
-        ai_prompt: checkAi && promptChanged ? prompt : null,
+        // под замком промт собирает бэкенд из критериев; строка — только override
+        ai_prompt: checkAi && !promptLocked ? prompt : null,
+        criterion_ids: checkAi ? [...criteriaOn] : null,
       };
       await api("/api/documents/validate-batch", {
         method: "POST",
@@ -134,7 +178,7 @@ export default function ValidationDialog({
               <span>
                 <span className="name">Наполнение (ИИ)</span>
                 <div className="desc">
-                  Полноту и качество содержимого проверяет ИИ по промту ниже
+                  Полноту и качество содержимого проверяет ИИ по критериям ниже
                 </div>
               </span>
             </label>
@@ -186,28 +230,78 @@ export default function ValidationDialog({
             </div>
 
             <div className={checkAi ? "" : "zone-off"}>
-              <div className="zone-label">Промт ИИ-проверки</div>
-              <div className="prompt-note">
-                Предзаполнен стандартным промтом. Меняйте, если для этой партии нужен другой
-                фокус. Изменение действует <b>только на этот запуск</b> и никуда не сохраняется.
-              </div>
-              <textarea
-                className="prompt"
-                spellCheck={false}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                aria-label="Промт ИИ-проверки"
-              />
-              <div className="prompt-toolbar">
-                {promptChanged && (
+              <div className="zone-label">ИИ-критерии и промт</div>
+              {config.criteria.length === 0 && (
+                <div className="alert error">
+                  Нет активных ИИ-критериев — добавьте их в разделе «Критерии ИИ-проверок»
+                </div>
+              )}
+              {config.criteria.map((crit) => (
+                <label key={crit.id} className={criteriaOn.has(crit.id) ? "tpl selected" : "tpl"}>
+                  <input
+                    type="checkbox"
+                    checked={criteriaOn.has(crit.id)}
+                    onChange={(e) =>
+                      setCriteriaOn((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(crit.id);
+                        else next.delete(crit.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="name">{crit.name}</span>
+                    {/* промт критерия одной строкой: полный текст — в тултипе
+                        и в собранном промте ниже, карточки не раздуваем */}
+                    <div className="desc clip" title={crit.prompt}>
+                      {crit.prompt}
+                    </div>
+                  </span>
+                </label>
+              ))}
+              {noCriteria && (
+                <div className="alert error">
+                  Отметьте хотя бы один ИИ-критерий — иначе проверке не по чему оценивать документ
+                </div>
+              )}
+
+              <div className="lockbar">
+                {promptLocked ? (
                   <>
-                    <button type="button" className="btn ghost" onClick={() => setPrompt(config.default_prompt)}>
-                      ⟲ Вернуть стандартный промт
+                    <span className="lock-title">🔒 Промт собран из отмеченных критериев</span>
+                    <button type="button" className="btn ghost small" onClick={unlockPrompt}>
+                      ✏️ Изменить промт
                     </button>
-                    <span className="lozenge moved">промт изменён — применится к этому запуску</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="lock-title">
+                      🔓 Промт изменён вручную — действует только на этот запуск
+                    </span>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      onClick={() => setPromptLocked(true)}
+                    >
+                      ⟲ Вернуть собранный промт
+                    </button>
                   </>
                 )}
               </div>
+              <div className="prompt-note">
+                {promptLocked
+                  ? "Снятие галочки убирает блок критерия из промта и пересобирает нумерацию. Действует на этот запуск и никуда не сохраняется."
+                  : "Замок снят: галочки критериев больше не меняют промт, он уйдёт в проверку как есть."}
+              </div>
+              <textarea
+                className={`prompt${promptLocked ? " locked" : ""}`}
+                spellCheck={false}
+                readOnly={promptLocked}
+                value={promptLocked ? assembled : prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                aria-label="Промт ИИ-проверки"
+              />
             </div>
 
             {error && <div className="alert error">{error}</div>}
@@ -226,7 +320,10 @@ export default function ValidationDialog({
                   // шаблон выбран, но не настроен — запуск невозможен;
                   // без шаблонной проверки запуск возможен (только наполнение)
                   (checkTemplate && config.templates.length === 0) ||
-                  (checkAi && !prompt.trim())
+                  // ИИ-проверка: нечего собирать (нет критериев или все сняты)
+                  // или промт вручную очищен
+                  (checkAi && (config.criteria.length === 0 || criteriaOn.size === 0)) ||
+                  (checkAi && !promptLocked && !prompt.trim())
                 }
               >
                 <span aria-hidden="true">▶</span> Запустить проверку — {n} док.

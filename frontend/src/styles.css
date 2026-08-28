@@ -810,6 +810,12 @@ body.sidebar-resizing {
   line-height: 1.5;
 }
 
+.alert.warn {
+  background: #fff7e6;
+  border: 1px solid #ffe380;
+  color: #7a5d00;
+}
+
 .alert.error {
   background: var(--red-bg);
   color: var(--red-text);
@@ -2209,6 +2215,19 @@ body.drawer-resizing * {
   margin-top: 2px;
 }
 
+/* карточка ИИ-критерия в диалоге: промт одной строкой (полный текст —
+   в тултипе и в собранном промте ниже), чтобы диалог не рос по высоте */
+.dialog .tpl > span {
+  flex: 1;
+  min-width: 0; /* иначе ellipsis во flex-элементе не работает */
+}
+
+.tpl .desc.clip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .prompt-note {
   font-size: 12px;
   color: var(--text-subtle);
@@ -2271,4 +2290,310 @@ textarea.prompt:focus {
   .selection-bar {
     padding: 6px 10px;
   }
+}
+
+/* --- критерии ИИ-проверок: диалог запуска (замок) и справочник --- */
+
+/* полоса замка над промтом: состояние + действие в одну строку */
+.lockbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle, #f7f8f9);
+}
+
+.lockbar .lock-title {
+  font-size: 0.85rem;
+  color: var(--text-subtle, #5e6c84);
+}
+
+/* промт под замком: только чтение — визуально спокойнее */
+textarea.prompt.locked {
+  background: var(--bg-subtle, #f7f8f9);
+  color: var(--text-subtle, #5e6c84);
+  height: 170px; /* диалог с критериями должен помещаться на экран */
+  resize: vertical;
+}
+
+/* справочник критериев */
+.crit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.crit-form textarea,
+.crit-edit textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.crit-form-foot {
+  display: flex;
+  gap: 8px;
+}
+
+.crit-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.crit-item:last-child {
+  border-bottom: none;
+}
+
+.crit-item.archived {
+  opacity: 0.7;
+}
+
+.crit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.crit-name {
+  font-weight: 600;
+}
+
+.crit-code {
+  font-size: 0.78rem;
+  color: var(--text-subtle, #5e6c84);
+  background: var(--bg-subtle, #f7f8f9);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.crit-prompt {
+  margin-top: 4px;
+  color: var(--text-subtle, #5e6c84);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+.crit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.crit-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- Оценка руководителя по ИИ-критериям (страница документа) --- */
+
+.ratings-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ratings-hint {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.rate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.rate-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rate-stale {
+  font-weight: 400;
+  font-size: 12px;
+  color: #7a5d00;
+}
+
+.score-picker {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.score-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.score-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.score-btn.on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+/* «—»: не выбранный балл, а явное «без оценки» — чуть тише */
+.score-btn.dash {
+  width: 34px;
+  border-radius: var(--radius);
+}
+
+.score-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* --- Профиль аналитика --- */
+
+.profile-head {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--blue-subtle-bg);
+  color: var(--blue-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.profile-actions {
+  margin-top: 10px;
+}
+
+/* --- Статистика оценок аналитика --- */
+
+/* фильтр периода — один ряд над диаграммой */
+.stats-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+
+.stats-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.stats-filters .text-input {
+  width: 150px;
+}
+
+/* общий балл — крупная цифра, а не диаграмма */
+.stats-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0 2px;
+}
+
+.stats-hero-value {
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+}
+
+.stats-hero-caption {
+  color: var(--text-subtle);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* горизонтальные бары: критерий сверху, тонкий бар и прямые значения */
+.stats-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats-row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.stats-row-name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.stats-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* трек до полной ширины: бар читается против шкалы 0–5 */
+.stats-bar-track {
+  flex: 1 1 auto;
+  min-width: 120px;
+  height: 10px;
+  background: var(--border-subtle);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 5px;
+  min-width: 4px;
+}
+
+.stats-row-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+  text-align: right;
+}
+
+.stats-row-count {
+  font-size: 13px;
+  white-space: nowrap;
 }

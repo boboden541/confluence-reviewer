@@ -56,6 +56,30 @@ const REPORT = {
 
 const NOTE = { document_id: 42, content: "", created_at: null, updated_at: null };
 
+const RATINGS = {
+  document_id: 42,
+  criteria: [
+    {
+      criterion_id: 1,
+      code: "polnota_opisaniya",
+      name: "Полнота описания",
+      is_archived: false,
+      score: null,
+      updated_at: null,
+      stale: false,
+    },
+    {
+      criterion_id: 2,
+      code: "neprotivorechivost_trebovanii",
+      name: "Непротиворечивость требований",
+      is_archived: true,
+      score: 3,
+      updated_at: "2026-08-11T13:00:00",
+      stale: true,
+    },
+  ],
+};
+
 const VALIDATION_CONFIG = {
   templates: [
     {
@@ -67,7 +91,19 @@ const VALIDATION_CONFIG = {
     },
   ],
   default_prompt: "Ты — опытный ведущий системный аналитик, ревьюер требований.",
+  criteria: [
+    { id: 1, code: "polnota_opisaniya", name: "Полнота описания", prompt: "описаны ли все сценарии" },
+    { id: 2, code: "odnoznachnost_formulirovok", name: "Однозначность формулировок", prompt: "сможет ли разработчик реализовать" },
+  ],
+  prompt_head: "КАРКАС ПРОМТА\n\n",
+  prompt_tail: "\nХВОСТ ПРОМТА",
 };
+
+/** Промт, который диалог собирает из обоих критериев фикстуры. */
+const ASSEMBLED_PROMPT = "КАРКАС ПРОМТА\n\n" +
+      "1. «Полнота описания» — описаны ли все сценарии\n" +
+      "2. «Однозначность формулировок» — сможет ли разработчик реализовать" +
+      "\nХВОСТ ПРОМТА";
 
 function renderPage(initialEntries: string[] = ["/documents/42"]) {
   return render(
@@ -75,7 +111,10 @@ function renderPage(initialEntries: string[] = ["/documents/42"]) {
       <Routes>
         <Route path="/documents/:documentId" element={<ReportPage />} />
         <Route path="/" element={<div>Список аналитиков</div>} />
-        <Route path="/analysts/:analystId" element={<div>Список документов</div>} />
+        <Route
+          path="/analysts/:analystId/documents"
+          element={<div>Список документов</div>}
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -282,15 +321,15 @@ describe("ReportPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Проверить заново/ }));
 
-    // диалог предзаполнен стандартным промтом и шаблоном по умолчанию
+    // диалог предзаполнен собранным промтом и шаблоном по умолчанию
     const prompt = await screen.findByRole("textbox", {
       name: "Промт ИИ-проверки",
     }) as HTMLTextAreaElement;
-    expect(prompt.value).toBe(VALIDATION_CONFIG.default_prompt);
+    expect(prompt.value).toBe(ASSEMBLED_PROMPT);
     // зоны диалога (одноимённая карточка есть и в самом отчёте — ищем внутри диалога)
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Шаблон требований")).toBeInTheDocument();
-    expect(within(dialog).getByText("Промт ИИ-проверки")).toBeInTheDocument();
+    expect(within(dialog).getByText("ИИ-критерии и промт")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Запустить проверку — 1 док\./ }));
 
@@ -305,7 +344,8 @@ describe("ReportPage", () => {
         force: true, // «Проверить заново» — перевалидировать безусловно
         checks: ["template", "ai"], // оба критерия включены по умолчанию
         template_id: 1,
-        ai_prompt: null, // стандартный промт не отправляем
+        ai_prompt: null, // собранный промт не отправляем
+        criterion_ids: [1, 2], // оба ИИ-критерия фикстуры отмечены
       });
     });
     // диалог закрылся, страница ждёт завершения проверки
@@ -408,5 +448,95 @@ describe("ReportPage", () => {
     });
     await new Promise((r) => setTimeout(r, 50));
     expect(reportLoads()).toBe(before);
+  });
+
+  // --- Оценка руководителя по ИИ-критериям последнего прогона ---
+
+  function ratingGroup(name: string) {
+    return within(screen.getByRole("radiogroup", { name }));
+  }
+
+  it("shows the rating zone with stale and archived marks", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Оценка руководителя")).toBeInTheDocument();
+    // обе группы-кружка на месте; у второго — архив и устаревшая оценка
+    expect(ratingGroup("Оценка «Полнота описания»")).toBeDefined();
+    expect(screen.getByText("в архиве")).toBeInTheDocument();
+    expect(screen.getByText(/перепроверено после оценки/)).toBeInTheDocument();
+    const checked = ratingGroup("Оценка «Непротиворечивость требований»").getByRole(
+      "radio",
+      { name: "3" },
+    );
+    expect(checked).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("picking a score sends PUT immediately; clicking the picked score clears it", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    await screen.findByRole("radiogroup", { name: "Оценка «Полнота описания»" });
+    const group = ratingGroup("Оценка «Полнота описания»");
+    fireEvent.click(group.getByRole("radio", { name: "4" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/42/ratings" && init?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        ratings: [{ criterion_id: 1, score: 4 }],
+      });
+    });
+  });
+
+  it("dash button sends score null (no rating)", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    const group = await screen.findByRole("radiogroup", {
+      name: "Оценка «Непротиворечивость требований»",
+    });
+    fireEvent.click(within(group).getByRole("radio", { name: "—" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/42/ratings" && init?.method === "PUT",
+      );
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        ratings: [{ criterion_id: 2, score: null }],
+      });
+    });
+  });
+
+  it("hides the rating zone when the last run has no AI criteria", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": { document_id: 42, criteria: [] },
+    });
+    renderPage();
+
+    expect(await screen.findByText("Заметки руководителя")).toBeInTheDocument();
+    expect(screen.queryByText("Оценка руководителя")).not.toBeInTheDocument();
   });
 });

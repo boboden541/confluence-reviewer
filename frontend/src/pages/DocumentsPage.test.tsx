@@ -109,7 +109,19 @@ const VALIDATION_CONFIG = {
     },
   ],
   default_prompt: "Ты — опытный ведущий системный аналитик, ревьюер требований.",
+  criteria: [
+    { id: 1, code: "polnota_opisaniya", name: "Полнота описания", prompt: "описаны ли все сценарии" },
+    { id: 2, code: "odnoznachnost_formulirovok", name: "Однозначность формулировок", prompt: "сможет ли разработчик реализовать" },
+  ],
+  prompt_head: "КАРКАС ПРОМТА\n\n",
+  prompt_tail: "\nХВОСТ ПРОМТА",
 };
+
+/** Промт, который диалог собирает из обоих критериев фикстуры. */
+const ASSEMBLED_PROMPT = "КАРКАС ПРОМТА\n\n" +
+      "1. «Полнота описания» — описаны ли все сценарии\n" +
+      "2. «Однозначность формулировок» — сможет ли разработчик реализовать" +
+      "\nХВОСТ ПРОМТА";
 
 const BULK_IDLE = {
   running: false,
@@ -139,9 +151,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -162,9 +174,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -188,9 +200,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5?q=GDS"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents?q=GDS"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -211,9 +223,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -248,9 +260,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -279,9 +291,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -310,9 +322,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -350,9 +362,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
           <Route path="/documents/:documentId" element={<div>Полная страница</div>} />
         </Routes>
       </MemoryRouter>,
@@ -376,9 +388,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -402,9 +414,9 @@ describe("DocumentsPage", () => {
     });
 
     const { container } = render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -428,9 +440,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
           <Route path="/documents/:documentId" element={<div>Полная страница документа</div>} />
         </Routes>
       </MemoryRouter>,
@@ -457,9 +469,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -488,9 +500,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -528,9 +540,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5?doc=11"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents?doc=11"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -548,9 +560,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -590,9 +602,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -617,9 +629,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -630,16 +642,20 @@ describe("DocumentsPage", () => {
     const textarea = within(dialog).getByLabelText(
       "Промт ИИ-проверки",
     ) as HTMLTextAreaElement;
-    // всегда предзаполнен стандартным промтом
-    expect(textarea.value).toBe(VALIDATION_CONFIG.default_prompt);
+    // под замком — собранный из критериев промт, только чтение
+    expect(textarea.value).toBe(ASSEMBLED_PROMPT);
+    expect(textarea.readOnly).toBe(true);
 
-    // правка подсвечивается и откатывается одной кнопкой
+    // замок снимается, правка подсвечивается и откатывается одной кнопкой
+    fireEvent.click(within(dialog).getByRole("button", { name: /Изменить промт/ }));
+    expect(textarea.readOnly).toBe(false);
     fireEvent.change(textarea, { target: { value: "мой особый промт" } });
-    expect(within(dialog).getByText(/промт изменён/)).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: /Вернуть стандартный промт/ }));
-    expect(textarea.value).toBe(VALIDATION_CONFIG.default_prompt);
+    expect(within(dialog).getByText(/Промт изменён вручную/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Вернуть собранный промт/ }));
+    expect(textarea.value).toBe(ASSEMBLED_PROMPT);
 
-    // изменённый промт уходит в запуск, стандартный — нет
+    // изменённый промт уходит в запуск, собранный — нет
+    fireEvent.click(within(dialog).getByRole("button", { name: /Изменить промт/ }));
     fireEvent.change(textarea, { target: { value: "особый промт партии" } });
     fireEvent.click(
       within(dialog).getByRole("button", { name: /Запустить проверку — 1 док\./ }),
@@ -701,9 +717,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -728,9 +744,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -768,9 +784,9 @@ describe("DocumentsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/analysts/5"]}>
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
         <Routes>
-          <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
         </Routes>
       </MemoryRouter>,
     );

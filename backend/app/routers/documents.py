@@ -12,11 +12,14 @@ from app.confluence import ConfluenceError
 from app.database import get_db
 from app.models import Analyst, ConfluenceDocument, DocumentNote, TemplateVersion, TriggerType
 from app.schemas import (
+    CriterionOptionOut,
     DocumentOut,
     DocumentPage,
     DocumentListItem,
     NoteOut,
     NoteUpdate,
+    RatingsOut,
+    RatingsUpdate,
     SearchHit,
     ValidationBatchRequest,
     ValidationConfigOut,
@@ -24,15 +27,23 @@ from app.schemas import (
     ValidationReportOut,
 )
 from app.services import tasks
+from app.services import ratings
 from app.services.ai_validator import SYSTEM_PROMPT
 from app.services.comments import (
     CommentError,
     NoReportError,
     publish_report_comment,
 )
+from app.services.criteria import (
+    PROMPT_HEAD,
+    PROMPT_TAIL,
+    seed_criteria_if_missing,
+    select_criteria,
+)
 from app.services.semantic_search import SemanticSearchError, SemanticSearcher
 from app.services.template_store import get_active, seed_if_missing
 from app.services.validation import (
+    AI_CHECK,
     DocumentNotFound,
     TEMPLATE_CHECK,
     latest_report,
@@ -227,12 +238,14 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 @router.get("/validation-config", response_model=ValidationConfigOut)
 def get_validation_config(db: Session = Depends(get_db)):
-    """Конфиг диалога проверки: доступные шаблоны и стандартный промт ИИ.
+    """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
 
     Пока шаблон один (активная версия); структура списка рассчитана
-    на несколько — интерфейс выбора не изменится.
+    на несколько — интерфейс выбора не изменится. Критерии отдаются только
+    активные: галочки диалога и блоки собранного промта.
     """
     seed_if_missing(db)
+    seed_criteria_if_missing(db)
     active = get_active(db)
     templates = []
     if active is not None:
@@ -245,7 +258,17 @@ def get_validation_config(db: Session = Depends(get_db)):
                 "section_count": len(json.loads(active.sections_json)),
             }
         )
-    return ValidationConfigOut(templates=templates, default_prompt=SYSTEM_PROMPT)
+    criteria = [
+        CriterionOptionOut(id=c.id, code=c.code, name=c.name, prompt=c.prompt)
+        for c in select_criteria(db)
+    ]
+    return ValidationConfigOut(
+        templates=templates,
+        default_prompt=SYSTEM_PROMPT,
+        criteria=criteria,
+        prompt_head=PROMPT_HEAD,
+        prompt_tail=PROMPT_TAIL,
+    )
 
 
 @router.post(
@@ -261,13 +284,16 @@ async def validate_document(
     """ФТ-CR-16: ручной запуск валидации (в фоне).
 
     Тело (опционально) — настройки из диалога проверки: критерии checks,
-    template_id и ai_prompt.
+    template_id, ai_prompt и criterion_ids (ИИ-критерии запуска).
     """
     get_document_or_404(document_id, db)
     checks = options.checks if options else None
     # существование версии проверяем, только если шаблонная проверка запрошена
     if TEMPLATE_CHECK in normalize_checks(checks):
         _check_template_exists(options.template_id if options else None, db)
+    # критерии ИИ — только при запущенной ИИ-проверке
+    if AI_CHECK in normalize_checks(checks):
+        _check_criteria_usable(options.criterion_ids if options else None, db)
     started, message = tasks.start_validation(
         document_id,
         trigger=TriggerType.MANUAL,
@@ -275,10 +301,22 @@ async def validate_document(
         template_version_id=options.template_id if options else None,
         ai_prompt=options.ai_prompt if options else None,
         checks=checks,
+        criterion_ids=options.criterion_ids if options else None,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"detail": message, "document_id": document_id}
+
+
+def _check_criteria_usable(criterion_ids: list[int] | None, db: Session) -> None:
+    """Выбранные ИИ-критерии должны существовать и быть активными: молча
+    вычеркнуть нельзя — промт запуска незаметно изменился бы."""
+    if criterion_ids is None:
+        return
+    try:
+        select_criteria(db, criterion_ids)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 def _check_template_exists(template_id: int | None, db: Session) -> None:
@@ -295,11 +333,14 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
     """Проверка выбранных документов (в фоне, последовательно).
 
     Не-force: актуальные документы пропускаются идемпотентностью;
-    изменённый промт ИИ сам по себе принуждает к перепроверке.
+    изменённый промт ИИ (override или правка критерия) сам по себе
+    принуждает к перепроверке — сравнением хэша промта.
     """
     # существование версии проверяем, только если шаблонная проверка запрошена
     if TEMPLATE_CHECK in normalize_checks(payload.checks):
         _check_template_exists(payload.template_id, db)
+    if AI_CHECK in normalize_checks(payload.checks):
+        _check_criteria_usable(payload.criterion_ids, db)
     found = set(
         db.scalars(
             select(ConfluenceDocument.id).where(ConfluenceDocument.id.in_(payload.document_ids))
@@ -319,6 +360,7 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         template_version_id=payload.template_id,
         ai_prompt=payload.ai_prompt,
         checks=payload.checks,
+        criterion_ids=payload.criterion_ids,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
@@ -363,6 +405,26 @@ def _get_note(db: Session, document_id: int) -> DocumentNote | None:
     return db.scalar(
         select(DocumentNote).where(DocumentNote.document_id == document_id)
     )
+
+
+@router.get("/documents/{document_id}/ratings", response_model=RatingsOut)
+def get_ratings(document_id: int, db: Session = Depends(get_db)):
+    """Блок оценивания: критерии последнего прогона с оценками руководителя.
+
+    Прогона с ИИ-проверкой ещё не было — criteria пуст (оценивать нечего).
+    """
+    get_document_or_404(document_id, db)
+    return ratings.get_ratings_view(db, document_id)
+
+
+@router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
+def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
+    """Выставить/изменить оценки (1..5); score=None — снять («—»)."""
+    get_document_or_404(document_id, db)
+    try:
+        return ratings.apply_ratings(db, document_id, payload.ratings)
+    except ratings.CriterionNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @router.get("/documents/{document_id}/note", response_model=NoteOut)

@@ -193,9 +193,70 @@ export interface TemplateOption {
   section_count: number;
 }
 
+/** Активный критерий ИИ-проверки в конфиге диалога: галочка + блок промта */
+export interface CriterionOption {
+  id: number;
+  code: string;
+  name: string;
+  prompt: string;
+}
+
 export interface ValidationConfig {
   templates: TemplateOption[];
   default_prompt: string;
+  /** ИИ-критерии для галочек диалога; превью промта = head + блоки + tail */
+  criteria: CriterionOption[];
+  prompt_head: string;
+  prompt_tail: string;
+}
+
+/** Критерий последнего прогона с оценкой руководителя (блок оценивания) */
+export interface RatingItem {
+  criterion_id: number;
+  code: string;
+  name: string;
+  is_archived: boolean;
+  /** null — оценка ещё не выставлена («—») */
+  score: number | null;
+  updated_at: string | null;
+  /** Документ перепроверен после выставления оценки */
+  stale: boolean;
+}
+
+/** GET/PUT /api/documents/:id/ratings */
+export interface DocumentRatings {
+  document_id: number;
+  /** Пусто — прогона с ИИ-проверкой ещё не было: оценивать нечего */
+  criteria: RatingItem[];
+}
+
+/** GET/PUT/DELETE /api/analysts/:id/note — заметка в профиле аналитика */
+export interface AnalystNote {
+  analyst_id: number;
+  content: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** GET /api/analysts/:id/ratings-summary — средний балл по одному критерию */
+export interface CriterionSummaryItem {
+  criterion_id: number;
+  code: string;
+  name: string;
+  is_archived: boolean;
+  average: number;
+  ratings_count: number;
+}
+
+/** GET /api/analysts/:id/ratings-summary — статистика оценок за период */
+export interface RatingsSummary {
+  analyst_id: number;
+  date_from: string | null;
+  date_to: string | null;
+  /** null — оценок в периоде нет */
+  overall_average: number | null;
+  total_ratings: number;
+  criteria: CriterionSummaryItem[];
 }
 
 /** POST /api/documents/validate-batch */
@@ -207,6 +268,21 @@ export interface BatchValidationRequest {
   template_id?: number | null;
   /** null/undefined — стандартный промт; строка — пользовательский на этот запуск */
   ai_prompt?: string | null;
+  /** ИИ-критерии этого запуска (id); null/undefined — все активные */
+  criterion_ids?: number[] | null;
+}
+
+// --- справочник ИИ-критериев (раздел настроек) ---
+
+/** Критерий ИИ-проверки: название + промт-инструкция. Код стабилен после создания */
+export interface AiCriterion {
+  id: number;
+  code: string;
+  name: string;
+  prompt: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // --- настройки подключения ИИ (глобальные) ---

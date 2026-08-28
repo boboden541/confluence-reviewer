@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 
 from sqlalchemy import select
@@ -26,7 +28,8 @@ from app.models import (
     ValidationStatus,
 )
 from app.services.ai_settings import get_ai_connection
-from app.services.ai_validator import AIValidationError, AIValidator, SYSTEM_PROMPT
+from app.services.ai_validator import AIValidationError, AIValidator
+from app.services.criteria import assemble_prompt, select_criteria, seed_criteria_if_missing
 from app.services.html_to_markdown import html_to_markdown
 from app.services.template_store import get_template_for_validation
 from app.services.template_validator import validate_template
@@ -98,6 +101,7 @@ def run_validation(
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
+    criterion_ids: list[int] | None = None,
 ) -> ValidationReport:
     """Прогнать выбранные проверки документа и сохранить отчёт.
 
@@ -107,23 +111,47 @@ def run_validation(
     запуск с большим набором критериев всегда полный: NULL-проверка не
     проходит кэш идемпотентности.
 
-    template_version_id / ai_prompt — настройки из диалога проверки:
-    конкретная версия шаблона и промт ИИ на этот запуск. Промт применяется
-    только при запущенной ИИ-проверке. Изменённый промт — всегда
-    перевалидация (иначе отчёт вернулся бы из кэша идемпотентности,
-    и настройка не применилась бы).
+    template_version_id / ai_prompt / criterion_ids — настройки из диалога
+    проверки: версия шаблона, override промта и критерии ИИ-проверки этого
+    запуска (None — все активные). Промт прогона без override собирается из
+    критериев; эффективный промт хэшируется в отчёт — любое отличие (правка
+    критерия, override) не проходит кэш идемпотентности и переводит
+    документ в перевалидацию.
     """
     requested = normalize_checks(checks)
     run_template, run_ai = TEMPLATE_CHECK in requested, AI_CHECK in requested
     # промт имеет смысл только для запускаемой ИИ-проверки: без неё
     # не применяется и не принуждает к перевалидации
     custom_prompt = ai_prompt if run_ai and ai_prompt and ai_prompt.strip() else None
-    force = force or (custom_prompt is not None and custom_prompt != SYSTEM_PROMPT)
 
     with SessionLocal() as db:
         doc = db.get(ConfluenceDocument, document_id)
         if doc is None:
             raise DocumentNotFound(f"Документ {document_id} не найден")
+
+        # критерии прогона нужны до проверки кэша: из них собирается промт,
+        # а его хэш входит в условие идемпотентности
+        criteria = []
+        effective_prompt: str | None = None
+        prompt_hash: str | None = None
+        if run_ai:
+            seed_criteria_if_missing(db)
+            try:
+                criteria = select_criteria(db, criterion_ids)
+            except LookupError as exc:
+                return _save_error(db, doc, trigger, str(exc))
+            if not criteria:
+                return _save_error(
+                    db, doc, trigger, "Нет активных ИИ-критериев — добавьте или восстановите"
+                )
+            assembled = assemble_prompt(criteria)
+            # присланный промт дословно равен собранному — это не override
+            # (кнопка «вернуть собранный промт» в диалоге отправляет null,
+            # но дословное совпадение не должно форсировать перепроверку)
+            if custom_prompt is not None and custom_prompt == assembled:
+                custom_prompt = None
+            effective_prompt = custom_prompt or assembled
+            prompt_hash = hashlib.sha256(effective_prompt.encode("utf-8")).hexdigest()
 
         existing = _latest_report(db, doc.id)
         # эффективное подключение ИИ: env + настройки из UI (по-полё);
@@ -144,6 +172,9 @@ def run_validation(
                     # сменилась модель — кэшированный отчёт ей не соответствовал
                     # (NULL у старых отчётов ≠ модель → разовая ревалидация)
                     and existing.ai_model_used == connection.model
+                    # сменился эффективный промт (правка критерия / override) —
+                    # кэш не соответствует запрошенной проверке
+                    and existing.ai_prompt_hash == prompt_hash
                 )
             )
         ):
@@ -174,8 +205,10 @@ def run_validation(
         if run_ai:
             try:
                 markdown = html_to_markdown(doc.content_html)
+                # ИИ всегда получает эффективный промт: override или собранный
+                # из критериев (None недопустим — валидатор ушёл бы в легаси-промт)
                 ai_result = AIValidator(connection=connection).validate(
-                    doc.title, markdown, custom_prompt
+                    doc.title, markdown, effective_prompt
                 )
             except AIValidationError as exc:
                 return _save_error(db, doc, trigger, str(exc))
@@ -194,10 +227,15 @@ def run_validation(
             ai_findings=ai_findings,
             overall_passed=overall,
             template_version_id=used_template_id,
-            # в отчёте храним только пользовательский промт (стандартный и так в коде)
-            ai_prompt=custom_prompt if custom_prompt != SYSTEM_PROMPT else None,
+            # в отчёте храним только override (собранный восстанавливается из критериев)
+            ai_prompt=custom_prompt,
             # какой моделью проверяли — для отчёта и идемпотентности (ФТ-CR-14)
             ai_model_used=ai_model_used,
+            # чем собирали промт и его хэш — для UI и идемпотентности
+            ai_criteria_codes=json.dumps(
+                [c.code for c in criteria], ensure_ascii=False
+            ),
+            ai_prompt_hash=prompt_hash,
         )
         db.add(report)
         doc.validation_status = ValidationStatus.PASSED if overall else ValidationStatus.FAILED

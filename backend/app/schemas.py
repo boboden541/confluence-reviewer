@@ -120,6 +120,8 @@ class ValidationReportOut(BaseModel):
     ai_prompt: str | None = None
     # какой моделью ИИ проверяли (NULL — старые отчёты)
     ai_model_used: str | None = None
+    # коды критериев, из которых собран промт ИИ прогона (JSON; NULL — старые отчёты)
+    ai_criteria_codes: str | None = None
 
 
 # --- Настройки запуска проверки (диалог выбора критериев, шаблона и промта) ---
@@ -142,7 +144,12 @@ class ValidationOptions(BaseModel):
         default=None, description="Версия шаблона требований (используется при checks template)"
     )
     ai_prompt: str | None = Field(
-        default=None, max_length=32_000, description="Промт ИИ на этот запуск"
+        default=None, max_length=32_000, description="Промт ИИ на этот запуск (override)"
+    )
+    # Критерии ИИ-проверки этого запуска (id); None — все активные.
+    # Используется при checks ai; промт без замка собирается из них
+    criterion_ids: list[int] | None = Field(
+        default=None, description="Критерии ИИ-проверки запуска; None — все активные"
     )
 
     @field_validator("checks")
@@ -164,6 +171,14 @@ class ValidationOptions(BaseModel):
             raise ValueError("Промт не может состоять из одних пробелов")
         return value
 
+    @field_validator("criterion_ids")
+    @classmethod
+    def criteria_present(cls, value: list[int] | None) -> list[int] | None:
+        # пустой список = ни одного критерия: проверка наполнения бессмысленна
+        if value is not None and not value:
+            raise ValueError("Выберите хотя бы один критерий ИИ-проверки")
+        return value
+
 
 class ValidationBatchRequest(ValidationOptions):
     """Проверка набора выбранных документов (последовательно, в фоне)."""
@@ -182,11 +197,89 @@ class TemplateOptionOut(BaseModel):
     section_count: int
 
 
+class CriterionOptionOut(BaseModel):
+    """Активный критерий ИИ-проверки в конфиге диалога: галочка + блок промта."""
+
+    id: int
+    code: str
+    name: str
+    prompt: str
+
+
 class ValidationConfigOut(BaseModel):
-    """Конфиг диалога проверки: доступные шаблоны и стандартный промт ИИ."""
+    """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
+
+    Превью промта фронт собирает как prompt_head + блоки критериев + prompt_tail
+    (живое обновление по галочкам) — та же схема, что в services.criteria.
+    """
 
     templates: list[TemplateOptionOut]
     default_prompt: str
+    criteria: list[CriterionOptionOut] = Field(default_factory=list)
+    prompt_head: str = ""
+    prompt_tail: str = ""
+
+
+# --- Справочник ИИ-критериев (раздел настроек) ---
+
+
+class AiCriterionCreate(BaseModel):
+    """Новый критерий: название + промт. Код сгенерируется из названия."""
+
+    name: str = Field(min_length=1, max_length=255)
+    prompt: str = Field(min_length=10, max_length=32_000)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Название критерия не может быть пустым")
+        return cleaned
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Промт критерия не может быть пустым")
+        return cleaned
+
+
+class AiCriterionUpdate(BaseModel):
+    """Редактирование критерия. Код не меняется; переименование увидят и
+    прошлые оценки в статистике — предупреждение в UI."""
+
+    name: str = Field(min_length=1, max_length=255)
+    prompt: str = Field(min_length=10, max_length=32_000)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Название критерия не может быть пустым")
+        return cleaned
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Промт критерия не может быть пустым")
+        return cleaned
+
+
+class AiCriterionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    prompt: str
+    is_archived: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- Настройки подключения ИИ (глобальные) ---
@@ -326,6 +419,56 @@ class TemplateVersionInfo(BaseModel):
     section_count: int
 
 
+# --- Оценки руководителя по ИИ-критериям ---
+
+
+class RatingItem(BaseModel):
+    """Одна оценка в PUT: score=None — снять оценку («—»)."""
+
+    criterion_id: int
+    score: int | None = Field(default=None, ge=1, le=5)
+
+
+class RatingsUpdate(BaseModel):
+    """PUT /api/documents/{id}/ratings: применить оценки (upsert по паре
+    документ+критерий). Достаточно изменившихся элементов, не всего блока."""
+
+    ratings: list[RatingItem] = Field(min_length=1, max_length=100)
+
+    @field_validator("ratings")
+    @classmethod
+    def no_duplicate_criteria(cls, value: list[RatingItem]) -> list[RatingItem]:
+        seen = {item.criterion_id for item in value}
+        if len(seen) != len(value):
+            raise ValueError("Каждый критерий — не более одной оценки в запросе")
+        return value
+
+
+class RatingItemOut(BaseModel):
+    """Критерий последнего прогона с оценкой руководителя (если есть)."""
+
+    criterion_id: int
+    code: str
+    name: str
+    is_archived: bool
+    # None — оценка ещё не выставлена («—»)
+    score: int | None = None
+    updated_at: datetime | None = None
+    # Документ перепроверен после оценки — оценка могла устареть
+    stale: bool = False
+
+
+class RatingsOut(BaseModel):
+    """Блок оценивания документа: критерии последнего прогона в его порядке.
+
+    Пустой criteria — прогона с ИИ-проверкой ещё не было (или отчёт старый,
+    до появления критериев): оценивать нечего.
+    """
+
+    document_id: int
+    criteria: list[RatingItemOut] = Field(default_factory=list)
+
+
 # --- Заметки руководителя ---
 
 
@@ -342,3 +485,47 @@ class NoteOut(BaseModel):
     content: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+# --- Заметка по аналитику (профиль) ---
+
+
+class AnalystNoteUpdate(BaseModel):
+    """Заметка в профиле аналитика — произвольный Markdown, одна на аналитика."""
+
+    content: str = Field(default="", max_length=100_000)
+
+
+class AnalystNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    analyst_id: int
+    content: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+# --- Статистика оценок аналитика (профиль) ---
+
+
+class CriterionSummaryOut(BaseModel):
+    """Средний балл и число оценок по одному критерию."""
+
+    criterion_id: int
+    code: str
+    name: str
+    is_archived: bool
+    average: float
+    ratings_count: int
+
+
+class RatingsSummaryOut(BaseModel):
+    """Средние оценки руководителя по критериям аналитика за период."""
+
+    analyst_id: int
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    # None — оценок в периоде нет
+    overall_average: float | None = None
+    total_ratings: int = 0
+    criteria: list[CriterionSummaryOut] = Field(default_factory=list)

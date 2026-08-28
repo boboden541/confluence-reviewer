@@ -135,7 +135,7 @@ describe("Sidebar", () => {
     expect(called).toContain("page_size=5");
     // «остальные» появляются только когда документов больше пяти
     const more = screen.getByRole("link", { name: /Показать остальные документы · 12/ });
-    expect(more).toHaveAttribute("href", "/analysts/5");
+    expect(more).toHaveAttribute("href", "/analysts/5/documents");
   });
 
   it("hides the rest-link when total ≤ 5", async () => {

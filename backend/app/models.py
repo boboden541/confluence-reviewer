@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -58,6 +59,9 @@ class Analyst(Base):
 
     documents: Mapped[list[ConfluenceDocument]] = relationship(
         back_populates="analyst", cascade="all, delete-orphan"
+    )
+    note: Mapped[AnalystNote | None] = relationship(
+        back_populates="analyst", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -118,8 +122,12 @@ class ValidationReport(Base):
     template_version_id: Mapped[int | None] = mapped_column(
         ForeignKey("template_versions.id", ondelete="SET NULL"), nullable=True
     )
-    # Пользовательский промт ИИ этой проверки (NULL — стандартный промт)
+    # Пользовательский промт ИИ этой проверки (NULL — собран из критериев)
     ai_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Критерии, из которых собран промт прогона (JSON-список кодов; NULL — старые)
+    ai_criteria_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Хэш эффективного промта (override или собранного): отличие = перевалидация
+    ai_prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Какой моделью выполнялась ИИ-проверка (NULL — старые отчёты). Отличие
     # эффективной модели от этого значения = перевалидация (ФТ-CR-14)
     ai_model_used: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -172,6 +180,61 @@ class AIConnectionSettings(Base):
     )
 
 
+class AiCriterion(Base):
+    """Глобальный критерий ИИ-проверки: название + промт-инструкция.
+
+    Промт ИИ-проверки собирается из активных критериев (диалог запуска);
+    оценки руководителя по документам ссылаются на критерий FK. Удаление —
+    логическое (is_archived): архив не участвует в новых проверках, но
+    прошлые оценки и статистика сохраняют смысл.
+    """
+
+    __tablename__ = "ai_criteria"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Стабильный код (транслит названия при создании). Название дальше можно
+    # менять свободно — старые оценки увидят новое название, код не меняется
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Что и как проверять; что считать провалом
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class CriterionRating(Base):
+    """Оценка руководителя (1..5) по ИИ-критерию конкретного документа.
+
+    Одна на пару документ+критерий; «—» (без оценки) — отсутствие записи:
+    PUT со score=None удаляет её (статистика считает только реальные оценки).
+    Оцениваются критерии последнего прогона документа; записи не стираются
+    при новых прогонах — актуальность каждой показывает сравнение updated_at
+    с created_at отчёта (stale = документ перепроверен после оценки).
+    """
+
+    __tablename__ = "criterion_ratings"
+    __table_args__ = (
+        UniqueConstraint("document_id", "criterion_id", name="uq_criterion_ratings_pair"),
+        CheckConstraint("score BETWEEN 1 AND 5", name="ck_criterion_ratings_score"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("confluence_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    criterion_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_criteria.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
 class DocumentNote(Base):
     """Заметки руководителя по документу в Markdown (ФТ-CR-18). Одна на документ."""
 
@@ -189,3 +252,22 @@ class DocumentNote(Base):
     )
 
     document: Mapped[ConfluenceDocument] = relationship(back_populates="note")
+
+
+class AnalystNote(Base):
+    """Заметка руководителя по аналитику в Markdown (профиль аналитика). Одна на аналитика."""
+
+    __tablename__ = "analyst_notes"
+    __table_args__ = (UniqueConstraint("analyst_id", name="uq_analyst_notes_analyst"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    analyst_id: Mapped[int] = mapped_column(
+        ForeignKey("analysts.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+    analyst: Mapped[Analyst] = relationship(back_populates="note")

@@ -139,6 +139,7 @@ async def _execute_validation(
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
+    criterion_ids: list[int] | None = None,
 ) -> Any:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     return await asyncio.to_thread(
@@ -149,6 +150,7 @@ async def _execute_validation(
         template_version_id=template_version_id,
         ai_prompt=ai_prompt,
         checks=checks,
+        criterion_ids=criterion_ids,
     )
 
 
@@ -160,10 +162,12 @@ def start_validation(
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
+    criterion_ids: list[int] | None = None,
 ) -> tuple[bool, str]:
     """Запустить валидацию документа в фоне (ФТ-CR-16). True — запущена.
 
-    template_version_id / ai_prompt / checks — настройки из диалога проверки.
+    template_version_id / ai_prompt / checks / criterion_ids — настройки
+    из диалога проверки.
     """
     current = _validation_state.get(document_id)
     if current and current.get("status") == "running":
@@ -178,7 +182,7 @@ def start_validation(
         _publish_event("validation", {"document_id": document_id, **_validation_state[document_id]})
         try:
             report = await _execute_validation(
-                document_id, trigger, force, template_version_id, ai_prompt, checks
+                document_id, trigger, force, template_version_id, ai_prompt, checks, criterion_ids
             )
             _validation_state[document_id].update(
                 status="done", report_id=report.id, finished_at=now_utc().isoformat()
@@ -213,6 +217,7 @@ def start_bulk_validation(
     template_version_id: int | None = None,
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
+    criterion_ids: list[int] | None = None,
 ) -> tuple[bool, str]:
     """Проверить документы последовательно, в фоне (выбор пользователя
     в списке или «все документы аналитика»).
@@ -247,7 +252,13 @@ def start_bulk_validation(
                 _publish_event("validation", {"document_id": doc_id, **_validation_state[doc_id]})
                 try:
                     report = await _execute_validation(
-                        doc_id, TriggerType.MANUAL, force, template_version_id, ai_prompt, checks
+                        doc_id,
+                        TriggerType.MANUAL,
+                        force,
+                        template_version_id,
+                        ai_prompt,
+                        checks,
+                        criterion_ids,
                     )
                     _validation_state[doc_id].update(
                         status="done", report_id=report.id, finished_at=now_utc().isoformat()
