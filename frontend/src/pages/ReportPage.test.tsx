@@ -67,7 +67,19 @@ const VALIDATION_CONFIG = {
     },
   ],
   default_prompt: "Ты — опытный ведущий системный аналитик, ревьюер требований.",
+  criteria: [
+    { id: 1, code: "polnota_opisaniya", name: "Полнота описания", prompt: "описаны ли все сценарии" },
+    { id: 2, code: "odnoznachnost_formulirovok", name: "Однозначность формулировок", prompt: "сможет ли разработчик реализовать" },
+  ],
+  prompt_head: "КАРКАС ПРОМТА\n\n",
+  prompt_tail: "\nХВОСТ ПРОМТА",
 };
+
+/** Промт, который диалог собирает из обоих критериев фикстуры. */
+const ASSEMBLED_PROMPT = "КАРКАС ПРОМТА\n\n" +
+      "1. «Полнота описания» — описаны ли все сценарии\n" +
+      "2. «Однозначность формулировок» — сможет ли разработчик реализовать" +
+      "\nХВОСТ ПРОМТА";
 
 function renderPage(initialEntries: string[] = ["/documents/42"]) {
   return render(
@@ -282,15 +294,15 @@ describe("ReportPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Проверить заново/ }));
 
-    // диалог предзаполнен стандартным промтом и шаблоном по умолчанию
+    // диалог предзаполнен собранным промтом и шаблоном по умолчанию
     const prompt = await screen.findByRole("textbox", {
       name: "Промт ИИ-проверки",
     }) as HTMLTextAreaElement;
-    expect(prompt.value).toBe(VALIDATION_CONFIG.default_prompt);
+    expect(prompt.value).toBe(ASSEMBLED_PROMPT);
     // зоны диалога (одноимённая карточка есть и в самом отчёте — ищем внутри диалога)
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Шаблон требований")).toBeInTheDocument();
-    expect(within(dialog).getByText("Промт ИИ-проверки")).toBeInTheDocument();
+    expect(within(dialog).getByText("ИИ-критерии и промт")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Запустить проверку — 1 док\./ }));
 
@@ -305,7 +317,8 @@ describe("ReportPage", () => {
         force: true, // «Проверить заново» — перевалидировать безусловно
         checks: ["template", "ai"], // оба критерия включены по умолчанию
         template_id: 1,
-        ai_prompt: null, // стандартный промт не отправляем
+        ai_prompt: null, // собранный промт не отправляем
+        criterion_ids: [1, 2], // оба ИИ-критерия фикстуры отмечены
       });
     });
     // диалог закрылся, страница ждёт завершения проверки

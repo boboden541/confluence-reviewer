@@ -149,11 +149,18 @@ def test_custom_prompt_reaches_ai_and_is_saved_in_report(client, fake_ai):
     assert report.ai_prompt == custom  # в отчёте — что реально применено
 
 
-def test_default_prompt_not_saved_and_not_forced(client, fake_ai):
+def test_assembled_prompt_not_saved_and_not_forced(client, fake_ai):
+    """«Стандартный» промт теперь собирается из критериев справочника.
+
+    Повторный запуск тем же набором — из кэша; промт, присланный дословно
+    равным собранному, — тоже не override и не повод перепроверять.
+    """
     doc_id = seed_document()
-    first = run_validation(doc_id)  # стандартный промт
-    second = run_validation(doc_id, ai_prompt=SYSTEM_PROMPT)  # диалог вернул дефолт без правок
-    assert fake_ai.calls == 1  # идемпотентность работает: дефолтный промт ≠ повод перепроверять
+    first = run_validation(doc_id)  # промт собран из активных критериев
+    assembled = fake_ai.prompts[0]
+    assert "Полнота описания" in assembled
+    second = run_validation(doc_id, ai_prompt=assembled)
+    assert fake_ai.calls == 1
     assert second.id == first.id
     assert second.ai_prompt is None
 
@@ -172,7 +179,8 @@ def test_blank_prompt_is_ignored(client, fake_ai):
     doc_id = seed_document()
     report = run_validation(doc_id, ai_prompt="   ")
     assert report.ai_prompt is None
-    assert fake_ai.prompts == [None]  # пустая строка = стандартный промт
+    # пустая строка = собранный промт, а не легаси-SYSTEM_PROMPT
+    assert "Полнота описания" in fake_ai.prompts[0]
 
 
 def test_specific_template_version_is_used(client, fake_ai):
@@ -213,7 +221,7 @@ def test_validate_endpoint_accepts_options_body(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None):
+    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured.update(
             template=template_version_id, prompt=ai_prompt, doc=document_id, checks=checks
         )
@@ -262,7 +270,7 @@ def test_batch_runs_selected_documents_in_order(client, monkeypatch):
     ids = [seed_document() for _ in range(3)]
     seen: list[tuple[int, str | None, int | None]] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         seen.append((document_id, ai_prompt, template_version_id))
         return SimpleNamespace(id=document_id)
 
@@ -299,7 +307,7 @@ def test_batch_empty_ids_and_bad_prompt_422(client):
 def test_batch_conflict_while_running(client, monkeypatch):
     doc_id = seed_document()
 
-    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None):
+    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         await asyncio.sleep(0.2)  # держим прогон открытым
         return SimpleNamespace(id=1)
 
@@ -405,7 +413,7 @@ def test_validate_endpoint_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None):
+    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 
@@ -423,7 +431,7 @@ def test_batch_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     seen: list[list[str] | None] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         seen.append(checks)
         return SimpleNamespace(id=document_id)
 
@@ -453,7 +461,7 @@ def test_duplicate_checks_collapsed(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None):
+    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 

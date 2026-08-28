@@ -15,6 +15,7 @@ import {
 } from "./api";
 import AnalystsPage from "./pages/AnalystsPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
+import CriteriaPage from "./pages/CriteriaPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
 import TemplatePage from "./pages/TemplatePage";
@@ -180,6 +181,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const onAnalysts = location.pathname === "/";
   const onTemplate = location.pathname.startsWith("/template");
   const onAiConnection = location.pathname.startsWith("/ai-connection");
+  const onCriteria = location.pathname.startsWith("/criteria");
   const activeAnalystId = Number(
     location.pathname.match(/^\/analysts\/(\d+)/)?.[1] ?? NaN,
   );
@@ -352,6 +354,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <span className="ic">🧩</span> Шаблон требований
       </Link>
       <Link
+        to="/criteria"
+        className={`nav-item${onCriteria ? " active" : ""}`}
+        onClick={onClose}
+      >
+        <span className="ic">✅</span> Критерии ИИ-проверок
+      </Link>
+      <Link
         to="/ai-connection"
         className={`nav-item${onAiConnection ? " active" : ""}`}
         onClick={onClose}
@@ -472,6 +481,7 @@ export default function App() {
             <Route path="/analysts/:analystId" element={<DocumentsPage />} />
             <Route path="/documents/:documentId" element={<ReportPage />} />
             <Route path="/template" element={<TemplatePage />} />
+            <Route path="/criteria" element={<CriteriaPage />} />
             <Route path="/ai-connection" element={<AiSettingsPage />} />
           </Routes>
         </main>

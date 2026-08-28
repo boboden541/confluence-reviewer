@@ -118,8 +118,12 @@ class ValidationReport(Base):
     template_version_id: Mapped[int | None] = mapped_column(
         ForeignKey("template_versions.id", ondelete="SET NULL"), nullable=True
     )
-    # Пользовательский промт ИИ этой проверки (NULL — стандартный промт)
+    # Пользовательский промт ИИ этой проверки (NULL — собран из критериев)
     ai_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Критерии, из которых собран промт прогона (JSON-список кодов; NULL — старые)
+    ai_criteria_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Хэш эффективного промта (override или собранного): отличие = перевалидация
+    ai_prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Какой моделью выполнялась ИИ-проверка (NULL — старые отчёты). Отличие
     # эффективной модели от этого значения = перевалидация (ФТ-CR-14)
     ai_model_used: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -167,6 +171,31 @@ class AIConnectionSettings(Base):
     base_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     api_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
     model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class AiCriterion(Base):
+    """Глобальный критерий ИИ-проверки: название + промт-инструкция.
+
+    Промт ИИ-проверки собирается из активных критериев (диалог запуска);
+    оценки руководителя по документам ссылаются на критерий FK. Удаление —
+    логическое (is_archived): архив не участвует в новых проверках, но
+    прошлые оценки и статистика сохраняют смысл.
+    """
+
+    __tablename__ = "ai_criteria"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Стабильный код (транслит названия при создании). Название дальше можно
+    # менять свободно — старые оценки увидят новое название, код не меняется
+    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Что и как проверять; что считать провалом
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=now_utc, onupdate=now_utc, nullable=False
     )

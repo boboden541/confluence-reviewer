@@ -94,6 +94,7 @@ def create_app(settings=None) -> FastAPI:
     )
 
     from app.routers.ai_settings import router as ai_settings_router
+    from app.routers.criteria import router as criteria_router
     from app.routers.analysts import router as analysts_router
     from app.routers.documents import router as documents_router
     from app.routers.events import router as events_router
@@ -103,6 +104,7 @@ def create_app(settings=None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(analysts_router)
+    app.include_router(criteria_router)
     app.include_router(documents_router)
     app.include_router(events_router)
     app.include_router(sync_router)

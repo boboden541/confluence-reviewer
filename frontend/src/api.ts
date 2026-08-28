@@ -193,9 +193,21 @@ export interface TemplateOption {
   section_count: number;
 }
 
+/** Активный критерий ИИ-проверки в конфиге диалога: галочка + блок промта */
+export interface CriterionOption {
+  id: number;
+  code: string;
+  name: string;
+  prompt: string;
+}
+
 export interface ValidationConfig {
   templates: TemplateOption[];
   default_prompt: string;
+  /** ИИ-критерии для галочек диалога; превью промта = head + блоки + tail */
+  criteria: CriterionOption[];
+  prompt_head: string;
+  prompt_tail: string;
 }
 
 /** POST /api/documents/validate-batch */
@@ -207,6 +219,21 @@ export interface BatchValidationRequest {
   template_id?: number | null;
   /** null/undefined — стандартный промт; строка — пользовательский на этот запуск */
   ai_prompt?: string | null;
+  /** ИИ-критерии этого запуска (id); null/undefined — все активные */
+  criterion_ids?: number[] | null;
+}
+
+// --- справочник ИИ-критериев (раздел настроек) ---
+
+/** Критерий ИИ-проверки: название + промт-инструкция. Код стабилен после создания */
+export interface AiCriterion {
+  id: number;
+  code: string;
+  name: string;
+  prompt: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // --- настройки подключения ИИ (глобальные) ---
