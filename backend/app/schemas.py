@@ -503,3 +503,29 @@ class AnalystNoteOut(BaseModel):
     content: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+# --- Статистика оценок аналитика (профиль) ---
+
+
+class CriterionSummaryOut(BaseModel):
+    """Средний балл и число оценок по одному критерию."""
+
+    criterion_id: int
+    code: str
+    name: str
+    is_archived: bool
+    average: float
+    ratings_count: int
+
+
+class RatingsSummaryOut(BaseModel):
+    """Средние оценки руководителя по критериям аналитика за период."""
+
+    analyst_id: int
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    # None — оценок в периоде нет
+    overall_average: float | None = None
+    total_ratings: int = 0
+    criteria: list[CriterionSummaryOut] = Field(default_factory=list)

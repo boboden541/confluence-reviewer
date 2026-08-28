@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Analyst, AnalystNote, ConfluenceDocument
+from app.models import (
+    AiCriterion,
+    Analyst,
+    AnalystNote,
+    ConfluenceDocument,
+    CriterionRating,
+)
 from app.schemas import (
     AnalystCreate,
     AnalystNoteOut,
     AnalystNoteUpdate,
     AnalystOut,
     AnalystUpdate,
+    CriterionSummaryOut,
+    RatingsSummaryOut,
 )
 
 router = APIRouter(prefix="/api/analysts", tags=["analysts"])
@@ -156,6 +166,68 @@ def delete_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
     if note is not None:
         db.delete(note)
         db.commit()
+
+
+@router.get("/{analyst_id}/ratings-summary", response_model=RatingsSummaryOut)
+def get_ratings_summary(
+    analyst_id: int,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    db: Session = Depends(get_db),
+):
+    """Средние оценки руководителя по ИИ-критериям аналитика за период.
+
+    Период отсчитывается по дате оценки (updated_at); по умолчанию — все
+    когда-либо выставленные. Снятые оценки («—») записями не являются и в
+    статистику не попадают. Сортировка критериев: от сильных к слабым.
+    """
+    analyst = get_analyst_or_404(analyst_id, db)
+
+    query = (
+        select(
+            AiCriterion.id,
+            AiCriterion.code,
+            AiCriterion.name,
+            AiCriterion.is_archived,
+            func.avg(CriterionRating.score).label("average"),
+            func.count().label("ratings_count"),
+        )
+        .join(ConfluenceDocument, CriterionRating.document_id == ConfluenceDocument.id)
+        .join(AiCriterion, CriterionRating.criterion_id == AiCriterion.id)
+        .where(ConfluenceDocument.analyst_id == analyst.id)
+        .group_by(AiCriterion.id, AiCriterion.code, AiCriterion.name, AiCriterion.is_archived)
+    )
+    if date_from is not None:
+        query = query.where(CriterionRating.updated_at >= date_from)
+    if date_to is not None:
+        query = query.where(CriterionRating.updated_at <= date_to)
+    rows = db.execute(query).all()
+
+    criteria = [
+        CriterionSummaryOut(
+            criterion_id=row.id,
+            code=row.code,
+            name=row.name,
+            is_archived=row.is_archived,
+            average=round(row.average, 2),
+            ratings_count=row.ratings_count,
+        )
+        for row in rows
+    ]
+    criteria.sort(key=lambda c: (-c.average, c.name.lower()))
+
+    total = sum(c.ratings_count for c in criteria)
+    overall = (
+        round(sum(c.average * c.ratings_count for c in criteria) / total, 2) if total else None
+    )
+    return RatingsSummaryOut(
+        analyst_id=analyst.id,
+        date_from=date_from,
+        date_to=date_to,
+        overall_average=overall,
+        total_ratings=total,
+        criteria=criteria,
+    )
 
 
 @router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])

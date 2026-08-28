@@ -238,6 +238,27 @@ export interface AnalystNote {
   updated_at: string | null;
 }
 
+/** GET /api/analysts/:id/ratings-summary — средний балл по одному критерию */
+export interface CriterionSummaryItem {
+  criterion_id: number;
+  code: string;
+  name: string;
+  is_archived: boolean;
+  average: number;
+  ratings_count: number;
+}
+
+/** GET /api/analysts/:id/ratings-summary — статистика оценок за период */
+export interface RatingsSummary {
+  analyst_id: number;
+  date_from: string | null;
+  date_to: string | null;
+  /** null — оценок в периоде нет */
+  overall_average: number | null;
+  total_ratings: number;
+  criteria: CriterionSummaryItem[];
+}
+
 /** POST /api/documents/validate-batch */
 export interface BatchValidationRequest {
   document_ids: number[];

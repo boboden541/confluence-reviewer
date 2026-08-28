@@ -2494,3 +2494,106 @@ textarea.prompt.locked {
 .profile-actions {
   margin-top: 10px;
 }
+
+/* --- Статистика оценок аналитика --- */
+
+/* фильтр периода — один ряд над диаграммой */
+.stats-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+
+.stats-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.stats-filters .text-input {
+  width: 150px;
+}
+
+/* общий балл — крупная цифра, а не диаграмма */
+.stats-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0 2px;
+}
+
+.stats-hero-value {
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+}
+
+.stats-hero-caption {
+  color: var(--text-subtle);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* горизонтальные бары: критерий сверху, тонкий бар и прямые значения */
+.stats-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats-row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.stats-row-name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.stats-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* трек до полной ширины: бар читается против шкалы 0–5 */
+.stats-bar-track {
+  flex: 1 1 auto;
+  min-width: 120px;
+  height: 10px;
+  background: var(--border-subtle);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 5px;
+  min-width: 4px;
+}
+
+.stats-row-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+  text-align: right;
+}
+
+.stats-row-count {
+  font-size: 13px;
+  white-space: nowrap;
+}

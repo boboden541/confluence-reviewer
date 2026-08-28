@@ -15,6 +15,7 @@ import {
 } from "./api";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
+import AnalystStatsPage from "./pages/AnalystStatsPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import CriteriaPage from "./pages/CriteriaPage";
 import DocumentsPage from "./pages/DocumentsPage";
@@ -481,6 +482,7 @@ export default function App() {
             <Route path="/" element={<AnalystsPage />} />
             <Route path="/analysts/:analystId" element={<AnalystProfilePage />} />
             <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+            <Route path="/analysts/:analystId/stats" element={<AnalystStatsPage />} />
             <Route path="/documents/:documentId" element={<ReportPage />} />
             <Route path="/template" element={<TemplatePage />} />
             <Route path="/criteria" element={<CriteriaPage />} />

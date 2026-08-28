@@ -117,6 +117,9 @@ export default function AnalystProfilePage() {
             <Link className="btn primary" to={`/analysts/${id}/documents`}>
               <span aria-hidden="true">📄</span> Документы ({analyst.documents_count})
             </Link>
+            <Link className="btn ghost" to={`/analysts/${id}/stats`}>
+              <span aria-hidden="true">📊</span> Статистика оценок
+            </Link>
           </div>
         </div>
       </div>

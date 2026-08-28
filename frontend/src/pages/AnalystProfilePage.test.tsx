@@ -76,6 +76,9 @@ describe("AnalystProfilePage", () => {
     // главная кнопка профиля — переход к документам аналитика
     const docs = await screen.findByRole("link", { name: /Документы \(12\)/ });
     expect(docs).toHaveAttribute("href", "/analysts/5/documents");
+    // соседняя — статистика его оценок
+    const stats = screen.getByRole("link", { name: /Статистика оценок/ });
+    expect(stats).toHaveAttribute("href", "/analysts/5/stats");
   });
 
   it("loads the note into the editor with a markdown preview", async () => {
