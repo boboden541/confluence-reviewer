@@ -485,3 +485,21 @@ class NoteOut(BaseModel):
     content: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+# --- Заметка по аналитику (профиль) ---
+
+
+class AnalystNoteUpdate(BaseModel):
+    """Заметка в профиле аналитика — произвольный Markdown, одна на аналитика."""
+
+    content: str = Field(default="", max_length=100_000)
+
+
+class AnalystNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    analyst_id: int
+    content: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

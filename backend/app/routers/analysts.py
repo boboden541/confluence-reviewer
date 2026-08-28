@@ -7,8 +7,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Analyst, ConfluenceDocument
-from app.schemas import AnalystCreate, AnalystOut, AnalystUpdate
+from app.models import Analyst, AnalystNote, ConfluenceDocument
+from app.schemas import (
+    AnalystCreate,
+    AnalystNoteOut,
+    AnalystNoteUpdate,
+    AnalystOut,
+    AnalystUpdate,
+)
 
 router = APIRouter(prefix="/api/analysts", tags=["analysts"])
 
@@ -18,6 +24,10 @@ def get_analyst_or_404(analyst_id: int, db: Session) -> Analyst:
     if analyst is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден")
     return analyst
+
+
+def _get_note(db: Session, analyst_id: int) -> AnalystNote | None:
+    return db.scalar(select(AnalystNote).where(AnalystNote.analyst_id == analyst_id))
 
 
 @router.get("", response_model=list[AnalystOut])
@@ -109,6 +119,43 @@ def delete_analyst(analyst_id: int, db: Session = Depends(get_db)):
     analyst = get_analyst_or_404(analyst_id, db)
     db.delete(analyst)  # каскад: документы → отчёты и заметки
     db.commit()
+
+
+@router.get("/{analyst_id}/note", response_model=AnalystNoteOut)
+def get_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
+    """Заметка по аналитику в его профиле; пустая, если ещё не было."""
+    get_analyst_or_404(analyst_id, db)
+    note = _get_note(db, analyst_id)
+    if note is None:
+        return AnalystNoteOut(analyst_id=analyst_id, content="")
+    return AnalystNoteOut.model_validate(note)
+
+
+@router.put("/{analyst_id}/note", response_model=AnalystNoteOut)
+def update_analyst_note(
+    analyst_id: int, payload: AnalystNoteUpdate, db: Session = Depends(get_db)
+):
+    """Создать или перезаписать заметку (Markdown, одна на аналитика)."""
+    get_analyst_or_404(analyst_id, db)
+    note = _get_note(db, analyst_id)
+    if note is None:
+        note = AnalystNote(analyst_id=analyst_id, content=payload.content)
+        db.add(note)
+    else:
+        note.content = payload.content
+    db.commit()
+    db.refresh(note)
+    return AnalystNoteOut.model_validate(note)
+
+
+@router.delete("/{analyst_id}/note", status_code=status.HTTP_204_NO_CONTENT)
+def delete_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
+    """Удалить заметку аналитика. Идемпотентно: заметки нет — тоже 204."""
+    get_analyst_or_404(analyst_id, db)
+    note = _get_note(db, analyst_id)
+    if note is not None:
+        db.delete(note)
+        db.commit()
 
 
 @router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])

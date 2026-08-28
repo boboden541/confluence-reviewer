@@ -2469,3 +2469,28 @@ textarea.prompt.locked {
   opacity: 0.55;
   cursor: default;
 }
+
+/* --- Профиль аналитика --- */
+
+.profile-head {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--blue-subtle-bg);
+  color: var(--blue-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.profile-actions {
+  margin-top: 10px;
+}

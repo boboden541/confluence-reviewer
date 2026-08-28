@@ -14,6 +14,7 @@ import {
   type SyncStatus,
 } from "./api";
 import AnalystsPage from "./pages/AnalystsPage";
+import AnalystProfilePage from "./pages/AnalystProfilePage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import CriteriaPage from "./pages/CriteriaPage";
 import DocumentsPage from "./pages/DocumentsPage";
@@ -328,7 +329,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         ))}
                         {branch.total > branch.docs.length && (
                           <Link
-                            to={`/analysts/${analyst.id}`}
+                            to={`/analysts/${analyst.id}/documents`}
                             className="nav-more"
                             onClick={onClose}
                           >
@@ -478,7 +479,8 @@ export default function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<AnalystsPage />} />
-            <Route path="/analysts/:analystId" element={<DocumentsPage />} />
+            <Route path="/analysts/:analystId" element={<AnalystProfilePage />} />
+            <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
             <Route path="/documents/:documentId" element={<ReportPage />} />
             <Route path="/template" element={<TemplatePage />} />
             <Route path="/criteria" element={<CriteriaPage />} />

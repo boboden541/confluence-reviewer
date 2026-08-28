@@ -111,7 +111,10 @@ function renderPage(initialEntries: string[] = ["/documents/42"]) {
       <Routes>
         <Route path="/documents/:documentId" element={<ReportPage />} />
         <Route path="/" element={<div>Список аналитиков</div>} />
-        <Route path="/analysts/:analystId" element={<div>Список документов</div>} />
+        <Route
+          path="/analysts/:analystId/documents"
+          element={<div>Список документов</div>}
+        />
       </Routes>
     </MemoryRouter>,
   );

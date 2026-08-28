@@ -230,6 +230,14 @@ export interface DocumentRatings {
   criteria: RatingItem[];
 }
 
+/** GET/PUT/DELETE /api/analysts/:id/note — заметка в профиле аналитика */
+export interface AnalystNote {
+  analyst_id: number;
+  content: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 /** POST /api/documents/validate-batch */
 export interface BatchValidationRequest {
   document_ids: number[];

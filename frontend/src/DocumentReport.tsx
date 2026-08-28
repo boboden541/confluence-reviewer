@@ -213,7 +213,7 @@ export default function DocumentReport({
     <nav className="breadcrumbs">
       <Link to="/">Аналитики</Link>
       <span className="sep">/</span>
-      <Link to={`/analysts/${doc.analyst_id}`}>{analystName}</Link>
+      <Link to={`/analysts/${doc.analyst_id}/documents`}>{analystName}</Link>
       <span className="sep">/</span>
       <span className="crumb-current" title={doc.title}>
         {embedded ? (
@@ -270,7 +270,7 @@ export default function DocumentReport({
                 {analystInitial}
               </span>
               <span className="author-info">
-                <Link className="author-name" to={`/analysts/${doc.analyst_id}`}>
+                <Link className="author-name" to={`/analysts/${doc.analyst_id}/documents`}>
                   {analystName}
                 </Link>
                 {doc.analyst_email && (
