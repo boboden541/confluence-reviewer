@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -195,6 +196,36 @@ class AiCriterion(Base):
     # Что и как проверять; что считать провалом
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class CriterionRating(Base):
+    """Оценка руководителя (1..5) по ИИ-критерию конкретного документа.
+
+    Одна на пару документ+критерий; «—» (без оценки) — отсутствие записи:
+    PUT со score=None удаляет её (статистика считает только реальные оценки).
+    Оцениваются критерии последнего прогона документа; записи не стираются
+    при новых прогонах — актуальность каждой показывает сравнение updated_at
+    с created_at отчёта (stale = документ перепроверен после оценки).
+    """
+
+    __tablename__ = "criterion_ratings"
+    __table_args__ = (
+        UniqueConstraint("document_id", "criterion_id", name="uq_criterion_ratings_pair"),
+        CheckConstraint("score BETWEEN 1 AND 5", name="ck_criterion_ratings_score"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("confluence_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    criterion_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_criteria.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=now_utc, onupdate=now_utc, nullable=False

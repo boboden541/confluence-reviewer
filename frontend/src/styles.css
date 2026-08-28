@@ -2392,3 +2392,80 @@ textarea.prompt.locked {
   flex-direction: column;
   gap: 8px;
 }
+
+/* --- Оценка руководителя по ИИ-критериям (страница документа) --- */
+
+.ratings-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ratings-hint {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.rate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.rate-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rate-stale {
+  font-weight: 400;
+  font-size: 12px;
+  color: #7a5d00;
+}
+
+.score-picker {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.score-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.score-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.score-btn.on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+/* «—»: не выбранный балл, а явное «без оценки» — чуть тише */
+.score-btn.dash {
+  width: 34px;
+  border-radius: var(--radius);
+}
+
+.score-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

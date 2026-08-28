@@ -419,6 +419,56 @@ class TemplateVersionInfo(BaseModel):
     section_count: int
 
 
+# --- Оценки руководителя по ИИ-критериям ---
+
+
+class RatingItem(BaseModel):
+    """Одна оценка в PUT: score=None — снять оценку («—»)."""
+
+    criterion_id: int
+    score: int | None = Field(default=None, ge=1, le=5)
+
+
+class RatingsUpdate(BaseModel):
+    """PUT /api/documents/{id}/ratings: применить оценки (upsert по паре
+    документ+критерий). Достаточно изменившихся элементов, не всего блока."""
+
+    ratings: list[RatingItem] = Field(min_length=1, max_length=100)
+
+    @field_validator("ratings")
+    @classmethod
+    def no_duplicate_criteria(cls, value: list[RatingItem]) -> list[RatingItem]:
+        seen = {item.criterion_id for item in value}
+        if len(seen) != len(value):
+            raise ValueError("Каждый критерий — не более одной оценки в запросе")
+        return value
+
+
+class RatingItemOut(BaseModel):
+    """Критерий последнего прогона с оценкой руководителя (если есть)."""
+
+    criterion_id: int
+    code: str
+    name: str
+    is_archived: bool
+    # None — оценка ещё не выставлена («—»)
+    score: int | None = None
+    updated_at: datetime | None = None
+    # Документ перепроверен после оценки — оценка могла устареть
+    stale: bool = False
+
+
+class RatingsOut(BaseModel):
+    """Блок оценивания документа: критерии последнего прогона в его порядке.
+
+    Пустой criteria — прогона с ИИ-проверкой ещё не было (или отчёт старый,
+    до появления критериев): оценивать нечего.
+    """
+
+    document_id: int
+    criteria: list[RatingItemOut] = Field(default_factory=list)
+
+
 # --- Заметки руководителя ---
 
 

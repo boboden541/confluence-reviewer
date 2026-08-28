@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import CriterionRatings from "./CriterionRatings";
 import Markdown from "./Markdown";
 import StatusBadge from "./StatusBadge";
 import ValidationDialog from "./ValidationDialog";
@@ -7,6 +8,7 @@ import {
   api,
   ApiError,
   type DocumentDetail,
+  type DocumentRatings,
   type ValidationReport,
 } from "./api";
 import { on } from "./events";
@@ -49,6 +51,7 @@ export default function DocumentReport({
 }) {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [report, setReport] = useState<ValidationReport | null>(null);
+  const [ratings, setRatings] = useState<DocumentRatings | null>(null);
   const [note, setNote] = useState("");
   const [noteOriginal, setNoteOriginal] = useState("");
   const [error, setError] = useState("");
@@ -77,6 +80,10 @@ export default function DocumentReport({
       const noteResp = await api<Note>(`/api/documents/${documentId}/note`);
       setNote(noteResp.content);
       setNoteOriginal(noteResp.content);
+      // блок оценивания: критерии последнего прогона с оценками
+      setRatings(
+        await api<DocumentRatings>(`/api/documents/${documentId}/ratings`).catch(() => null),
+      );
       setError("");
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить документ");
@@ -86,6 +93,7 @@ export default function DocumentReport({
   useEffect(() => {
     setDoc(null);
     setReport(null);
+    setRatings(null);
     setPinned(false);
     load();
   }, [load]);
@@ -394,6 +402,14 @@ export default function DocumentReport({
             {report.ai_model_used && ` · модель: ${report.ai_model_used}`}
             {report.template_version_id != null && ` · шаблон v${report.template_version_id}`}
           </div>
+        </>
+      )}
+
+      {/* оценивать можно только после ИИ-прогона: пустой criteria — зоны нет */}
+      {ratings && ratings.criteria.length > 0 && (
+        <>
+          <div className="zone-label">Оценка руководителя</div>
+          <CriterionRatings documentId={documentId} ratings={ratings} onChanged={setRatings} />
         </>
       )}
 

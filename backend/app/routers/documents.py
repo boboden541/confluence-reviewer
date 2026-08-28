@@ -18,6 +18,8 @@ from app.schemas import (
     DocumentListItem,
     NoteOut,
     NoteUpdate,
+    RatingsOut,
+    RatingsUpdate,
     SearchHit,
     ValidationBatchRequest,
     ValidationConfigOut,
@@ -25,6 +27,7 @@ from app.schemas import (
     ValidationReportOut,
 )
 from app.services import tasks
+from app.services import ratings
 from app.services.ai_validator import SYSTEM_PROMPT
 from app.services.comments import (
     CommentError,
@@ -402,6 +405,26 @@ def _get_note(db: Session, document_id: int) -> DocumentNote | None:
     return db.scalar(
         select(DocumentNote).where(DocumentNote.document_id == document_id)
     )
+
+
+@router.get("/documents/{document_id}/ratings", response_model=RatingsOut)
+def get_ratings(document_id: int, db: Session = Depends(get_db)):
+    """Блок оценивания: критерии последнего прогона с оценками руководителя.
+
+    Прогона с ИИ-проверкой ещё не было — criteria пуст (оценивать нечего).
+    """
+    get_document_or_404(document_id, db)
+    return ratings.get_ratings_view(db, document_id)
+
+
+@router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
+def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
+    """Выставить/изменить оценки (1..5); score=None — снять («—»)."""
+    get_document_or_404(document_id, db)
+    try:
+        return ratings.apply_ratings(db, document_id, payload.ratings)
+    except ratings.CriterionNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @router.get("/documents/{document_id}/note", response_model=NoteOut)

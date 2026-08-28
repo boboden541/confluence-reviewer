@@ -210,6 +210,26 @@ export interface ValidationConfig {
   prompt_tail: string;
 }
 
+/** Критерий последнего прогона с оценкой руководителя (блок оценивания) */
+export interface RatingItem {
+  criterion_id: number;
+  code: string;
+  name: string;
+  is_archived: boolean;
+  /** null — оценка ещё не выставлена («—») */
+  score: number | null;
+  updated_at: string | null;
+  /** Документ перепроверен после выставления оценки */
+  stale: boolean;
+}
+
+/** GET/PUT /api/documents/:id/ratings */
+export interface DocumentRatings {
+  document_id: number;
+  /** Пусто — прогона с ИИ-проверкой ещё не было: оценивать нечего */
+  criteria: RatingItem[];
+}
+
 /** POST /api/documents/validate-batch */
 export interface BatchValidationRequest {
   document_ids: number[];

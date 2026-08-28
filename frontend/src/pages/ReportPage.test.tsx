@@ -56,6 +56,30 @@ const REPORT = {
 
 const NOTE = { document_id: 42, content: "", created_at: null, updated_at: null };
 
+const RATINGS = {
+  document_id: 42,
+  criteria: [
+    {
+      criterion_id: 1,
+      code: "polnota_opisaniya",
+      name: "Полнота описания",
+      is_archived: false,
+      score: null,
+      updated_at: null,
+      stale: false,
+    },
+    {
+      criterion_id: 2,
+      code: "neprotivorechivost_trebovanii",
+      name: "Непротиворечивость требований",
+      is_archived: true,
+      score: 3,
+      updated_at: "2026-08-11T13:00:00",
+      stale: true,
+    },
+  ],
+};
+
 const VALIDATION_CONFIG = {
   templates: [
     {
@@ -421,5 +445,95 @@ describe("ReportPage", () => {
     });
     await new Promise((r) => setTimeout(r, 50));
     expect(reportLoads()).toBe(before);
+  });
+
+  // --- Оценка руководителя по ИИ-критериям последнего прогона ---
+
+  function ratingGroup(name: string) {
+    return within(screen.getByRole("radiogroup", { name }));
+  }
+
+  it("shows the rating zone with stale and archived marks", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Оценка руководителя")).toBeInTheDocument();
+    // обе группы-кружка на месте; у второго — архив и устаревшая оценка
+    expect(ratingGroup("Оценка «Полнота описания»")).toBeDefined();
+    expect(screen.getByText("в архиве")).toBeInTheDocument();
+    expect(screen.getByText(/перепроверено после оценки/)).toBeInTheDocument();
+    const checked = ratingGroup("Оценка «Непротиворечивость требований»").getByRole(
+      "radio",
+      { name: "3" },
+    );
+    expect(checked).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("picking a score sends PUT immediately; clicking the picked score clears it", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    await screen.findByRole("radiogroup", { name: "Оценка «Полнота описания»" });
+    const group = ratingGroup("Оценка «Полнота описания»");
+    fireEvent.click(group.getByRole("radio", { name: "4" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/42/ratings" && init?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        ratings: [{ criterion_id: 1, score: 4 }],
+      });
+    });
+  });
+
+  it("dash button sends score null (no rating)", async () => {
+    const fetchMock = mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": RATINGS,
+    });
+    renderPage();
+
+    const group = await screen.findByRole("radiogroup", {
+      name: "Оценка «Непротиворечивость требований»",
+    });
+    fireEvent.click(within(group).getByRole("radio", { name: "—" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/documents/42/ratings" && init?.method === "PUT",
+      );
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        ratings: [{ criterion_id: 2, score: null }],
+      });
+    });
+  });
+
+  it("hides the rating zone when the last run has no AI criteria", async () => {
+    mockFetch({
+      "/api/documents/42": DOCUMENT,
+      "/api/documents/42/report": REPORT,
+      "/api/documents/42/note": NOTE,
+      "/api/documents/42/ratings": { document_id: 42, criteria: [] },
+    });
+    renderPage();
+
+    expect(await screen.findByText("Заметки руководителя")).toBeInTheDocument();
+    expect(screen.queryByText("Оценка руководителя")).not.toBeInTheDocument();
   });
 });
