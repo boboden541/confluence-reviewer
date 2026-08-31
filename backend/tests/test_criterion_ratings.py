@@ -49,7 +49,7 @@ class FakeAIValidator:
     def __init__(self, *args, **kwargs):
         pass
 
-    def validate(self, title, markdown, system_prompt=None):
+    def validate(self, title, markdown, system_prompt=None, expected_criteria=None):
         type(self).calls += 1
         return AIValidationResult(
             passed=True, summary="ok", findings_markdown="✅", findings_count=0, model="t"

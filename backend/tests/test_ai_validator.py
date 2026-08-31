@@ -93,6 +93,64 @@ def test_failed_document_with_findings():
     assert "[однозначность, minor]" in md
 
 
+# --- канонизация ярлыка критерия по списку прогона ---
+
+
+def test_finding_criterion_canonicalized_to_run_criteria():
+    """Контракт промта («criterion» — название критерия прогона) — просьба,
+    не гарантия: ярлык модели сверяется с критериями прогона без учёта
+    регистра и заменяется каноническим названием из справочника."""
+    payload = PASSED_JSON.replace(
+        '"findings": []',
+        '"findings": [{"criterion": "ПОЛНОТА ОПИСАНИЯ", "severity": "minor", '
+        '"message": "Не описаны граничные случаи."}]',
+    )
+    validator, _ = make_validator(payload)
+    result = validator.validate(
+        "[СТ] Документ",
+        "текст",
+        expected_criteria=["Полнота описания", "Соответствие шаблону"],
+    )
+    assert "[Полнота описания, minor]" in result.findings_markdown
+
+
+def test_finding_with_foreign_criterion_marked_outside():
+    """Вне-критериальная находка не теряется, но помечается честно —
+    она не относится ни к одному критерию прогона."""
+    payload = PASSED_JSON.replace(
+        '"findings": []',
+        '"findings": [{"criterion": "Юзабилити интерфейса", "severity": "major", '
+        '"message": "Замечание вне критериев прогона."}]',
+    )
+    validator, _ = make_validator(payload)
+    result = validator.validate(
+        "[СТ] Документ", "текст", expected_criteria=["Полнота описания"]
+    )
+    assert "[вне критериев, major]" in result.findings_markdown
+
+
+def test_finding_criterion_without_expected_list_verbatim():
+    """Легаси-вызов без списка критериев: ярлык модели проходит как есть."""
+    payload = PASSED_JSON.replace(
+        '"findings": []',
+        '"findings": [{"criterion": "Соответствие шаблону", "severity": "minor", '
+        '"message": "Раздел «Роли» вне шаблона."}]',
+    )
+    validator, _ = make_validator(payload)
+    result = validator.validate("[СТ] Документ", "текст")
+    assert "[Соответствие шаблону, minor]" in result.findings_markdown
+
+
+def test_finding_empty_criterion_marked_outside():
+    payload = PASSED_JSON.replace(
+        '"findings": []',
+        '"findings": [{"criterion": "", "severity": "minor", "message": "Без ярлыка."}]',
+    )
+    validator, _ = make_validator(payload)
+    result = validator.validate("[СТ] Документ", "текст")
+    assert "[вне критериев, minor]" in result.findings_markdown
+
+
 def test_critical_finding_overrides_models_passed():
     payload = PASSED_JSON.replace('"findings": []', """
     "findings": [{"criterion": "непротиворечивость", "severity": "critical",

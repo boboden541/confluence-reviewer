@@ -208,7 +208,7 @@ def run_validation(
                 # ИИ всегда получает эффективный промт: override или собранный
                 # из критериев (None недопустим — валидатор ушёл бы в легаси-промт)
                 ai_result = AIValidator(connection=connection).validate(
-                    doc.title, markdown, effective_prompt
+                    doc.title, markdown, effective_prompt, [c.name for c in criteria]
                 )
             except AIValidationError as exc:
                 return _save_error(db, doc, trigger, str(exc))
