@@ -33,7 +33,7 @@ class FakeValidator:
 def fake_validator(monkeypatch):
     FakeValidator.last = None
     FakeValidator.error = None
-    monkeypatch.setattr("app.routers.ai_settings.AIValidator", FakeValidator)
+    monkeypatch.setattr("app.api.ai_settings.AIValidator", FakeValidator)
     return FakeValidator
 
 

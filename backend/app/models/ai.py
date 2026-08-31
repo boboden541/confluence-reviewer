@@ -25,7 +25,7 @@ class AIConnectionSettings(Base):
 
     Пустое поле = значение из окружения (env — загрузочный дефолт).
     api_key хранится в БД (принятый компромисс внутреннего инструмента),
-    наружу отдаётся только маской (см. services.ai_settings.mask_api_key).
+    наружу отдаётся только маской (см. usecase.ai_settings.mask_api_key).
     """
 
     __tablename__ = "ai_connection_settings"

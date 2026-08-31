@@ -122,7 +122,7 @@ class ValidationConfigOut(BaseModel):
     """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
 
     Превью промта фронт собирает как prompt_head + блоки критериев + prompt_tail
-    (живое обновление по галочкам) — та же схема, что в services.criteria.
+    (живое обновление по галочкам) — та же схема, что в usecase.criteria.
     """
 
     templates: list[TemplateOptionOut]
