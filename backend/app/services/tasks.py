@@ -16,7 +16,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import ConfluenceDocument, TriggerType
 from app.services.sync import SyncResult, sync_all, sync_analyst
-from app.services.validation import DocumentNotFound, run_validation
+from app.usecase.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
 
 logger = logging.getLogger("confluence_reviewer.tasks")
@@ -132,6 +132,12 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
     return True, "Синхронизация запущена"
 
 
+def _run_validation_sync(document_id: int, **kwargs) -> Any:
+    """Сессия БД для фоновой валидации (run_validation работает по сессии)."""
+    with SessionLocal() as db:
+        return run_validation(db, document_id, **kwargs)
+
+
 async def _execute_validation(
     document_id: int,
     trigger: TriggerType,
@@ -143,7 +149,7 @@ async def _execute_validation(
 ) -> Any:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     return await asyncio.to_thread(
-        run_validation,
+        _run_validation_sync,
         document_id,
         trigger=trigger,
         force=force,

@@ -39,7 +39,7 @@ class TemplateVersion(Base):
     новую версию; активна ровно одна ВНУТРИ шаблона (is_active).
 
     Секции хранятся плоским списком в визуальном порядке — вложенность
-    задаётся уровнем 1..3 (см. services.template_store).
+    задаётся уровнем 1..3 (см. usecase.templates).
     """
 
     __tablename__ = "template_versions"

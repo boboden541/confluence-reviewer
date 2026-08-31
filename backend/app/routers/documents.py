@@ -28,9 +28,9 @@ from app.schemas import (
     ValidationReportOut,
 )
 from app.services import tasks
-from app.services import ratings
+from app.usecase import ratings
 from app.clients.ai_validator import SYSTEM_PROMPT
-from app.services.comments import (
+from app.usecase.comments import (
     CommentError,
     NoReportError,
     publish_report_comment,
@@ -41,9 +41,10 @@ from app.usecase.criteria import (
     seed_criteria_if_missing,
     select_criteria,
 )
+from app.usecase.exceptions import CriterionNotFound
 from app.clients.semantic_search import SemanticSearchError, SemanticSearcher
 from app.usecase.templates import get_active_version, list_templates, seed_if_missing
-from app.services.validation import (
+from app.usecase.validation import (
     AI_CHECK,
     DocumentNotFound,
     TEMPLATE_CHECK,
@@ -407,7 +408,7 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
 def get_report(document_id: int, db: Session = Depends(get_db)):
     """Последний отчёт валидации документа (ФТ-CR-13)."""
     get_document_or_404(document_id, db)
-    report = latest_report(document_id)
+    report = latest_report(db, document_id)
     if report is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -421,7 +422,7 @@ async def post_comment(document_id: int, db: Session = Depends(get_db)):
     """ФТ-CR-17: опубликовать замечания отчёта комментарием на страницу Confluence."""
     get_document_or_404(document_id, db)
     try:
-        report = await publish_report_comment(document_id)
+        report = await publish_report_comment(db, document_id)
     except (DocumentNotFound, NoReportError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -463,7 +464,7 @@ def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depen
     get_document_or_404(document_id, db)
     try:
         return ratings.apply_ratings(db, document_id, payload.ratings)
-    except ratings.CriterionNotFound as exc:
+    except CriterionNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 

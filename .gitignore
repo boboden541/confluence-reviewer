@@ -36,3 +36,4 @@ postgres_data/
 .DS_Store
 *.log
 docker/ca/
+mockups/

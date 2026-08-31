@@ -28,7 +28,7 @@ class TemplateUpdate(BaseModel):
     """PUT /api/template (legacy): маркер названия + плоский список разделов.
 
     name/description и повторяемые блоки из UI не редактируются —
-    переносятся из предыдущей версии (см. services.template_store).
+    переносятся из предыдущей версии (см. usecase.templates).
     """
 
     title_marker: str = Field(default="", max_length=100)

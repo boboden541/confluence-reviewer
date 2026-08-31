@@ -11,8 +11,14 @@ from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, CriterionRating, ValidationStatus
 from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationResult
-from app.services.validation import run_validation
+from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
+
+
+def run_validation(document_id, **kwargs):
+    """Сессия для прямых прогонов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return _run_validation(db, document_id, **kwargs)
 
 import pytest
 
@@ -60,9 +66,9 @@ class FakeAIValidator:
 @pytest.fixture()
 def fake_ai(monkeypatch):
     FakeAIValidator.calls = 0
-    monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    monkeypatch.setattr("app.usecase.validation.AIValidator", FakeAIValidator)
     monkeypatch.setattr(
-        "app.services.validation.get_ai_connection",
+        "app.usecase.validation.get_ai_connection",
         lambda db: AIConnection(
             protocol="anthropic",
             base_url="https://ai.test",

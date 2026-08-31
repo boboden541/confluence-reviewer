@@ -1,6 +1,6 @@
 """Скриптовая валидация документа на соответствие шаблону (ФТ-CR-10).
 
-Шаблон передаётся словарём (активная версия из БД, см. services.template_store):
+Шаблон передаётся словарём (активная версия из БД, см. usecase.templates):
 title_marker + sections (с вычисленными parent/order) + repeatable_blocks.
 
 Проверки мягкие (по замечаниям заказчика): у аналитиков структура свободная —
@@ -201,7 +201,7 @@ def validate_title(title: str, marker: str) -> Finding | None:
 def validate_template(title: str, content_html: str, template: dict) -> TemplateValidationResult:
     """Главная функция скриптовой валидации (ФТ-CR-10).
 
-    template — активная версия шаблона из БД (services.template_store).
+    template — активная версия шаблона из БД (usecase.templates).
     """
     headings = extract_headings(content_html)
     findings: list[Finding] = []

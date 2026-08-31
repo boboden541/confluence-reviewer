@@ -9,22 +9,16 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy.orm import Session
+
+from app import repository
 from app.config import get_settings
 from app.clients.confluence import ConfluenceClient
-from app.database import SessionLocal
 from app.models import ConfluenceDocument, ValidationReport
-from app.services.validation import DocumentNotFound, _latest_report
+from app.usecase.exceptions import CommentError, DocumentNotFound, NoReportError
 from app.utils import now_utc
 
 logger = logging.getLogger("confluence_reviewer.comments")
-
-
-class NoReportError(LookupError):
-    """У документа ещё нет отчёта валидации."""
-
-
-class CommentError(RuntimeError):
-    """Комментарий опубликовать нельзя (отчёт с ошибкой или уже отправлен)."""
 
 
 def build_comment(report: ValidationReport, document: ConfluenceDocument) -> str:
@@ -58,36 +52,34 @@ def _trigger(value) -> str:
     return "автоматический" if getattr(value, "value", value) == "auto" else "ручной"
 
 
-async def publish_report_comment(document_id: int) -> ValidationReport:
+async def publish_report_comment(db: Session, document_id: int) -> ValidationReport:
     """Опубликовать замечания последнего отчёта (ФТ-CR-17).
 
-    Возвращает обновлённый отчёт с проставленным comment_sent_at.
+    Работает по сессии запроса: чтение документа и отчёта, HTTP-вызов в
+    Confluence, затем отметка об отправке в той же сессии. Возвращает
+    обновлённый отчёт с проставленным comment_sent_at.
     """
-    with SessionLocal() as db:
-        document = db.get(ConfluenceDocument, document_id)
-        if document is None:
-            raise DocumentNotFound(f"Документ {document_id} не найден")
-        report = _latest_report(db, document_id)
-        if report is None:
-            raise NoReportError(f"У документа {document_id} нет отчёта валидации")
-        if report.error_message:
-            raise CommentError("Отчёт содержит техническую ошибку — опубликуйте после успешной проверки")
-        if report.comment_sent_at is not None:
-            raise CommentError("Комментарий по этому отчёту уже опубликован")
-        page_id = document.confluence_page_id
-        text = build_comment(report, document)
-        report_id = report.id
+    document = db.get(ConfluenceDocument, document_id)
+    if document is None:
+        raise DocumentNotFound(f"Документ {document_id} не найден")
+    report = repository.reports.get_latest(db, document_id)
+    if report is None:
+        raise NoReportError(f"У документа {document_id} нет отчёта валидации")
+    if report.error_message:
+        raise CommentError("Отчёт содержит техническую ошибку — опубликуйте после успешной проверки")
+    if report.comment_sent_at is not None:
+        raise CommentError("Комментарий по этому отчёту уже опубликован")
+    page_id = document.confluence_page_id
+    text = build_comment(report, document)
 
     settings = get_settings()
     async with ConfluenceClient(settings) as client:
         await client.add_comment(page_id, text)
 
-    with SessionLocal() as db:
-        report = db.get(ValidationReport, report_id)
-        report.comment_sent_at = now_utc()
-        db.commit()
-        db.refresh(report)
-    logger.info("Комментарий по отчёту %s опубликован на странице %s", report_id, page_id)
+    report.comment_sent_at = now_utc()
+    db.commit()
+    db.refresh(report)
+    logger.info("Комментарий по отчёту %s опубликован на странице %s", report.id, page_id)
     return report
 
 

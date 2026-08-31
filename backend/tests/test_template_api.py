@@ -5,8 +5,14 @@ from __future__ import annotations
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument
 from app.clients.ai_validator import AIValidationResult
-from app.services.validation import run_validation
+from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
+
+
+def run_validation(document_id, **kwargs):
+    """Сессия для прямых прогонов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return _run_validation(db, document_id, **kwargs)
 
 
 def h(level: int, text: str) -> str:
@@ -112,7 +118,7 @@ def test_validation_uses_saved_template_and_keeps_repeatable_blocks(client, monk
     """Проверка документа идёт по шаблону из БД: новый маркер применяется,
     повторяемые блоки доработок переносятся из сид-версии без изменений."""
     monkeypatch.setattr(
-        "app.services.validation.AIValidator",
+        "app.usecase.validation.AIValidator",
         lambda *args, **kwargs: type(
             "StubAI",
             (),

@@ -11,28 +11,22 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import repository
 from app.models import CriterionRating
 from app.schemas import RatingItem, RatingItemOut, RatingsOut
 from app.usecase.criteria import select_criteria
-from app.services.validation import _latest_report
-
-
-class CriterionNotFound(LookupError):
-    """Критерий из запроса не существует или в архиве (оценить нельзя)."""
+from app.usecase.exceptions import CriterionNotFound
 
 
 def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
     """Все активные критерии справочника с оценками; порядок — справочника."""
     criteria = select_criteria(db)
-    report = _latest_report(db, document_id)
+    report = repository.reports.get_latest(db, document_id)
     ratings = {
         rating.criterion_id: rating
-        for rating in db.scalars(
-            select(CriterionRating).where(CriterionRating.document_id == document_id)
-        ).all()
+        for rating in repository.ratings.list_for_document(db, document_id)
     }
 
     items: list[RatingItemOut] = []
@@ -56,7 +50,7 @@ def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
 
 def apply_ratings(db: Session, document_id: int, items: list[RatingItem]) -> RatingsOut:
     """Upsert оценок: score=None удаляет запись (идемпотентно)."""
-    # валидация набора — единый паттерн с прогоном (services.criteria):
+    # валидация набора — единый паттерн с прогоном (usecase.criteria):
     # несуществующий/архивный критерий — ошибка, молча вычеркивать нельзя
     try:
         select_criteria(db, [item.criterion_id for item in items])
@@ -64,12 +58,7 @@ def apply_ratings(db: Session, document_id: int, items: list[RatingItem]) -> Rat
         raise CriterionNotFound(str(exc)) from exc
 
     for item in items:
-        rating = db.scalar(
-            select(CriterionRating).where(
-                CriterionRating.document_id == document_id,
-                CriterionRating.criterion_id == item.criterion_id,
-            )
-        )
+        rating = repository.ratings.get(db, document_id, item.criterion_id)
         if item.score is None:
             if rating is not None:  # снятие оценки — «—»; отсутствующая и так «—»
                 db.delete(rating)
