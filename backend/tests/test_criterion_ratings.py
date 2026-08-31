@@ -1,5 +1,6 @@
-"""Оценки руководителя по ИИ-критериям: блок оценивания строится по
-последнему прогону документа, upsert 1..10 и «—», stale после перепроверки.
+"""Оценки руководителя по ИИ-критериям: блок оценивания строится по всем
+активным критериям справочника (прогоны на него не влияют), upsert 1..10
+и «—», stale после перепроверки, архивные критерии скрыты.
 """
 
 from __future__ import annotations
@@ -85,31 +86,43 @@ def put_rating(client, doc_id: int, criterion_id: int, score: int | None):
     )
 
 
-# --- блок оценивания по последнему прогону ---
+# --- блок оценивания по активному справочнику ---
 
 
-def test_ratings_view_requires_ai_run(client, fake_ai):
+def test_ratings_view_ignores_runs(client, fake_ai):
+    """Блок виден до первого ИИ-прогона: руководитель оценивает по всем
+    активным критериям справочника, а не по набору последнего прогона."""
     doc_id = seed_document()
-    # прогона не было — оценивать нечего
-    assert client.get(f"/api/documents/{doc_id}/ratings").json()["criteria"] == []
+    ids = criteria_ids(client)
 
-    # шаблонная проверка без ИИ тоже не даёт критериев для оценки
+    # прогона не было — блок уже со всеми активными критериями
+    body = client.get(f"/api/documents/{doc_id}/ratings").json()
+    assert [c["criterion_id"] for c in body["criteria"]] == ids
+    assert all(c["score"] is None and not c["stale"] for c in body["criteria"])
+
+    # шаблонная проверка без ИИ блок не меняет
     run_validation(doc_id, checks=["template"])
-    assert client.get(f"/api/documents/{doc_id}/ratings").json()["criteria"] == []
+    body = client.get(f"/api/documents/{doc_id}/ratings").json()
+    assert [c["criterion_id"] for c in body["criteria"]] == ids
+
+    # оценка ставится до первого ИИ-прогона
+    assert put_rating(client, doc_id, ids[0], 8).status_code == 200
 
 
-def test_ratings_view_follows_last_run_order(client, fake_ai):
+def test_ratings_view_follows_catalog_order(client, fake_ai):
+    """Узкий прогон не сужает блок: все активные критерии, порядок справочника."""
     doc_id = seed_document()
     ids = criteria_ids(client)
     run_validation(doc_id, criterion_ids=[ids[2], ids[0]])
 
     body = client.get(f"/api/documents/{doc_id}/ratings").json()
-    assert [c["criterion_id"] for c in body["criteria"]] == [ids[2], ids[0]]
+    # порядок прогона [ids[2], ids[0]] проигнорирован — порядок справочника
+    assert [c["criterion_id"] for c in body["criteria"]] == ids
     assert all(c["score"] is None and not c["stale"] for c in body["criteria"])
-    # название и архивность — из справочника, для блока оценивания
     assert {c["code"] for c in body["criteria"]} == {
-        "odnoznachnost_formulirovok",
         "polnota_opisaniya",
+        "neprotivorechivost_trebovanii",
+        "odnoznachnost_formulirovok",
     }
 
 
@@ -142,21 +155,23 @@ def test_put_upserts_and_removes_rating(client, fake_ai):
     assert put_rating(client, doc_id, ids[0], None).status_code == 200
 
 
-def test_rating_survives_new_run_hidden_until_criteria_return(client, fake_ai):
-    """Оценка вне текущего прогона не показывается, но хранится: критерий
-    вернётся в прогон — оценка вернётся в блок (как устаревшая)."""
+def test_rating_survives_new_run_marked_stale(client, fake_ai):
+    """Оценка переживает новые прогоны и остаётся видимой: критерий вне
+    узкого прогона из блока не исчезает — блок от прогонов не зависит."""
     doc_id = seed_document()
     ids = criteria_ids(client)
     run_validation(doc_id)
     assert put_rating(client, doc_id, ids[1], 5).status_code == 200
     time.sleep(0.01)
 
-    # узкий прогон без второго критерия
+    # узкий прогон без второго критерия — блок не сузился, оценка на месте
     run_validation(doc_id, force=True, criterion_ids=[ids[0]])
     body = client.get(f"/api/documents/{doc_id}/ratings").json()
-    assert [c["criterion_id"] for c in body["criteria"]] == [ids[0]]
+    assert [c["criterion_id"] for c in body["criteria"]] == ids
+    item = next(c for c in body["criteria"] if c["criterion_id"] == ids[1])
+    assert item["score"] == 5 and item["stale"] is True  # отчёт новее оценки
 
-    # полный прогон снова — оценка на месте, но отчёт новее неё
+    # полный прогон — картина та же: оценка жива и помечена устаревшей
     run_validation(doc_id, force=True)
     body = client.get(f"/api/documents/{doc_id}/ratings").json()
     item = next(c for c in body["criteria"] if c["criterion_id"] == ids[1])
@@ -179,20 +194,28 @@ def test_stale_clears_after_rerating(client, fake_ai):
     assert item["stale"] is False and item["score"] == 4
 
 
-def test_archived_criterion_of_run_is_ratable(client, fake_ai):
-    """Критерий прогонa заархивировали — блок оценивания его не теряет."""
+def test_archived_criterion_hidden_even_with_score(client, fake_ai):
+    """Архивный критерий исчезает из блока даже с оценкой: оценка живёт
+    в БД и статистике, но поставить/снять её на документе уже нельзя."""
     doc_id = seed_document()
     ids = criteria_ids(client)
     run_validation(doc_id)
-    client.delete(f"/api/ai-criteria/{ids[1]}")
-
-    body = client.get(f"/api/documents/{doc_id}/ratings").json()
-    item = next(c for c in body["criteria"] if c["criterion_id"] == ids[1])
-    assert item["is_archived"] is True
-
     assert put_rating(client, doc_id, ids[1], 5).status_code == 200
+
+    client.delete(f"/api/ai-criteria/{ids[1]}")
     body = client.get(f"/api/documents/{doc_id}/ratings").json()
-    assert next(c for c in body["criteria"] if c["criterion_id"] == ids[1])["score"] == 5
+    assert ids[1] not in [c["criterion_id"] for c in body["criteria"]]
+
+    # и поставить, и снять оценку на архивном — 404 с честной причиной
+    resp = put_rating(client, doc_id, ids[1], 6)
+    assert resp.status_code == 404 and "архиве" in resp.json()["detail"]
+    resp = put_rating(client, doc_id, ids[1], None)
+    assert resp.status_code == 404 and "архиве" in resp.json()["detail"]
+
+    # запись не стёрта: статистика продолжает считать эту оценку
+    with SessionLocal() as db:
+        rating = db.query(CriterionRating).filter_by(document_id=doc_id).one()
+        assert rating.criterion_id == ids[1] and rating.score == 5
 
 
 # --- валидация API ---

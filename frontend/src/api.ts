@@ -224,11 +224,12 @@ export interface ValidationConfig {
   prompt_tail: string;
 }
 
-/** Критерий последнего прогона с оценкой руководителя (блок оценивания) */
+/** Активный критерий справочника с оценкой руководителя (блок оценивания) */
 export interface RatingItem {
   criterion_id: number;
   code: string;
   name: string;
+  /** задел: блок строится только по активным — из API всегда false */
   is_archived: boolean;
   /** null — оценка ещё не выставлена («—») */
   score: number | null; // 1..10
@@ -240,7 +241,7 @@ export interface RatingItem {
 /** GET/PUT /api/documents/:id/ratings */
 export interface DocumentRatings {
   document_id: number;
-  /** Пусто — прогона с ИИ-проверкой ещё не было: оценивать нечего */
+  /** Пусто — в справочнике нет активных критериев: оценивать нечего */
   criteria: RatingItem[];
 }
 
