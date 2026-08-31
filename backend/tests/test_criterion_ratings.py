@@ -1,5 +1,5 @@
 """Оценки руководителя по ИИ-критериям: блок оценивания строится по
-последнему прогону документа, upsert 1..5 и «—», stale после перепроверки.
+последнему прогону документа, upsert 1..10 и «—», stale после перепроверки.
 """
 
 from __future__ import annotations
@@ -210,8 +210,10 @@ def test_put_validates_payload(client, fake_ai):
     ids = criteria_ids(client)
     run_validation(doc_id)
 
-    # оценка вне диапазона 1..5
-    assert put_rating(client, doc_id, ids[0], 6).status_code == 422
+    # новые границы шкалы: 6 и 10 валидны, 11 и 0 — нет
+    assert put_rating(client, doc_id, ids[0], 6).status_code == 200
+    assert put_rating(client, doc_id, ids[0], 10).status_code == 200
+    assert put_rating(client, doc_id, ids[0], 11).status_code == 422
     assert put_rating(client, doc_id, ids[0], 0).status_code == 422
     # пустой список и дубликаты критериев
     assert (

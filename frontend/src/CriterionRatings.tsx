@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, ApiError, type DocumentRatings } from "./api";
 
-/** Кружки 1..5 и «—»: один выбранный балл, клик по выбранному — снять. */
+/** Кружки 1..10 и «—»: один выбранный балл, клик по выбранному — снять. */
 function ScorePicker({
   label,
   score,
@@ -15,7 +15,7 @@ function ScorePicker({
 }) {
   return (
     <span className="score-picker" role="radiogroup" aria-label={label}>
-      {[1, 2, 3, 4, 5].map((value) => (
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
         <button
           key={value}
           type="button"
@@ -46,7 +46,7 @@ function ScorePicker({
 
 /**
  * Блок «Оценка руководителя»: критерии последнего прогона документа,
- * по каждому — оценка 1..5 или «—» (клик по выбранному баллу тоже снимает).
+ * по каждому — оценка 1..10 или «—» (клик по выбранному баллу тоже снимает).
  * Оценка сохраняется сразу; stale — документ перепроверен после оценки.
  */
 export default function CriterionRatings({
@@ -82,7 +82,7 @@ export default function CriterionRatings({
   return (
     <div className="ratings-zone">
       <p className="muted ratings-hint">
-        Ваша экспертная оценка документа по каждому критерию: 1 — плохо, 5 — отлично.
+        Ваша экспертная оценка документа по каждому критерию: 1 — плохо, 10 — отлично.
         «—» — не оценивать. Сохраняется сразу.
       </p>
       {error && <div className="alert error">{error}</div>}

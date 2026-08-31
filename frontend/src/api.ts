@@ -231,7 +231,7 @@ export interface RatingItem {
   name: string;
   is_archived: boolean;
   /** null — оценка ещё не выставлена («—») */
-  score: number | null;
+  score: number | null; // 1..10
   updated_at: string | null;
   /** Документ перепроверен после выставления оценки */
   stale: boolean;

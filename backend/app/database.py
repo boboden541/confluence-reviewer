@@ -72,6 +72,44 @@ def _migrate_nullable_columns() -> None:
                     logger.info("Миграция: колонка %s.%s теперь nullable", table, name)
 
 
+# Шкала оценок руководителя: 1..5 → 1..10. Маркер применения — имя
+# чек-констрейнта в БД (новое имя стоит — миграция уже прошла).
+_OLD_SCORE_CHECK = "ck_criterion_ratings_score"
+_NEW_SCORE_CHECK = "ck_criterion_ratings_score_1_10"
+
+
+def _migrate_rating_scale() -> None:
+    """Шкала оценок 1..5 → 1..10; существующие баллы удваиваются (3→6, 5→10).
+
+    Однократно и идемпотентно: маркер — имя чек-констрейнта. Атомарно:
+    postgres DDL транзакционен, всё в одном engine.begin() — падение между
+    UPDATE и ADD откатывает и то и другое, повторного удвоения не будет.
+    SQLite не умеет ALTER CONSTRAINT — тестовая БД создаётся заново уже
+    по новой модели, поэтому здесь работает только postgres.
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("criterion_ratings"):
+        return  # таблицу создаст create_all уже с новой шкалой
+    names = {c["name"] for c in inspector.get_check_constraints("criterion_ratings")}
+    if _NEW_SCORE_CHECK in names:
+        return  # новая шкала уже стоит (create_all или прошлый запуск)
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        if _OLD_SCORE_CHECK in names:
+            conn.execute(
+                text(f"ALTER TABLE criterion_ratings DROP CONSTRAINT {_OLD_SCORE_CHECK}")
+            )
+        conn.execute(text("UPDATE criterion_ratings SET score = score * 2"))
+        conn.execute(
+            text(
+                f"ALTER TABLE criterion_ratings ADD CONSTRAINT {_NEW_SCORE_CHECK} "
+                "CHECK (score BETWEEN 1 AND 10)"
+            )
+        )
+    logger.info("Миграция: шкала оценок 1..5 → 1..10, существующие баллы удвоены")
+
+
 def _migrate_template_containers() -> None:
     """Существующая цепочка версий (эпоха одного шаблона) → первый шаблон.
 
@@ -144,6 +182,7 @@ def init_db(retries: int = 15, delay: float = 2.0) -> None:
             Base.metadata.create_all(bind=engine)
             _migrate_added_columns()
             _migrate_nullable_columns()
+            _migrate_rating_scale()
             _migrate_template_containers()
             return
         except Exception as exc:  # pragma: no cover - зависит от окружения

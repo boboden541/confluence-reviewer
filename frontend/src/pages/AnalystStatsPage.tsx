@@ -90,7 +90,7 @@ export default function AnalystStatsPage() {
           <h1 className="page-title">Статистика оценок</h1>
           <div className="page-meta">
             {analyst.full_name}
-            {" · шкала 1–5 · "}
+            {" · шкала 1–10 · "}
             {appliedFrom || appliedTo
               ? `документы созданы: ${appliedFrom || "…"} — ${appliedTo || "…"}`
               : "за всё время"}
@@ -154,7 +154,7 @@ export default function AnalystStatsPage() {
               <li
                 className="stats-row"
                 key={criterion.criterion_id}
-                title={`${criterion.name}: ${formatScore(criterion.average)} из 5 (${pluralRatings(criterion.ratings_count)})`}
+                title={`${criterion.name}: ${formatScore(criterion.average)} из 10 (${pluralRatings(criterion.ratings_count)})`}
               >
                 <div className="stats-row-label">
                   <span className="stats-row-name">{criterion.name}</span>
@@ -168,7 +168,7 @@ export default function AnalystStatsPage() {
                   <div className="stats-bar-track" role="presentation">
                     <div
                       className="stats-bar-fill"
-                      style={{ width: `${(criterion.average / 5) * 100}%` }}
+                      style={{ width: `${(criterion.average / 10) * 100}%` }}
                     />
                   </div>
                   <span className="stats-row-value">{formatScore(criterion.average)}</span>

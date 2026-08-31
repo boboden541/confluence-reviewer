@@ -238,7 +238,7 @@ class AiCriterion(Base):
 
 
 class CriterionRating(Base):
-    """Оценка руководителя (1..5) по ИИ-критерию конкретного документа.
+    """Оценка руководителя (1..10) по ИИ-критерию конкретного документа.
 
     Одна на пару документ+критерий; «—» (без оценки) — отсутствие записи:
     PUT со score=None удаляет её (статистика считает только реальные оценки).
@@ -250,7 +250,8 @@ class CriterionRating(Base):
     __tablename__ = "criterion_ratings"
     __table_args__ = (
         UniqueConstraint("document_id", "criterion_id", name="uq_criterion_ratings_pair"),
-        CheckConstraint("score BETWEEN 1 AND 5", name="ck_criterion_ratings_score"),
+        # имя констрейнта — маркер миграции шкалы в database.py (было 1..5)
+        CheckConstraint("score BETWEEN 1 AND 10", name="ck_criterion_ratings_score_1_10"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
