@@ -20,8 +20,8 @@ import uvicorn
 from app.database import Base, SessionLocal, engine
 from app.main import create_app
 from app.models import Analyst, ConfluenceDocument
-from app.routers.events import format_event
-from app.services import tasks
+from app.api.events import format_event
+from app.usecase import tasks
 from app.utils import now_utc
 
 import pytest
@@ -225,7 +225,7 @@ def test_sync_lifecycle_streamed(live_server, monkeypatch):
 
 def test_keepalive_comment_when_idle(live_server, monkeypatch):
     """Без событий стрим шлёт keepalive-комментарий — соединение живо."""
-    from app.routers import events as events_router
+    from app.api import events as events_router
 
     monkeypatch.setattr(events_router, "KEEPALIVE_SECONDS", 0.05)
 

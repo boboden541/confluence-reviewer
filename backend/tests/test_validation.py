@@ -12,11 +12,18 @@ import pytest
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationStatus
 from app.config import get_settings
-from app.services import tasks
-from app.services.ai_settings import AIConnection
-from app.services.ai_validator import AIValidationError, AIValidationResult
-from app.services.validation import DocumentNotFound, run_validation
+from app.usecase import tasks
+from app.clients.ai_validator import AIConnection
+from app.clients.ai_validator import AIValidationError, AIValidationResult
+from app.usecase.validation import DocumentNotFound
+from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
+
+
+def run_validation(document_id, **kwargs):
+    """Сессия для прямых прогонов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return _run_validation(db, document_id, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -108,11 +115,11 @@ def patch_ai(monkeypatch, passed=True, error=None):
         findings_count=0 if passed else 1,
         model="test",
     )
-    monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    monkeypatch.setattr("app.usecase.validation.AIValidator", FakeAIValidator)
     # эффективная модель должна совпадать с моделью фейка — иначе
     # идемпотентность по модели (ФТ-CR-14) потребует ревалидации
     monkeypatch.setattr(
-        "app.services.validation.get_ai_connection",
+        "app.usecase.validation.get_ai_connection",
         lambda db: AIConnection(
             protocol="anthropic",
             base_url="https://ai.test",
@@ -222,7 +229,7 @@ def test_model_change_revalidates_unchanged_document(monkeypatch):
     assert second.id == first.id
 
     monkeypatch.setattr(
-        "app.services.validation.get_ai_connection",
+        "app.usecase.validation.get_ai_connection",
         lambda db: AIConnection(
             protocol="anthropic", base_url="https://ai.test", api_key="k",
             model="other-model", max_tokens=100, timeout_seconds=1.0,
@@ -360,7 +367,7 @@ def test_bulk_validation_no_documents_and_unknown_analyst(client):
 def test_validate_endpoint_202_and_report(client, monkeypatch):
     doc_id = seed_document()
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         return SimpleNamespace(id=77)
 
     monkeypatch.setattr(tasks, "run_validation", fake_run)

@@ -13,11 +13,17 @@ from types import SimpleNamespace
 
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
-from app.services import tasks
-from app.services.ai_settings import AIConnection
-from app.services.ai_validator import AIValidationResult, SYSTEM_PROMPT
-from app.services.validation import run_validation
+from app.usecase import tasks
+from app.clients.ai_validator import AIConnection
+from app.clients.ai_validator import AIValidationResult, SYSTEM_PROMPT
+from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
+
+
+def run_validation(document_id, **kwargs):
+    """Сессия для прямых прогонов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return _run_validation(db, document_id, **kwargs)
 
 import pytest
 
@@ -98,10 +104,10 @@ def fake_ai(monkeypatch):
     FakeAIValidator.result = AIValidationResult(
         passed=True, summary="ok", findings_markdown="✅", findings_count=0, model="t"
     )
-    monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    monkeypatch.setattr("app.usecase.validation.AIValidator", FakeAIValidator)
     # эффективная модель = модель фейка, иначе идемпотентность по модели (ФТ-CR-14)
     monkeypatch.setattr(
-        "app.services.validation.get_ai_connection",
+        "app.usecase.validation.get_ai_connection",
         lambda db: AIConnection(
             protocol="anthropic",
             base_url="https://ai.test",
@@ -221,7 +227,7 @@ def test_validate_endpoint_accepts_options_body(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured.update(
             template=template_version_id, prompt=ai_prompt, doc=document_id, checks=checks
         )
@@ -245,7 +251,7 @@ def test_validate_endpoint_without_body_still_works(client, monkeypatch):
     """Старые клиенты запускают проверку без тела — обратная совместимость."""
     doc_id = seed_document()
     monkeypatch.setattr(
-        tasks, "run_validation", lambda document_id, **kw: SimpleNamespace(id=1)
+        tasks, "run_validation", lambda db, document_id, **kw: SimpleNamespace(id=1)
     )
     assert client.post(f"/api/documents/{doc_id}/validate").status_code == 202
 
@@ -348,7 +354,7 @@ def test_template_only_skips_ai(client, fake_ai):
 def test_ai_only_works_without_template(client, fake_ai, monkeypatch):
     """Только наполнение: работает даже если шаблон не настроен."""
     monkeypatch.setattr(
-        "app.services.validation.get_template_for_validation", lambda db, vid: None
+        "app.usecase.validation.get_template_for_validation", lambda db, vid: None
     )
     doc_id = seed_document()
     report = run_validation(doc_id, checks=["ai"])
@@ -363,7 +369,7 @@ def test_ai_only_works_without_template(client, fake_ai, monkeypatch):
 def test_template_only_without_template_errors(client, fake_ai, monkeypatch):
     """Шаблонная проверка без настроенного шаблона — техническая ошибка, как раньше."""
     monkeypatch.setattr(
-        "app.services.validation.get_template_for_validation", lambda db, vid: None
+        "app.usecase.validation.get_template_for_validation", lambda db, vid: None
     )
     doc_id = seed_document()
     report = run_validation(doc_id, checks=["template"])
@@ -413,7 +419,7 @@ def test_validate_endpoint_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 
@@ -461,7 +467,7 @@ def test_duplicate_checks_collapsed(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 
@@ -482,7 +488,7 @@ def test_template_id_not_checked_when_template_unrequested(client, monkeypatch):
     """Шаблон не выбран — битый template_id не блокирует запуск проверки наполнения."""
     doc_id = seed_document()
     monkeypatch.setattr(
-        tasks, "run_validation", lambda document_id, **kw: SimpleNamespace(id=1)
+        tasks, "run_validation", lambda db, document_id, **kw: SimpleNamespace(id=1)
     )
     resp = client.post(f"/api/documents/{doc_id}/validate", json={"checks": ["ai"], "template_id": 999})
     assert resp.status_code == 202

@@ -7,17 +7,23 @@ from datetime import timedelta
 
 import pytest
 
-from app.confluence import ConfluenceError
+from app.clients.confluence import ConfluenceError
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationReport
-from app.services.comments import (
+from app.usecase.comments import (
     CommentError,
     NoReportError,
     build_comment,
-    publish_report_comment,
 )
-from app.services.validation import DocumentNotFound
+from app.usecase.comments import publish_report_comment as _publish_report_comment
+from app.usecase.validation import DocumentNotFound
 from app.utils import now_utc
+
+
+async def publish_report_comment(document_id):
+    """Сессия для прямых вызовов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return await _publish_report_comment(db, document_id)
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +105,7 @@ class FakeConfluenceClient:
 def fake_client(monkeypatch):
     FakeConfluenceClient.comments = []
     FakeConfluenceClient.error = None
-    monkeypatch.setattr("app.services.comments.ConfluenceClient", FakeConfluenceClient)
+    monkeypatch.setattr("app.usecase.comments.ConfluenceClient", FakeConfluenceClient)
     return FakeConfluenceClient
 
 

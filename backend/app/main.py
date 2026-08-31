@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
+from app.dependencies import add_catch_all, install_auth, require_basic_auth
 
 logger = logging.getLogger("confluence_reviewer")
 logging.basicConfig(level=logging.INFO)
@@ -19,18 +20,19 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     init_db()
-    if settings.seed_analysts:
-        from app.seed import seed_analysts
 
-        created = seed_analysts(settings.seed_analysts)
-        if created:
-            logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
-
-    # Первая версия шаблона требований — из файла, если в БД ещё нет
+    # Первичное наполнение: карточки аналитиков и первая версия шаблона
+    # требований — одна сессия на оба сида
     from app.database import SessionLocal
-    from app.services.template_store import seed_if_missing
+    from app.usecase.seed import seed_analysts
+    from app.usecase.templates import seed_if_missing
 
     with SessionLocal() as db:
+        if settings.seed_analysts:
+            created = seed_analysts(db, settings.seed_analysts)
+            if created:
+                logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
+
         if seed_if_missing(db) is not None:
             logger.info("Первая версия шаблона требований создана из файла")
 
@@ -39,7 +41,7 @@ async def lifespan(app: FastAPI):
     if settings.confluence_base_url:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        from app.services.tasks import start_sync
+        from app.usecase.tasks import start_sync
 
         scheduler = AsyncIOScheduler(timezone="UTC")
         scheduler.add_job(
@@ -67,18 +69,15 @@ def create_app(settings=None) -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         lifespan=lifespan,
+        # НФТ-CR-7: basic-auth на всё, кроме /api/health. 401 генерируется
+        # внутри приложения, поэтому CORS-заголовки ставит внешняя
+        # CORSMiddleware — как раньше, при middleware-реализации
+        dependencies=[Depends(require_basic_auth)],
     )
 
-    # НФТ-CR-7: basic-auth на всё, кроме /api/health. Добавляется раньше CORS,
-    # чтобы ошибки 401 тоже получали CORS-заголовки (middleware идёт позже — внешне).
-    if settings.auth_enabled:
-        from app.auth import BasicAuthMiddleware
-
-        app.add_middleware(
-            BasicAuthMiddleware,
-            username=settings.app_username,
-            password=settings.app_password,
-        )
+    # Параметры авторизации в app.state + закрытые docs/catch-all (детали —
+    # в dependencies.auth: глобальная зависимость туда не дотягивается)
+    install_auth(app, settings)
 
     # Для локальной разработки frontend (vite) ходит на backend напрямую;
     # в docker-стеке запросы идут через nginx same-origin.
@@ -93,15 +92,15 @@ def create_app(settings=None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.routers.ai_settings import router as ai_settings_router
-    from app.routers.criteria import router as criteria_router
-    from app.routers.analysts import router as analysts_router
-    from app.routers.documents import router as documents_router
-    from app.routers.events import router as events_router
-    from app.routers.health import router as health_router
-    from app.routers.sync import router as sync_router
-    from app.routers.templates import multi_router as templates_multi_router
-    from app.routers.templates import router as templates_router
+    from app.api.ai_settings import router as ai_settings_router
+    from app.api.criteria import router as criteria_router
+    from app.api.analysts import router as analysts_router
+    from app.api.documents import router as documents_router
+    from app.api.events import router as events_router
+    from app.api.health import router as health_router
+    from app.api.sync import router as sync_router
+    from app.api.templates import multi_router as templates_multi_router
+    from app.api.templates import router as templates_router
 
     app.include_router(health_router)
     app.include_router(analysts_router)
@@ -112,6 +111,9 @@ def create_app(settings=None) -> FastAPI:
     app.include_router(templates_router)
     app.include_router(templates_multi_router)
     app.include_router(ai_settings_router)
+
+    # последним: неизвестные пути без учётки — 401, а не 404
+    add_catch_all(app)
 
     return app
 

@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.confluence import ConfluenceClient, ConfluenceError, creator_candidates
+from app.clients.confluence import ConfluenceClient, ConfluenceError, creator_candidates
 
 
 def make_settings(**overrides) -> Settings:

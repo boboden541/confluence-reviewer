@@ -8,9 +8,9 @@ import pytest
 
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument, DocumentNote
-from app.routers import documents as documents_router
-from app.services import semantic_search as ss
-from app.services.semantic_search import SemanticSearchError
+from app.usecase import documents as documents_router
+from app.clients import semantic_search as ss
+from app.clients.semantic_search import SemanticSearchError
 
 
 def seed_analyst_with_docs(titles: list[str]) -> tuple[int, list[int]]:

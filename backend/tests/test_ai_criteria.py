@@ -11,18 +11,24 @@ from types import SimpleNamespace
 
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
-from app.services import tasks
-from app.services.ai_settings import AIConnection
-from app.services.ai_validator import AIValidationResult
-from app.services.criteria import (
+from app.usecase import tasks
+from app.clients.ai_validator import AIConnection
+from app.clients.ai_validator import AIValidationResult
+from app.usecase.criteria import (
     PROMPT_HEAD,
     assemble_prompt,
     seed_criteria_if_missing,
     select_criteria,
     slugify_code,
 )
-from app.services.validation import run_validation
+from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
+
+
+def run_validation(document_id, **kwargs):
+    """Сессия для прямых прогонов в тестах: usecase-функция принимает db."""
+    with SessionLocal() as db:
+        return _run_validation(db, document_id, **kwargs)
 
 import pytest
 
@@ -75,10 +81,10 @@ class FakeAIValidator:
 def fake_ai(monkeypatch):
     FakeAIValidator.calls = 0
     FakeAIValidator.prompts = []
-    monkeypatch.setattr("app.services.validation.AIValidator", FakeAIValidator)
+    monkeypatch.setattr("app.usecase.validation.AIValidator", FakeAIValidator)
     # эффективная модель = модель фейка, иначе идемпотентность по модели (ФТ-CR-14)
     monkeypatch.setattr(
-        "app.services.validation.get_ai_connection",
+        "app.usecase.validation.get_ai_connection",
         lambda db: AIConnection(
             protocol="anthropic",
             base_url="https://ai.test",
@@ -337,7 +343,7 @@ def test_validate_endpoint_passes_criterion_ids(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
         captured["criterion_ids"] = criterion_ids
         return SimpleNamespace(id=9)
 
@@ -388,7 +394,7 @@ def test_criterion_ids_not_checked_without_ai(client, monkeypatch):
     """ИИ-проверка не выбрана — битые criterion_ids не блокируют запуск шаблона."""
     doc_id = seed_document()
     monkeypatch.setattr(
-        tasks, "run_validation", lambda document_id, **kw: SimpleNamespace(id=1)
+        tasks, "run_validation", lambda db, document_id, **kw: SimpleNamespace(id=1)
     )
     resp = client.post(
         f"/api/documents/{doc_id}/validate",

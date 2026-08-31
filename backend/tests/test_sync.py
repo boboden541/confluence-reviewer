@@ -7,10 +7,10 @@ from datetime import timedelta
 
 import pytest
 
-from app.confluence import ConfluenceError, PageContent, PageSummary
+from app.clients.confluence import ConfluenceError, PageContent, PageSummary
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument
-from app.services import sync as sync_module
+from app.usecase import sync as sync_module
 from app.utils import now_utc
 
 

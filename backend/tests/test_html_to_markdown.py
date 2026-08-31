@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.html_to_markdown import html_to_markdown
+from app.usecase.html_to_markdown import html_to_markdown
 
 
 def test_headings_and_inline_markup():

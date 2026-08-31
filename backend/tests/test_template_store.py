@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.template_store import (
+from app.usecase.templates import (
     expand_sections,
     find_duplicate_sections,
     marker_from_pattern,

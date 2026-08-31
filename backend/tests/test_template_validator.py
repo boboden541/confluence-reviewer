@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.services.template_store import expand_sections, load_seed_file
-from app.services.template_validator import (
+from app.usecase.templates import expand_sections, load_seed_file
+from app.usecase.template_validator import (
     extract_headings,
     heading_matches,
     normalize_heading,

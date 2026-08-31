@@ -1,6 +1,6 @@
 """Тесты health-check и первичного наполнения."""
 
-from app.seed import parse_seed_line
+from app.usecase.seed import parse_seed_line
 
 
 def test_health(client):

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -159,15 +158,6 @@ if settings.database_url.startswith("sqlite"):
         )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-
-
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI-зависимость: сессия с гарантированным закрытием."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def init_db(retries: int = 15, delay: float = 2.0) -> None:

@@ -10,8 +10,8 @@ import pytest
 
 from app.database import SessionLocal
 from app.models import AIConnectionSettings
-from app.services.ai_settings import mask_api_key
-from app.services.ai_validator import AIValidationError
+from app.usecase.ai_settings import mask_api_key
+from app.clients.ai_validator import AIValidationError
 
 
 class FakeValidator:
@@ -33,7 +33,7 @@ class FakeValidator:
 def fake_validator(monkeypatch):
     FakeValidator.last = None
     FakeValidator.error = None
-    monkeypatch.setattr("app.routers.ai_settings.AIValidator", FakeValidator)
+    monkeypatch.setattr("app.api.ai_settings.AIValidator", FakeValidator)
     return FakeValidator
 
 
