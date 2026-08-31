@@ -21,13 +21,13 @@ from app.schemas import (
     AIConnectionUpdate,
     AIEnvInfo,
 )
-from app.clients.ai_validator import AIValidationError, AIValidator
-from app.services.ai_settings import (
+from app.clients.ai_validator import AIValidationError, AIValidator, normalize_base_url
+from app.usecase.ai_settings import (
     get_ai_connection,
+    get_row,
     mask_api_key,
-    normalize_base_url,
+    save_settings,
 )
-from app.utils import now_utc
 
 router = APIRouter(prefix="/api/ai-settings", tags=["ai-settings"])
 
@@ -52,29 +52,17 @@ def _to_out(row: AIConnectionSettings | None) -> AIConnectionOut:
 @router.get("", response_model=AIConnectionOut)
 def get_settings_row(db: Session = Depends(get_db)):
     """Сохранённые настройки + дефолты env. Строки нет — поля пустые (= env)."""
-    return _to_out(db.get(AIConnectionSettings, 1))
+    return _to_out(get_row(db))
 
 
 @router.put("", response_model=AIConnectionOut)
-def save_settings(payload: AIConnectionUpdate, db: Session = Depends(get_db)):
+def save_settings_row(payload: AIConnectionUpdate, db: Session = Depends(get_db)):
     """Сохранить настройки (одна строка id=1). Пустое поле = значение из env.
 
     api_key=None не трогает сохранённый токен, "" — очищает его.
     Применяется к следующим запускам проверки (без перезапуска сервиса).
     """
-    row = db.get(AIConnectionSettings, 1)
-    if row is None:
-        row = AIConnectionSettings(id=1)
-        db.add(row)
-    row.protocol = payload.protocol
-    row.base_url = normalize_base_url(payload.base_url)
-    row.model = payload.model
-    if payload.api_key is not None:
-        row.api_key = payload.api_key.strip()
-    row.updated_at = now_utc()
-    db.commit()
-    db.refresh(row)
-    return _to_out(row)
+    return _to_out(save_settings(db, payload))
 
 
 @router.post("/test", response_model=AIConnectionTestResult)

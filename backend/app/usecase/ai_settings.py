@@ -3,17 +3,13 @@
 Одна строка (id=1) перекрывает env по-полю: пустое поле строки или её
 отсутствие = значение из окружения. api_key наружу отдаётся только маской
 и нигде не логируется.
-
-Пока модуль живёт в services (перенос в usecase — отдельным шагом):
-параметры подключения (AIConnection, connection_from_settings, PROTOCOLS,
-normalize_base_url) уже переехали в clients.ai_validator и реэкспортируются
-сюда для сохранения контракта импортов.
 """
 
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app import repository
 from app.clients.ai_validator import (
     PROTOCOLS,
     AIConnection,
@@ -22,15 +18,34 @@ from app.clients.ai_validator import (
 )
 from app.config import get_settings
 from app.models import AIConnectionSettings
+from app.schemas import AIConnectionUpdate
+from app.utils import now_utc
 
-__all__ = [
-    "PROTOCOLS",
-    "AIConnection",
-    "connection_from_settings",
-    "get_ai_connection",
-    "mask_api_key",
-    "normalize_base_url",
-]
+
+def get_row(db: Session) -> AIConnectionSettings | None:
+    """Сохранённая строка настроек (id=1) или None — поля пустые (= env)."""
+    return repository.ai_settings.get_row(db)
+
+
+def save_settings(db: Session, payload: AIConnectionUpdate) -> AIConnectionSettings:
+    """Сохранить настройки (одна строка id=1). Пустое поле = значение из env.
+
+    api_key=None не трогает сохранённый токен, "" — очищает его.
+    Применяется к следующим запускам проверки (без перезапуска сервиса).
+    """
+    row = repository.ai_settings.get_row(db)
+    if row is None:
+        row = AIConnectionSettings(id=1)
+        db.add(row)
+    row.protocol = payload.protocol
+    row.base_url = normalize_base_url(payload.base_url)
+    row.model = payload.model
+    if payload.api_key is not None:
+        row.api_key = payload.api_key.strip()
+    row.updated_at = now_utc()
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def get_ai_connection(db: Session) -> AIConnection:
@@ -40,7 +55,7 @@ def get_ai_connection(db: Session) -> AIConnection:
     применяются к следующей проверке без перезапуска сервиса.
     """
     env = connection_from_settings(get_settings())
-    row = db.get(AIConnectionSettings, 1)
+    row = repository.ai_settings.get_row(db)
     if row is None:
         return env
     protocol = row.protocol if row.protocol in PROTOCOLS else env.protocol

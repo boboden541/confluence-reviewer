@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models import CriterionRating
 from app.schemas import RatingItem, RatingItemOut, RatingsOut
-from app.services.criteria import select_criteria
+from app.usecase.criteria import select_criteria
 from app.services.validation import _latest_report
 
 

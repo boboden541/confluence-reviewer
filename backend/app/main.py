@@ -20,18 +20,19 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     init_db()
-    if settings.seed_analysts:
-        from app.seed import seed_analysts
 
-        created = seed_analysts(settings.seed_analysts)
-        if created:
-            logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
-
-    # Первая версия шаблона требований — из файла, если в БД ещё нет
+    # Первичное наполнение: карточки аналитиков и первая версия шаблона
+    # требований — одна сессия на оба сида
     from app.database import SessionLocal
-    from app.services.template_store import seed_if_missing
+    from app.usecase.seed import seed_analysts
+    from app.usecase.templates import seed_if_missing
 
     with SessionLocal() as db:
+        if settings.seed_analysts:
+            created = seed_analysts(db, settings.seed_analysts)
+            if created:
+                logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
+
         if seed_if_missing(db) is not None:
             logger.info("Первая версия шаблона требований создана из файла")
 

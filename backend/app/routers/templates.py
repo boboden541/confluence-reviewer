@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
@@ -22,7 +21,8 @@ from app.schemas import (
     TemplateUpdate,
     TemplateVersionInfo,
 )
-from app.services.template_store import (
+from app.usecase.exceptions import TemplateNotFound
+from app.usecase.templates import (
     archive_template,
     create_template,
     find_duplicate_sections,
@@ -30,7 +30,9 @@ from app.services.template_store import (
     get_active,
     get_active_version,
     get_default_template,
+    get_template,
     list_templates,
+    list_versions,
     normalize_sections,
     restore_template,
     save_version,
@@ -68,10 +70,12 @@ def _validated_sections(payload_sections: list[TemplateSection]) -> list[dict]:
 
 
 def _get_template_or_404(template_id: int, db: Session) -> Template:
-    template = db.get(Template, template_id)
-    if template is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден")
-    return template
+    try:
+        return get_template(db, template_id)
+    except TemplateNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Шаблон не найден"
+        ) from exc
 
 
 def _to_card(db: Session, template: Template) -> TemplateCardOut:
@@ -166,11 +170,6 @@ def save_template_version(template_id: int, payload: TemplateSave, db: Session =
 def list_template_versions(template_id: int, db: Session = Depends(get_db)):
     """История версий шаблона, свежие сверху."""
     _get_template_or_404(template_id, db)
-    rows = db.scalars(
-        select(TemplateVersion)
-        .where(TemplateVersion.template_id == template_id)
-        .order_by(TemplateVersion.id.desc())
-    ).all()
     return [
         TemplateVersionInfo(
             id=v.id,
@@ -179,7 +178,7 @@ def list_template_versions(template_id: int, db: Session = Depends(get_db)):
             is_active=v.is_active,
             section_count=len(json.loads(v.sections_json)),
         )
-        for v in rows
+        for v in list_versions(db, template_id)
     ]
 
 
@@ -213,7 +212,7 @@ def restore(template_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=TemplateOut)
-def get_template(db: Session = Depends(get_db)):
+def get_legacy_template(db: Session = Depends(get_db)):
     """Активная версия шаблона «по умолчанию»; при первом обращении (или
     пустой БД) шаблон заливается из requirements_template.json."""
     seed_if_missing(db)
@@ -254,16 +253,11 @@ def update_template(payload: TemplateUpdate, db: Session = Depends(get_db)):
 
 
 @router.get("/versions", response_model=list[TemplateVersionInfo])
-def list_versions(db: Session = Depends(get_db)):
+def list_legacy_versions(db: Session = Depends(get_db)):
     """История версий шаблона «по умолчанию», свежие сверху (legacy)."""
     active = get_active(db)
     if active is None:
         return []
-    rows = db.scalars(
-        select(TemplateVersion)
-        .where(TemplateVersion.template_id == active.template_id)
-        .order_by(TemplateVersion.id.desc())
-    ).all()
     return [
         TemplateVersionInfo(
             id=v.id,
@@ -272,5 +266,5 @@ def list_versions(db: Session = Depends(get_db)):
             is_active=v.is_active,
             section_count=len(json.loads(v.sections_json)),
         )
-        for v in rows
+        for v in list_versions(db, active.template_id)
     ]

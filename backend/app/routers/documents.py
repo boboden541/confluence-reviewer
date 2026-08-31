@@ -35,14 +35,14 @@ from app.services.comments import (
     NoReportError,
     publish_report_comment,
 )
-from app.services.criteria import (
+from app.usecase.criteria import (
     PROMPT_HEAD,
     PROMPT_TAIL,
     seed_criteria_if_missing,
     select_criteria,
 )
 from app.clients.semantic_search import SemanticSearchError, SemanticSearcher
-from app.services.template_store import get_active_version, list_templates, seed_if_missing
+from app.usecase.templates import get_active_version, list_templates, seed_if_missing
 from app.services.validation import (
     AI_CHECK,
     DocumentNotFound,

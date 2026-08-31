@@ -9,7 +9,7 @@ import time
 
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, CriterionRating, ValidationStatus
-from app.services.ai_settings import AIConnection
+from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationResult
 from app.services.validation import run_validation
 from app.utils import now_utc

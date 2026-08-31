@@ -13,7 +13,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationStatus
 from app.config import get_settings
 from app.services import tasks
-from app.services.ai_settings import AIConnection
+from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationError, AIValidationResult
 from app.services.validation import DocumentNotFound, run_validation
 from app.utils import now_utc

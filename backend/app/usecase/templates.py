@@ -8,6 +8,9 @@
 уровнем 1..3, parent/order для скриптового валидатора вычисляются на лету
 (expand_sections). «Дыр» в иерархии нет: после Ур.1 раздел Ур.3
 нормализуется в Ур.2 — то же правило показывает предпросмотр в UI.
+
+Выборки — в repository.templates; мутации (создание версий, пометки,
+архив) остаются здесь.
 """
 
 from __future__ import annotations
@@ -16,10 +19,11 @@ import json
 import re
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import repository
 from app.models import Template, TemplateVersion
+from app.usecase.exceptions import TemplateNotFound
 from app.utils import now_utc
 
 MAX_LEVEL = 3
@@ -153,17 +157,13 @@ def load_seed_file() -> dict | None:
 
 def get_active_version(db: Session, template: Template) -> TemplateVersion | None:
     """Активная версия шаблона (внутри контейнера ровно одна)."""
-    return db.scalar(
-        select(TemplateVersion)
-        .where(TemplateVersion.template_id == template.id, TemplateVersion.is_active)
-        .order_by(TemplateVersion.id.desc())
-    )
+    return repository.templates.get_active_version(db, template)
 
 
 def list_templates(db: Session) -> list[Template]:
     """Все шаблоны: активные (по умолчанию — первым, дальше свежие обновления),
     затем архивные (свежая архивация сверху)."""
-    rows = db.scalars(select(Template).order_by(Template.id)).all()
+    rows = repository.templates.list_containers(db)
     active = [t for t in rows if t.archived_at is None]
     archived = [t for t in rows if t.archived_at is not None]
 
@@ -177,7 +177,7 @@ def list_templates(db: Session) -> list[Template]:
 
 
 def get_default_template(db: Session) -> Template | None:
-    return db.scalar(select(Template).where(Template.is_default, Template.archived_at.is_(None)))
+    return repository.templates.get_default(db)
 
 
 def get_active(db: Session) -> TemplateVersion | None:
@@ -189,12 +189,25 @@ def get_active(db: Session) -> TemplateVersion | None:
     return get_active_version(db, template) if template else None
 
 
+def get_template(db: Session, template_id: int) -> Template:
+    """Шаблон по id; отсутствие — доменная ошибка (api → 404)."""
+    template = repository.templates.get(db, template_id)
+    if template is None:
+        raise TemplateNotFound("Шаблон не найден")
+    return template
+
+
+def list_versions(db: Session, template_id: int) -> list[TemplateVersion]:
+    """История версий шаблона, свежие сверху."""
+    return repository.templates.list_versions_desc(db, template_id)
+
+
 def find_name_duplicate(
     db: Session, name: str, exclude_id: int | None = None
 ) -> Template | None:
     """Неархивный шаблон с таким названием (регистр не важен) — или None."""
     needle = name.strip().lower()
-    for template in db.scalars(select(Template).where(Template.archived_at.is_(None))).all():
+    for template in repository.templates.list_not_archived(db):
         if template.id == exclude_id:
             continue
         version = get_active_version(db, template)
@@ -205,7 +218,7 @@ def find_name_duplicate(
 
 def seed_if_missing(db: Session) -> TemplateVersion | None:
     """Залить первый шаблон из файла, если в БД ещё нет ни одного."""
-    if db.scalar(select(Template.id).limit(1)) is not None:
+    if repository.templates.any_exists(db):
         return None
     seed = load_seed_file()
     if seed is None:
@@ -252,7 +265,7 @@ def create_template(
     )
     db.add(version)
     # первый шаблон в пустой системе сразу становится «по умолчанию»
-    others = db.scalars(select(Template).where(Template.id != template.id)).all()
+    others = repository.templates.list_others(db, template.id)
     if not any(t.is_default and t.archived_at is None for t in others):
         template.is_default = True
     db.commit()
@@ -291,7 +304,7 @@ def save_version(
 
 def set_default(db: Session, template: Template) -> Template:
     """Пометка «по умолчанию»: предвыбор в диалоге проверки. Одна на всех."""
-    for other in db.scalars(select(Template).where(Template.id != template.id)).all():
+    for other in repository.templates.list_others(db, template.id):
         other.is_default = False
     template.is_default = True
     db.commit()
@@ -347,7 +360,7 @@ def get_template_for_validation(
     первого запуска и тестов).
     """
     if version_id is not None:
-        version = db.get(TemplateVersion, version_id)
+        version = repository.templates.get_version(db, version_id)
         return (version_to_dict(version), version.id) if version is not None else None
     active = get_active(db) or seed_if_missing(db)
     return (version_to_dict(active), active.id) if active is not None else None

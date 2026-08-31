@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import re
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import repository
 from app.models import AiCriterion
+from app.usecase.exceptions import CriterionNotFound, CriterionSelectionError
 
 # Каркас собранного промта: блоки критериев вставляются между головой и хвостом.
-# Хвост — правила и JSON-контракт ответа (парсится в services.ai_validator).
+# Хвост — правила и JSON-контракт ответа (парсится в clients.ai_validator).
 PROMPT_HEAD = """Ты — опытный ведущий системный аналитик, ревьюер технических требований.
 
 Тебе дают документ требований (в Markdown), созданный аналитиком в Confluence.
@@ -49,7 +50,7 @@ PROMPT_TAIL = """
 Если замечаний нет — "passed": true и пустой список findings."""
 
 # Стартовое наполнение пустого справочника — три критерия действовавшего
-# ранее монолитного промта (services.ai_validator.SYSTEM_PROMPT), чтобы
+# ранее монолитного промта (clients.ai_validator.SYSTEM_PROMPT), чтобы
 # переход на справочник не менял поведение существующей установки.
 SEED_CRITERIA: list[tuple[str, str]] = [
     (
@@ -97,7 +98,7 @@ def _unique_code(db: Session, base: str) -> str:
     """Свободный код: base, base_2, base_3… — код неизменен после создания."""
     code = base
     suffix = 1
-    while db.scalar(select(AiCriterion.id).where(AiCriterion.code == code)) is not None:
+    while repository.criteria.code_exists(db, code):
         suffix += 1
         code = f"{base}_{suffix}"
     return code
@@ -105,7 +106,7 @@ def _unique_code(db: Session, base: str) -> str:
 
 def seed_criteria_if_missing(db: Session) -> None:
     """Пустой справочник наполняем стартовыми критериями (идемпотентно)."""
-    if db.scalar(select(AiCriterion.id).limit(1)) is not None:
+    if repository.criteria.any_exists(db):
         return
     for name, prompt in SEED_CRITERIA:
         db.add(AiCriterion(code=_unique_code(db, slugify_code(name)), name=name, prompt=prompt))
@@ -114,11 +115,15 @@ def seed_criteria_if_missing(db: Session) -> None:
 
 def list_criteria(db: Session) -> list[AiCriterion]:
     """Все критерии: активные, затем архивные (справочник в настройках)."""
-    return list(
-        db.scalars(
-            select(AiCriterion).order_by(AiCriterion.is_archived, AiCriterion.id)
-        ).all()
-    )
+    return repository.criteria.list_all(db)
+
+
+def get_criterion(db: Session, criterion_id: int) -> AiCriterion:
+    """Критерий по id; отсутствие — доменная ошибка."""
+    criterion = repository.criteria.get(db, criterion_id)
+    if criterion is None:
+        raise CriterionNotFound("Критерий не найден")
+    return criterion
 
 
 def select_criteria(
@@ -130,21 +135,17 @@ def select_criteria(
     вычеркивать нельзя, промт прогона незаметно изменился бы.
     """
     if criterion_ids is None:
-        return list(
-            db.scalars(
-                select(AiCriterion)
-                .where(AiCriterion.is_archived.is_(False))
-                .order_by(AiCriterion.id)
-            ).all()
-        )
+        return repository.criteria.list_active(db)
     ordered = dict.fromkeys(criterion_ids)  # дубликаты схлопываем, порядок сохраняем
     criteria: list[AiCriterion] = []
     for criterion_id in ordered:
-        criterion = db.get(AiCriterion, criterion_id)
+        criterion = repository.criteria.get(db, criterion_id)
         if criterion is None:
-            raise LookupError(f"Критерий ИИ-проверки {criterion_id} не найден")
+            raise CriterionSelectionError(f"Критерий ИИ-проверки {criterion_id} не найден")
         if criterion.is_archived:
-            raise LookupError(f"Критерий «{criterion.name}» в архиве — выберите активный")
+            raise CriterionSelectionError(
+                f"Критерий «{criterion.name}» в архиве — выберите активный"
+            )
         criteria.append(criterion)
     return criteria
 

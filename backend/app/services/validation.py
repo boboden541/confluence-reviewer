@@ -28,10 +28,10 @@ from app.models import (
     ValidationStatus,
 )
 from app.clients.ai_validator import AIValidationError, AIValidator
-from app.services.ai_settings import get_ai_connection
-from app.services.criteria import assemble_prompt, select_criteria, seed_criteria_if_missing
+from app.usecase.ai_settings import get_ai_connection
+from app.usecase.criteria import assemble_prompt, select_criteria, seed_criteria_if_missing
 from app.services.html_to_markdown import html_to_markdown
-from app.services.template_store import get_template_for_validation
+from app.usecase.templates import get_template_for_validation
 from app.services.template_validator import validate_template
 from app.utils import now_utc
 

@@ -1,6 +1,6 @@
-"""Справочник ИИ-критериев (раздел настроек): список, создание, редактирование,
-архив и восстановление. Критерии — источник сборки промта прогона и объект
-оценок руководителя, поэтому физического удаления нет."""
+"""API справочника ИИ-критериев (раздел настроек): список, создание,
+редактирование, архив и восстановление. Критерии — источник сборки промта
+прогона и объект оценок руководителя, поэтому физического удаления нет."""
 
 from __future__ import annotations
 
@@ -10,23 +10,25 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.models import AiCriterion
 from app.schemas import AiCriterionCreate, AiCriterionOut, AiCriterionUpdate
-from app.services.criteria import (
+from app.usecase.criteria import (
     _unique_code,
+    get_criterion,
     list_criteria as list_all_criteria,
     seed_criteria_if_missing,
     slugify_code,
 )
+from app.usecase.exceptions import CriterionNotFound
 
 router = APIRouter(prefix="/api/ai-criteria", tags=["ai-criteria"])
 
 
 def _get_criterion_or_404(criterion_id: int, db: Session) -> AiCriterion:
-    criterion = db.get(AiCriterion, criterion_id)
-    if criterion is None:
+    try:
+        return get_criterion(db, criterion_id)
+    except CriterionNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Критерий не найден"
-        )
-    return criterion
+        ) from exc
 
 
 @router.get("", response_model=list[AiCriterionOut])
