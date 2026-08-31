@@ -1,7 +1,8 @@
-"""Хранение шаблона требований в БД с историей версий.
+"""Хранение шаблонов требований в БД с историей версий.
 
-Первая версия сеется из app/templates/requirements_template.json. Каждое
-сохранение из UI создаёт новую версию; активна ровно одна (is_active).
+Шаблон — контейнер (таблица templates: пометка «по умолчанию», архив);
+каждое сохранение из UI создаёт новую версию, активна ровно одна внутри
+шаблона. Первый шаблон сеется из app/templates/requirements_template.json.
 
 Секции хранятся плоским списком в визуальном порядке: вложенность задаётся
 уровнем 1..3, parent/order для скриптового валидатора вычисляются на лету
@@ -18,7 +19,8 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import TemplateVersion
+from app.models import Template, TemplateVersion
+from app.utils import now_utc
 
 MAX_LEVEL = 3
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -149,22 +151,70 @@ def load_seed_file() -> dict | None:
     }
 
 
-def get_active(db: Session) -> TemplateVersion | None:
+def get_active_version(db: Session, template: Template) -> TemplateVersion | None:
+    """Активная версия шаблона (внутри контейнера ровно одна)."""
     return db.scalar(
         select(TemplateVersion)
-        .where(TemplateVersion.is_active)
+        .where(TemplateVersion.template_id == template.id, TemplateVersion.is_active)
         .order_by(TemplateVersion.id.desc())
     )
 
 
+def list_templates(db: Session) -> list[Template]:
+    """Все шаблоны: активные (по умолчанию — первым, дальше свежие обновления),
+    затем архивные (свежая архивация сверху)."""
+    rows = db.scalars(select(Template).order_by(Template.id)).all()
+    active = [t for t in rows if t.archived_at is None]
+    archived = [t for t in rows if t.archived_at is not None]
+
+    def freshness(t: Template) -> int:
+        version = get_active_version(db, t)
+        return version.id if version else 0
+
+    active.sort(key=lambda t: (not t.is_default, -freshness(t)))
+    archived.sort(key=lambda t: t.archived_at or now_utc(), reverse=True)
+    return active + archived
+
+
+def get_default_template(db: Session) -> Template | None:
+    return db.scalar(select(Template).where(Template.is_default, Template.archived_at.is_(None)))
+
+
+def get_active(db: Session) -> TemplateVersion | None:
+    """Legacy (/api/template): активная версия шаблона «по умолчанию»;
+    если пометки нет — самого свежего неархивного шаблона."""
+    template = get_default_template(db)
+    if template is None:
+        template = next((t for t in list_templates(db) if t.archived_at is None), None)
+    return get_active_version(db, template) if template else None
+
+
+def find_name_duplicate(
+    db: Session, name: str, exclude_id: int | None = None
+) -> Template | None:
+    """Неархивный шаблон с таким названием (регистр не важен) — или None."""
+    needle = name.strip().lower()
+    for template in db.scalars(select(Template).where(Template.archived_at.is_(None))).all():
+        if template.id == exclude_id:
+            continue
+        version = get_active_version(db, template)
+        if version is not None and version.name.strip().lower() == needle:
+            return template
+    return None
+
+
 def seed_if_missing(db: Session) -> TemplateVersion | None:
-    """Залить первую версию из файла, если в БД ещё нет шаблона."""
-    if get_active(db) is not None:
+    """Залить первый шаблон из файла, если в БД ещё нет ни одного."""
+    if db.scalar(select(Template.id).limit(1)) is not None:
         return None
     seed = load_seed_file()
     if seed is None:
         return None
+    template = Template(is_default=True)
+    db.add(template)
+    db.flush()  # id контейнера нужен версии
     version = TemplateVersion(
+        template_id=template.id,
         name=seed["name"],
         description=seed["description"],
         title_marker=seed["title_marker"],
@@ -178,15 +228,54 @@ def seed_if_missing(db: Session) -> TemplateVersion | None:
     return version
 
 
-def save_version(
-    db: Session, *, title_marker: str, sections: list[dict]
-) -> TemplateVersion:
-    """Новая активная версия. name/description и повторяемые блоки
-    редактируются только в файле и переносятся из предыдущей версии."""
-    previous = get_active(db)
+def create_template(
+    db: Session,
+    *,
+    name: str,
+    description: str | None,
+    title_marker: str,
+    sections: list[dict],
+) -> Template:
+    """Новый шаблон с первой версией. Создаётся «с нуля»: повторяемых блоков
+    доработок нет (они остаются особенностью сидированного шаблона)."""
+    template = Template()
+    db.add(template)
+    db.flush()
     version = TemplateVersion(
-        name=previous.name if previous else "Шаблон требований",
-        description=previous.description if previous else None,
+        template_id=template.id,
+        name=name.strip(),
+        description=(description or "").strip() or None,
+        title_marker=title_marker.strip(),
+        sections_json=json.dumps(sections, ensure_ascii=False),
+        repeatable_blocks_json="[]",
+        is_active=True,
+    )
+    db.add(version)
+    # первый шаблон в пустой системе сразу становится «по умолчанию»
+    others = db.scalars(select(Template).where(Template.id != template.id)).all()
+    if not any(t.is_default and t.archived_at is None for t in others):
+        template.is_default = True
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+def save_version(
+    db: Session,
+    template: Template,
+    *,
+    name: str,
+    description: str | None,
+    title_marker: str,
+    sections: list[dict],
+) -> TemplateVersion:
+    """Новая активная версия шаблона. Повторяемые блоки не редактируются из
+    UI и переносятся из предыдущей версии."""
+    previous = get_active_version(db, template)
+    version = TemplateVersion(
+        template_id=template.id,
+        name=name.strip(),
+        description=(description or "").strip() or None,
         title_marker=title_marker.strip(),
         sections_json=json.dumps(sections, ensure_ascii=False),
         repeatable_blocks_json=previous.repeatable_blocks_json if previous else "[]",
@@ -198,6 +287,44 @@ def save_version(
     db.commit()
     db.refresh(version)
     return version
+
+
+def set_default(db: Session, template: Template) -> Template:
+    """Пометка «по умолчанию»: предвыбор в диалоге проверки. Одна на всех."""
+    for other in db.scalars(select(Template).where(Template.id != template.id)).all():
+        other.is_default = False
+    template.is_default = True
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+def archive_template(db: Session, template: Template) -> Template:
+    """Шаблон в архив: исчезает из диалога проверки, карточка и история живы.
+    Если он был «по умолчанию» — пометка переходит самому свежему из оставшихся."""
+    template.archived_at = now_utc()
+    if template.is_default:
+        template.is_default = False
+        remaining = [t for t in list_templates(db) if t.archived_at is None]
+        if remaining:
+            set_default(db, remaining[0])
+        else:
+            db.commit()
+    else:
+        db.commit()
+    db.refresh(template)
+    return template
+
+
+def restore_template(db: Session, template: Template) -> Template:
+    """Вернуть из архива. Если пометки «по умолчанию» нет ни у кого —
+    возвращённый становится «по умолчанию»."""
+    template.archived_at = None
+    if get_default_template(db) is None:
+        template.is_default = True
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 def version_to_dict(version: TemplateVersion) -> dict:
@@ -215,8 +342,9 @@ def get_template_for_validation(
     """Шаблон для проверки документа: (словарь для валидатора, id версии).
 
     version_id — конкретная версия, выбранная пользователем в диалоге
-    проверки (пока выбор один — активная). None — активная версия;
-    если БД пуста, сеем из файла (страховка для первого запуска и тестов).
+    проверки (активная версия выбранного шаблона). None — активная версия
+    шаблона «по умолчанию»; если БД пуста, сеем из файла (страховка для
+    первого запуска и тестов).
     """
     if version_id is not None:
         version = db.get(TemplateVersion, version_id)

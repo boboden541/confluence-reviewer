@@ -41,7 +41,7 @@ from app.services.criteria import (
     select_criteria,
 )
 from app.services.semantic_search import SemanticSearchError, SemanticSearcher
-from app.services.template_store import get_active, seed_if_missing
+from app.services.template_store import get_active_version, list_templates, seed_if_missing
 from app.services.validation import (
     AI_CHECK,
     DocumentNotFound,
@@ -240,22 +240,26 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 def get_validation_config(db: Session = Depends(get_db)):
     """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
 
-    Пока шаблон один (активная версия); структура списка рассчитана
-    на несколько — интерфейс выбора не изменится. Критерии отдаются только
-    активные: галочки диалога и блоки собранного промта.
+    Шаблоны — неархивные с активными версиями («по умолчанию» первым); id
+    элемента = номер активной версии, он уходит в проверку как template_id.
+    Критерии отдаются только активные: галочки диалога и блоки собранного промта.
     """
     seed_if_missing(db)
     seed_criteria_if_missing(db)
-    active = get_active(db)
     templates = []
-    if active is not None:
+    for template in list_templates(db):
+        if template.archived_at is not None:
+            continue
+        version = get_active_version(db, template)
+        if version is None:
+            continue
         templates.append(
             {
-                "id": active.id,
-                "name": active.name,
-                "description": active.description,
-                "is_default": True,
-                "section_count": len(json.loads(active.sections_json)),
+                "id": version.id,
+                "name": version.name,
+                "description": version.description,
+                "is_default": template.is_default,
+                "section_count": len(json.loads(version.sections_json)),
             }
         )
     criteria = [

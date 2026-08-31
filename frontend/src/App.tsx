@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   AUTH_STORAGE_KEY,
   clearCredentials,
@@ -21,6 +21,7 @@ import CriteriaPage from "./pages/CriteriaPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ReportPage from "./pages/ReportPage";
 import TemplatePage from "./pages/TemplatePage";
+import TemplatesPage from "./pages/TemplatesPage";
 import GlobalSearch from "./GlobalSearch";
 import { on, startEvents, stopEvents } from "./events";
 
@@ -349,11 +350,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
       <div className="nav-label">Настройка</div>
       <Link
-        to="/template"
+        to="/templates"
         className={`nav-item${onTemplate ? " active" : ""}`}
         onClick={onClose}
       >
-        <span className="ic">🧩</span> Шаблон требований
+        <span className="ic">🧩</span> Шаблоны требований
       </Link>
       <Link
         to="/criteria"
@@ -484,7 +485,11 @@ export default function App() {
             <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
             <Route path="/analysts/:analystId/stats" element={<AnalystStatsPage />} />
             <Route path="/documents/:documentId" element={<ReportPage />} />
-            <Route path="/template" element={<TemplatePage />} />
+            <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/templates/new" element={<TemplatePage />} />
+            <Route path="/templates/:templateId" element={<TemplatePage />} />
+            {/* старый путь одного шаблона — ведём на список */}
+            <Route path="/template" element={<Navigate to="/templates" replace />} />
             <Route path="/criteria" element={<CriteriaPage />} />
             <Route path="/ai-connection" element={<AiSettingsPage />} />
           </Routes>

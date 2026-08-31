@@ -100,6 +100,7 @@ def create_app(settings=None) -> FastAPI:
     from app.routers.events import router as events_router
     from app.routers.health import router as health_router
     from app.routers.sync import router as sync_router
+    from app.routers.templates import multi_router as templates_multi_router
     from app.routers.templates import router as templates_router
 
     app.include_router(health_router)
@@ -109,6 +110,7 @@ def create_app(settings=None) -> FastAPI:
     app.include_router(events_router)
     app.include_router(sync_router)
     app.include_router(templates_router)
+    app.include_router(templates_multi_router)
     app.include_router(ai_settings_router)
 
     return app

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   api,
   ApiError,
+  type TemplateCard,
   type TemplateInfo,
   type TemplateSection,
   type TemplateVersionInfo,
@@ -31,14 +33,24 @@ function zoneFor(target: HTMLElement, clientY: number): DropZone {
   return ratio < 0.3 ? "before" : ratio > 0.7 ? "after" : "nest";
 }
 
+/**
+ * Редактор шаблона: /templates/new — создание с нуля, /templates/:id —
+ * очередная версия существующего. Название видно в диалоге проверки,
+ * поэтому редактируется здесь; каждое сохранение — новая версия.
+ */
 export default function TemplatePage() {
+  const { templateId } = useParams();
+  const navigate = useNavigate();
+  const isNew = templateId === undefined;
   const [template, setTemplate] = useState<TemplateInfo | null>(null);
   const [versions, setVersions] = useState<TemplateVersionInfo[]>([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [marker, setMarker] = useState("");
   const [sections, setSections] = useState<TemplateSection[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   // перетаскиваемое поддерево (диапазон строк) и текущая подсказка зоны
@@ -47,14 +59,17 @@ export default function TemplatePage() {
   const badgeRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
+    if (isNew || !templateId) return;
     setLoading(true);
     setError("");
     try {
       const [tpl, vers] = await Promise.all([
-        api<TemplateInfo>("/api/template"),
-        api<TemplateVersionInfo[]>("/api/template/versions"),
+        api<TemplateInfo>(`/api/templates/${templateId}`),
+        api<TemplateVersionInfo[]>(`/api/templates/${templateId}/versions`),
       ]);
       setTemplate(tpl);
+      setName(tpl.name);
+      setDescription(tpl.description ?? "");
       setMarker(tpl.title_marker);
       setSections(tpl.sections);
       setVersions(vers);
@@ -64,7 +79,7 @@ export default function TemplatePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isNew, templateId]);
 
   useEffect(() => {
     load();
@@ -114,20 +129,50 @@ export default function TemplatePage() {
     setError("");
     setInfo("");
     try {
-      const saved = await api<TemplateInfo>("/api/template", {
+      const body = JSON.stringify({
+        name: name.trim(),
+        description: description.trim() || null,
+        title_marker: marker,
+        sections,
+      });
+      if (isNew) {
+        // создание: после первой версии открываем редактор уже с id шаблона
+        const card = await api<TemplateCard>("/api/templates", { method: "POST", body });
+        navigate(`/templates/${card.id}`, { replace: true });
+        return;
+      }
+      const saved = await api<TemplateInfo>(`/api/templates/${templateId}`, {
         method: "PUT",
-        body: JSON.stringify({ title_marker: marker, sections }),
+        body,
       });
       setTemplate(saved);
+      setName(saved.name);
+      setDescription(saved.description ?? "");
       setMarker(saved.title_marker);
       setSections(saved.sections); // уровни мог нормализовать бэкенд
       setDirty(false);
       setInfo(`Шаблон сохранён — версия №${saved.id}. Применится к следующим проверкам.`);
-      setVersions(await api<TemplateVersionInfo[]>("/api/template/versions"));
+      setVersions(
+        await api<TemplateVersionInfo[]>(`/api/templates/${templateId}/versions`),
+      );
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить шаблон");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const archive = async () => {
+    if (isNew || !templateId) return;
+    if (!window.confirm(`Архивировать шаблон «${name}»? Он исчезнет из диалога проверки; карточка и история версий останутся.`)) {
+      return;
+    }
+    setError("");
+    try {
+      await api(`/api/templates/${templateId}/archive`, { method: "POST" });
+      navigate("/templates");
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось архивировать шаблон");
     }
   };
 
@@ -225,7 +270,7 @@ export default function TemplatePage() {
 
   const outline = outlineNumbers(sections);
 
-  if (loading) {
+  if (loading && !isNew) {
     return (
       <section className="page">
         <p className="muted">Загрузка шаблона…</p>
@@ -238,28 +283,73 @@ export default function TemplatePage() {
       <nav className="breadcrumbs">
         <span>Ревью требований</span>
         <span className="sep">/</span>
-        <span>Шаблон требований</span>
+        <Link to="/templates">Шаблоны требований</Link>
+        <span className="sep">/</span>
+        <span>{isNew ? "Новый шаблон" : name || "Шаблон"}</span>
       </nav>
       <div className="page-head">
         <div>
           <h1 className="page-title">
-            <span className="title-icon">🧩</span>Шаблон требований
+            <span className="title-icon">🧩</span>
+            {isNew ? "Новый шаблон требований" : name || "Шаблон требований"}
           </h1>
           <div className="page-meta">
             {template
-              ? `${template.name} · версия №${template.id} от ${formatDate(template.created_at)}`
-              : ""}
+              ? `версия №${template.id} от ${formatDate(template.created_at)}`
+              : "появится в диалоге проверки после первого сохранения"}
           </div>
         </div>
         <div className="head-actions">
-          <button className="btn primary" onClick={save} disabled={saving || !template}>
-            {saving ? "Сохранение…" : "Сохранить шаблон"}
+          {!isNew && (
+            <button className="btn subtle" onClick={archive} disabled={saving}>
+              В архив
+            </button>
+          )}
+          <button className="btn primary" onClick={save} disabled={saving || (isNew && !name.trim())}>
+            {saving ? "Сохранение…" : isNew ? "Создать шаблон" : "Сохранить шаблон"}
           </button>
         </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
+
+      <div className="panel">
+        <h2>Шаблон</h2>
+        <div className="form-row">
+          <div className="field tpl-field">
+            <label htmlFor="tpl-name">Название (видно в диалоге проверки)</label>
+            <input
+              id="tpl-name"
+              className="text-input"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setDirty(true);
+              }}
+              placeholder="например, Шаблон требований к доработке"
+              maxLength={255}
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="field tpl-field">
+            <label htmlFor="tpl-description">Описание (необязательно)</label>
+            <textarea
+              id="tpl-description"
+              className="text-input tpl-desc-input"
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setDirty(true);
+              }}
+              placeholder="для каких документов этот шаблон"
+              rows={2}
+              maxLength={2000}
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="panel">
         <h2>Название документа</h2>
@@ -418,19 +508,25 @@ export default function TemplatePage() {
       </div>
 
       <div className="head-actions" style={{ marginTop: "16px" }}>
-        <button className="btn primary" onClick={save} disabled={saving || !template}>
-          {saving ? "Сохранение…" : "Сохранить шаблон"}
+        <button className="btn primary" onClick={save} disabled={saving || (isNew && !name.trim())}>
+          {saving ? "Сохранение…" : isNew ? "Создать шаблон" : "Сохранить шаблон"}
         </button>
-        <button
-          className="btn subtle"
-          onClick={() => {
-            setInfo("");
-            load();
-          }}
-          disabled={saving || !dirty}
-        >
-          Сбросить изменения
-        </button>
+        {isNew ? (
+          <button className="btn subtle" onClick={() => navigate("/templates")} disabled={saving}>
+            Отмена
+          </button>
+        ) : (
+          <button
+            className="btn subtle"
+            onClick={() => {
+              setInfo("");
+              load();
+            }}
+            disabled={saving || !dirty}
+          >
+            Сбросить изменения
+          </button>
+        )}
         <span className="muted">
           Уже созданные отчёты не пересчитываются — шаблон применяется к следующим проверкам
         </span>

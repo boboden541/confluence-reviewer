@@ -193,40 +193,32 @@ export default function ValidationDialog({
                   Шаблон требований не настроен — проверка невозможна
                 </div>
               )}
-              {config.templates.map((tpl) => (
-                <label
-                  key={tpl.id}
-                  className={templateId === tpl.id ? "tpl selected" : "tpl"}
-                >
-                  <input
-                    type="radio"
-                    name="validation-template"
-                    checked={templateId === tpl.id}
-                    onChange={() => setTemplateId(tpl.id)}
-                  />
-                  <span>
+              <div className="dlg-tpl-cards" role="radiogroup" aria-label="Шаблон для проверки">
+                {config.templates.map((tpl) => (
+                  <button
+                    type="button"
+                    key={tpl.id}
+                    role="radio"
+                    aria-checked={templateId === tpl.id}
+                    className={`dlg-tpl${templateId === tpl.id ? " selected" : ""}`}
+                    onClick={() => setTemplateId(tpl.id)}
+                    title={tpl.description ?? undefined}
+                  >
                     <span className="name">
                       {tpl.name}{" "}
                       {tpl.is_default && <span className="lozenge new">по умолчанию</span>}
                     </span>
-                    <div className="desc">
+                    <span className="meta">
                       {tpl.section_count} разделов
                       {tpl.description ? ` · ${tpl.description}` : ""}
-                    </div>
-                  </span>
-                </label>
-              ))}
-              <label className="tpl disabled" title="Появится, когда в системе будет несколько шаблонов">
-                <input type="radio" disabled />
-                <span>
-                  <span className="name">
-                    Другие шаблоны <span className="lozenge moved">скоро</span>
-                  </span>
-                  <div className="desc">
-                    Список расширится без изменения интерфейса, когда шаблонов станет несколько
-                  </div>
-                </span>
-              </label>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="scroll-hint">
+                → лента листается горизонтально, когда шаблонов много; архивные шаблоны в выборе не
+                участвуют
+              </div>
             </div>
 
             <div className={checkAi ? "" : "zone-off"}>
