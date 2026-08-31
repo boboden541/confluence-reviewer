@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -49,6 +50,7 @@ from app.services.validation import (
     latest_report,
     normalize_checks,
 )
+from app.utils import normalize_period_end, to_naive_utc
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
@@ -81,12 +83,36 @@ def list_documents(
     db: Session = Depends(get_db),
     query: str | None = Query(default=None, max_length=512, description="Поиск по названию"),
     url: str | None = Query(default=None, max_length=1024, description="Поиск по ссылке"),
+    created_from: datetime | None = Query(
+        default=None, description="Создан в Confluence с даты (включительно)"
+    ),
+    created_to: datetime | None = Query(
+        default=None, description="Создан в Confluence по дату (включительно)"
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ):
-    """ФТ-CR-7: список документов от новых к старым, с пагинацией и поиском."""
+    """ФТ-CR-7: список документов от новых к старым, с пагинацией и поиском.
+
+    Период created_from/created_to фильтрует по дате создания в Confluence,
+    границы включительны (date-only «по» охватывает весь последний день).
+    Документы без даты создания в период не попадают.
+    """
     if db.get(Analyst, analyst_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден")
+    # aware-границы («Z», «+03:00») приводим к наивному UTC до guard и SQL:
+    # иначе сравнение naive>aware даёт 500, а SQL теряет offset
+    created_from = to_naive_utc(created_from)
+    created_to = to_naive_utc(created_to)
+    if (
+        created_from is not None
+        and created_to is not None
+        and created_from > normalize_period_end(created_to)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Дата начала периода позже даты окончания",
+        )
 
     conditions = [ConfluenceDocument.analyst_id == analyst_id]
     if query and query.strip():
@@ -97,6 +123,12 @@ def list_documents(
     if url and url.strip():
         conditions.append(
             func.lower(ConfluenceDocument.url).like(f"%{_normalize_url(url).lower()}%")
+        )
+    if created_from is not None:
+        conditions.append(ConfluenceDocument.created_in_confluence_at >= created_from)
+    if created_to is not None:
+        conditions.append(
+            ConfluenceDocument.created_in_confluence_at <= normalize_period_end(created_to)
         )
 
     total = db.scalar(select(func.count()).select_from(ConfluenceDocument).where(*conditions)) or 0

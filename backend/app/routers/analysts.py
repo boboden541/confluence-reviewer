@@ -25,6 +25,7 @@ from app.schemas import (
     CriterionSummaryOut,
     RatingsSummaryOut,
 )
+from app.utils import normalize_period_end, to_naive_utc
 
 router = APIRouter(prefix="/api/analysts", tags=["analysts"])
 
@@ -177,11 +178,24 @@ def get_ratings_summary(
 ):
     """Средние оценки руководителя по ИИ-критериям аналитика за период.
 
-    Период отсчитывается по дате оценки (updated_at); по умолчанию — все
-    когда-либо выставленные. Снятые оценки («—») записями не являются и в
-    статистику не попадают. Сортировка критериев: от сильных к слабым.
+    Период отсчитывается по дате создания документа в Confluence
+    (created_in_confluence_at): руководитель смотрит, как аналитик работал
+    в выбранный период, не таща ретроспективу; дата выставления самой
+    оценки не важна. По умолчанию — все документы. Границы включительны
+    (date-only «по» охватывает весь последний день); документы без даты
+    создания в период не попадают. Снятые оценки («—») записями не являются
+    и в статистику не попадают. Сортировка критериев: от сильных к слабым.
     """
     analyst = get_analyst_or_404(analyst_id, db)
+    # aware-границы («Z», «+03:00») приводим к наивному UTC до guard и SQL:
+    # иначе сравнение naive>aware даёт 500, а SQL теряет offset
+    date_from = to_naive_utc(date_from)
+    date_to = to_naive_utc(date_to)
+    if date_from is not None and date_to is not None and date_from > normalize_period_end(date_to):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Дата начала периода позже даты окончания",
+        )
 
     query = (
         select(
@@ -198,9 +212,11 @@ def get_ratings_summary(
         .group_by(AiCriterion.id, AiCriterion.code, AiCriterion.name, AiCriterion.is_archived)
     )
     if date_from is not None:
-        query = query.where(CriterionRating.updated_at >= date_from)
+        query = query.where(ConfluenceDocument.created_in_confluence_at >= date_from)
     if date_to is not None:
-        query = query.where(CriterionRating.updated_at <= date_to)
+        query = query.where(
+            ConfluenceDocument.created_in_confluence_at <= normalize_period_end(date_to)
+        )
     rows = db.execute(query).all()
 
     criteria = [
@@ -223,7 +239,8 @@ def get_ratings_summary(
     return RatingsSummaryOut(
         analyst_id=analyst.id,
         date_from=date_from,
-        date_to=date_to,
+        # эхо — эффективная граница: ответ честно описывает применённый фильтр
+        date_to=normalize_period_end(date_to) if date_to is not None else None,
         overall_average=overall,
         total_ratings=total,
         criteria=criteria,

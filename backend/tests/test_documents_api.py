@@ -2,28 +2,42 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.utils import now_utc
 
 
-def seed_analyst_with_docs(count: int = 5, title_pattern: str = "Страница {n}") -> tuple[int, list[int]]:
-    """Аналитик + count документов с разными датами создания."""
+def seed_analyst_with_docs(
+    count: int = 5,
+    title_pattern: str = "Страница {n}",
+    created_dates: list[datetime | None] | None = None,
+) -> tuple[int, list[int]]:
+    """Аналитик + count документов с разными датами создания.
+
+    created_dates — фиксированные даты создания (по одной на документ, None —
+    без даты): для тестов периода нужны известные границы, а не «сейчас минус N».
+    """
+    assert created_dates is None or len(created_dates) == count
     with SessionLocal() as db:
         analyst = Analyst(full_name="Тест", email="t@mts.ru")
         db.add(analyst)
         db.flush()
         ids = []
         for n in range(1, count + 1):
+            created = (
+                created_dates[n - 1]
+                if created_dates is not None
+                else now_utc() - timedelta(days=count - n + 1)
+            )
             doc = ConfluenceDocument(
                 analyst_id=analyst.id,
                 confluence_page_id=str(1000 + n),
                 title=title_pattern.format(n=n),
                 url=f"https://conf.test/pages/viewpage.action?pageId={1000 + n}",
                 content_html="<h1>Введение</h1>",
-                created_in_confluence_at=now_utc() - timedelta(days=count - n + 1),
+                created_in_confluence_at=created,
                 last_modified_in_confluence_at=now_utc() - timedelta(days=1),
                 validation_status=ValidationStatus.NOT_CHECKED,
             )
@@ -82,6 +96,129 @@ def test_combined_search_empty(client):
         params={"query": "нет такого", "url": "conf.test"},
     ).json()
     assert body["total"] == 0 and body["items"] == []
+
+
+def test_list_period_inclusive_bounds(client):
+    # date-only «по» охватывает весь последний день: границы на самих значениях
+    analyst_id, _ = seed_analyst_with_docs(
+        4,
+        created_dates=[
+            datetime(2026, 8, 1, 0, 0, 0),
+            datetime(2026, 8, 15, 10, 0, 0),
+            datetime(2026, 8, 31, 23, 59, 59, 999999),
+            datetime(2026, 9, 1, 0, 0, 0),
+        ],
+    )
+    body = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"created_from": "2026-08-01", "created_to": "2026-08-31"},
+    ).json()
+    assert body["total"] == 3
+    assert [item["title"] for item in body["items"]] == ["Страница 3", "Страница 2", "Страница 1"]
+
+
+def test_list_period_exact_datetime_upper(client):
+    # точное время в created_to — точная граница: микросекундой позже уже вне
+    analyst_id, _ = seed_analyst_with_docs(
+        2,
+        created_dates=[datetime(2026, 8, 15, 10, 0, 0), datetime(2026, 8, 15, 10, 0, 0, 1)],
+    )
+    body = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"created_to": "2026-08-15T10:00:00"},
+    ).json()
+    assert body["total"] == 1
+    assert body["items"][0]["confluence_page_id"] == "1001"
+
+
+def test_list_period_excludes_null_created_at(client):
+    # даты создания нет — период к документу неприменим; без периода входит
+    analyst_id, _ = seed_analyst_with_docs(
+        2, created_dates=[None, datetime(2026, 8, 10, 12, 0, 0)]
+    )
+    base = f"/api/analysts/{analyst_id}/documents"
+    in_period = client.get(
+        base, params={"created_from": "2026-08-01", "created_to": "2026-08-31"}
+    ).json()
+    assert in_period["total"] == 1
+    assert in_period["items"][0]["confluence_page_id"] == "1002"
+    assert client.get(base).json()["total"] == 2
+
+
+def test_list_period_no_matches(client):
+    analyst_id, _ = seed_analyst_with_docs(
+        1, created_dates=[datetime(2026, 8, 10, 12, 0, 0)]
+    )
+    body = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"created_from": "2020-01-01", "created_to": "2020-12-31"},
+    ).json()
+    assert body["total"] == 0 and body["items"] == []
+
+
+def test_list_period_naive_aware_mixture_ok(client):
+    # date-only (naive) + «Z» (aware): сравнение в Python не должно падать (500)
+    analyst_id, _ = seed_analyst_with_docs(
+        2,
+        created_dates=[datetime(2026, 8, 31, 17, 0, 0), datetime(2026, 8, 31, 20, 0, 0)],
+    )
+    resp = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"created_from": "2026-08-01", "created_to": "2026-08-31T21:00:00Z"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 2
+
+
+def test_list_period_aware_boundary_uses_instant(client):
+    # aware «+03:00» — инстант UTC: 21:00 МСК = 18:00 UTC, позже — вне периода
+    analyst_id, _ = seed_analyst_with_docs(
+        3,
+        created_dates=[
+            datetime(2026, 8, 31, 17, 0, 0),
+            datetime(2026, 8, 31, 18, 0, 0),
+            datetime(2026, 8, 31, 20, 0, 0),
+        ],
+    )
+    body = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"created_to": "2026-08-31T21:00:00+03:00"},
+    ).json()
+    assert body["total"] == 2
+
+
+def test_list_period_from_after_to_422(client):
+    analyst_id, _ = seed_analyst_with_docs(1)
+    assert (
+        client.get(
+            f"/api/analysts/{analyst_id}/documents",
+            params={"created_from": "2026-08-31", "created_to": "2026-08-01"},
+        ).status_code
+        == 422
+    )
+
+
+def test_list_period_invalid_date_422(client):
+    analyst_id, _ = seed_analyst_with_docs(1)
+    assert (
+        client.get(
+            f"/api/analysts/{analyst_id}/documents", params={"created_from": "not-a-date"}
+        ).status_code
+        == 422
+    )
+
+
+def test_list_period_with_title_filter(client):
+    # период комбинируется с поиском по названию (общий conditions-список)
+    analyst_id, _ = seed_analyst_with_docs(
+        2, created_dates=[datetime(2026, 8, 10), datetime(2026, 9, 10)]
+    )
+    body = client.get(
+        f"/api/analysts/{analyst_id}/documents",
+        params={"query": "Страница", "created_from": "2026-09-01"},
+    ).json()
+    assert body["total"] == 1
+    assert body["items"][0]["title"] == "Страница 2"
 
 
 def test_list_analyst_not_found(client):

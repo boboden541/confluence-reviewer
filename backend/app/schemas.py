@@ -560,7 +560,12 @@ class CriterionSummaryOut(BaseModel):
 
 
 class RatingsSummaryOut(BaseModel):
-    """Средние оценки руководителя по критериям аналитика за период."""
+    """Средние оценки руководителя по критериям аналитика за период.
+
+    Период — по дате создания документа в Confluence (created_in_confluence_at),
+    границы включительны. date_to возвращается эффективной границей: date-only
+    «по» расширяется до конца суток.
+    """
 
     analyst_id: int
     date_from: datetime | None = None

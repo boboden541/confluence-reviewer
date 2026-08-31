@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import DocumentsPage from "./DocumentsPage";
 import { AUTH_STORAGE_KEY } from "../api";
 import { emitServerEvent } from "../events";
@@ -38,7 +38,11 @@ const DOC_REPORT = {
 
 const DOC_NOTE = { document_id: 11, content: "", created_at: null, updated_at: null };
 
-function mockFetch(responses: Record<string, unknown>, posts: string[] = []) {
+function mockFetch(
+  responses: Record<string, unknown>,
+  posts: string[] = [],
+  errors: Record<string, { status: number; payload: unknown }> = {},
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     const bare = path.split("?")[0];
@@ -48,8 +52,18 @@ function mockFetch(responses: Record<string, unknown>, posts: string[] = []) {
         headers: { "Content-Type": "application/json" },
       });
     }
-    for (const [prefix, payload] of Object.entries(responses)) {
-      // точное совпадение (с query-строкой) либо без неё
+    if (bare in errors) {
+      const { status, payload } = errors[bare];
+      return new Response(JSON.stringify(payload), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    for (const [prefix, payload] of Object.entries(responses).sort(
+      (a, b) => b[0].length - a[0].length,
+    )) {
+      // от более длинного ключа к короткому: точное совпадение (с query-строкой)
+      // приоритетнее bare-пути — отфильтрованный запрос может ответить иначе
       if (path === prefix || bare === prefix) {
         return new Response(JSON.stringify(payload), {
           status: 200,
@@ -447,6 +461,201 @@ describe("DocumentsPage", () => {
     expect(await screen.findByText("Документы не найдены")).toBeInTheDocument();
   });
 
+  it("applies the creation period filter to the request", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("[СТ] GDS-15 Загрузка кино");
+    fireEvent.change(screen.getByLabelText("Создан с"), { target: { value: "2026-08-01" } });
+    // встречная граница ограничивает пикер: «по» не раньше введённого «с»
+    expect(screen.getByLabelText("по")).toHaveAttribute("min", "2026-08-01");
+    fireEvent.change(screen.getByLabelText("по"), { target: { value: "2026-08-31" } });
+    expect(screen.getByLabelText("Создан с")).toHaveAttribute("max", "2026-08-31");
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url]) =>
+          String(url).includes("created_from=2026-08-01") &&
+          String(url).includes("created_to=2026-08-31"),
+      );
+      expect(call).toBeDefined();
+    });
+
+    // период живёт и при вводе в «Название»: все фильтры в одном запросе
+    fireEvent.change(screen.getByPlaceholderText("Поиск по названию…"), {
+      target: { value: "GDS" },
+    });
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url]) =>
+          String(url).includes("query=GDS") &&
+          String(url).includes("created_from=2026-08-01") &&
+          String(url).includes("created_to=2026-08-31"),
+      );
+      expect(call).toBeDefined();
+    });
+  });
+
+  it("restores the period filter from the URL", async () => {
+    // как ?q=GDS: вернувшись «Назад», пользователь попадает в тот же период
+    const fetchMock = mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents?created_from=2026-07-01&created_to=2026-07-31"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findByLabelText("Создан с") as HTMLInputElement).value).toBe(
+      "2026-07-01",
+    );
+    expect((screen.getByLabelText("по") as HTMLInputElement).value).toBe("2026-07-31");
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) =>
+            String(url).includes("created_from=2026-07-01") &&
+            String(url).includes("created_to=2026-07-31"),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("says no documents for the period when the filtered set is empty", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": { items: [], total: 0, page: 1, page_size: 20 },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents?created_from=2026-01-01&created_to=2026-01-31"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // текст уведомляет именно о периоде, а не просто «не найдены»
+    expect(await screen.findByText("За выбранный период документов нет")).toBeInTheDocument();
+    expect(screen.queryByText("Документы не найдены")).not.toBeInTheDocument();
+  });
+
+  it("keeps the period in the URL when the dates change", async () => {
+    // адрес — источник правды: после «Назад» из документа период восстанавливается.
+    // MemoryRouter не пишет в window.location — историю смотрим через хук
+    function LocationProbe() {
+      const location = useLocation();
+      return <div data-testid="location-probe">{location.search}</div>;
+    }
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          {/* probe рядом со страницей: маршрут "*" не рендерится, пока
+              активен маршрут документов */}
+          <Route
+            path="/analysts/:analystId/documents"
+            element={
+              <>
+                <DocumentsPage />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("[СТ] GDS-15 Загрузка кино");
+    fireEvent.change(screen.getByLabelText("Создан с"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("по"), { target: { value: "2026-08-31" } });
+
+    await waitFor(() => {
+      const search = screen.getByTestId("location-probe").textContent ?? "";
+      expect(search).toContain("created_from=2026-08-01");
+      expect(search).toContain("created_to=2026-08-31");
+    });
+  });
+
+  it("clears the selection when the period changes", async () => {
+    // документы фикстуры созданы в июле: август их отсекает
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+      "/api/analysts/5/documents?page=1&page_size=20&created_from=2026-08-01": {
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByLabelText("Выбрать документ: [СТ] GDS-15 Загрузка кино"));
+    expect(screen.getByRole("button", { name: /Проверить выбранные \(1\)/ })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Создан с"), { target: { value: "2026-08-01" } });
+    expect(await screen.findByText("За выбранный период документов нет")).toBeInTheDocument();
+    // выделение не переживает смену фильтра: скрытого документа в наборе нет
+    expect(screen.getByRole("button", { name: /^Проверить выбранные$/ })).toBeDisabled();
+  });
+
+  it("shows a readable error when the URL carries an invalid date", async () => {
+    // FastAPI-валидация шлёт detail-массивом — сообщение собирается из msg
+    mockFetch(
+      { "/api/analysts/5": ANALYST },
+      [],
+      {
+        "/api/analysts/5/documents": {
+          status: 422,
+          payload: {
+            detail: [
+              {
+                type: "datetime_from_date",
+                loc: ["query", "created_from"],
+                msg: "Input should be a valid date",
+              },
+            ],
+          },
+        },
+      },
+    );
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents?created_from=2026-8-1"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const alert = await screen.findByText(/Input should be a valid date/);
+    expect(alert.closest(".alert")).toHaveClass("error");
+  });
+
   it("semantic search calls the AI endpoint after a pause and shows scores", async () => {
     vi.useFakeTimers();
     const fetchMock = mockFetch({
@@ -482,6 +691,10 @@ describe("DocumentsPage", () => {
     );
 
     fireEvent.click(screen.getByLabelText(/по смыслу/));
+    // период и ссылка несовместимы с ИИ-поиском: поля гаснут, а не обманывают
+    expect(screen.getByLabelText("Создан с")).toBeDisabled();
+    expect(screen.getByLabelText("по")).toBeDisabled();
+    expect(screen.getByLabelText("Ссылка")).toBeDisabled();
     const input = screen.getByPlaceholderText("Поиск по названию…");
     fireEvent.change(input, { target: { value: "фильмы в каталог" } });
     await vi.advanceTimersByTimeAsync(900);

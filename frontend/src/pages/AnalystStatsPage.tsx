@@ -26,10 +26,17 @@ export default function AnalystStatsPage() {
   const [summary, setSummary] = useState<RatingsSummary | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // применённый период (ушёл в запрос): подпись, пустое состояние и кнопка
+  // «За всё время» описывают загруженные данные, а не черновик в инпутах —
+  // иначе очистка полей без «Применить» меняла бы тексты при старых данных
+  const [appliedFrom, setAppliedFrom] = useState("");
+  const [appliedTo, setAppliedTo] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(
     async (from: string, to: string) => {
+      setAppliedFrom(from);
+      setAppliedTo(to);
       try {
         setAnalyst(await api<Analyst>(`/api/analysts/${id}`));
         const params = new URLSearchParams();
@@ -55,7 +62,8 @@ export default function AnalystStatsPage() {
     void load("", "");
   }, [load]);
 
-  // фильтр по периоду: даты оценки (когда руководитель выставил балл)
+  // фильтр по периоду: дата создания документа в Confluence — руководитель
+  // смотрит работу аналитика за период, не таща ретроспективу оценок
   const applyFilter = () => void load(dateFrom, dateTo);
   const resetFilter = () => {
     setDateFrom("");
@@ -83,8 +91,8 @@ export default function AnalystStatsPage() {
           <div className="page-meta">
             {analyst.full_name}
             {" · шкала 1–5 · "}
-            {dateFrom || dateTo
-              ? `период: ${dateFrom || "…"} — ${dateTo || "…"}`
+            {appliedFrom || appliedTo
+              ? `документы созданы: ${appliedFrom || "…"} — ${appliedTo || "…"}`
               : "за всё время"}
           </div>
         </div>
@@ -99,11 +107,12 @@ export default function AnalystStatsPage() {
 
       <div className="stats-filters">
         <label>
-          <span>Оценки с</span>
+          <span>Документы созданы с</span>
           <input
             type="date"
             className="text-input"
             value={dateFrom}
+            max={dateTo || undefined}
             onChange={(e) => setDateFrom(e.target.value)}
           />
         </label>
@@ -113,13 +122,14 @@ export default function AnalystStatsPage() {
             type="date"
             className="text-input"
             value={dateTo}
+            min={dateFrom || undefined}
             onChange={(e) => setDateTo(e.target.value)}
           />
         </label>
         <button className="btn small primary" onClick={applyFilter}>
           Применить
         </button>
-        {(dateFrom || dateTo) && (
+        {(appliedFrom || appliedTo) && (
           <button className="btn small ghost" onClick={resetFilter}>
             За всё время
           </button>
@@ -171,8 +181,9 @@ export default function AnalystStatsPage() {
       ) : (
         summary && (
           <div className="empty-hint">
-            Оценок пока нет. Оценивайте документы в блоке «Оценка руководителя» —
-            статистика соберётся здесь.
+            {appliedFrom || appliedTo
+              ? "За выбранный период оценок нет. Измените период или нажмите «За всё время»."
+              : "Оценок пока нет. Оценивайте документы в блоке «Оценка руководителя» — статистика соберётся здесь."}
           </div>
         )
       )}

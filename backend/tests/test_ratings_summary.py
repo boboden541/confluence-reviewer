@@ -1,7 +1,9 @@
 """Статистика оценок руководителя в профиле аналитика: средние по критериям,
-число оценок, общий балл и фильтр по периоду (дата оценки)."""
+число оценок, общий балл и фильтр по периоду (дата создания документа)."""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from app.database import Base, SessionLocal, engine
 from app.models import AiCriterion, Analyst, ConfluenceDocument, CriterionRating
@@ -17,9 +19,17 @@ def _db():
     Base.metadata.drop_all(bind=engine)
 
 
-def _seed(name: str, rated: list[list[tuple[int, int]]]) -> tuple[int, list[int]]:
+def _seed(
+    name: str,
+    rated: list[list[tuple[int, int]]],
+    created: list[datetime | None] | None = None,
+) -> tuple[int, list[int]]:
     """Аналитик с документами и оценками: rated[i] — оценки i-го документа,
     каждая — (индекс критерия 0/1, балл). Возвращает (analyst_id, criterion_ids).
+
+    created — даты создания документов (по одной на документ, None — без даты):
+    статистика фильтрует по ним, поэтому тестам периода нужны фикс. границы.
+    Без параметра даты создания не задаются.
 
     Критерий 0 — активный, 1 — архивный: статистика показывает оба. Коды
     критериев уникальны на вызов — нескольких аналитиков в тесте можно сеять.
@@ -42,6 +52,7 @@ def _seed(name: str, rated: list[list[tuple[int, int]]]) -> tuple[int, list[int]
                 title=f"[СТ] Документ {i}",
                 url="https://conf.test/pages/stat",
                 content_html="<h1>Введение</h1>",
+                created_in_confluence_at=created[i] if created is not None else None,
             )
             db.add(doc)
             db.flush()
@@ -97,22 +108,83 @@ def test_summary_averages_and_order(client):
     assert by_id[crit_ids[1]]["is_archived"] is True
 
 
-def test_summary_date_filters(client):
-    analyst_id, _ = _seed("Период", [[(0, 3)]])
+def test_summary_period_filters_by_document_creation(client):
+    # документ создан 10 августа: август видит его оценку, июль и сентябрь — нет
+    analyst_id, _ = _seed("Период", [[(0, 3)]], created=[datetime(2026, 8, 10)])
     base = f"/api/analysts/{analyst_id}/ratings-summary"
 
-    # оценка выставлена сейчас: будущее отсекает её, далёкое прошлое — нет
-    assert client.get(f"{base}?date_from=2100-01-01T00:00:00").json()["total_ratings"] == 0
-    assert client.get(f"{base}?date_to=2000-01-01T00:00:00").json()["total_ratings"] == 0
+    assert (
+        client.get(f"{base}?date_from=2026-08-01&date_to=2026-08-31").json()["total_ratings"] == 1
+    )
+    assert client.get(f"{base}?date_to=2026-07-31").json()["total_ratings"] == 0
+    assert client.get(f"{base}?date_from=2026-09-01").json()["total_ratings"] == 0
+    # границы периода возвращаются в ответе; «по» — эффективная граница
+    body = client.get(f"{base}?date_from=2026-08-01&date_to=2026-08-31").json()
+    assert body["date_from"] == "2026-08-01T00:00:00"
+    assert body["date_to"] == "2026-08-31T23:59:59.999999"
+
+
+def test_summary_period_ignores_rating_updated_at(client):
+    # семантика — по созданию документа: когда именно выставлен балл, не важно
+    analyst_id, _ = _seed("Игнор даты оценки", [[(0, 4)]], created=[datetime(2026, 8, 10)])
+    base = f"/api/analysts/{analyst_id}/ratings-summary"
+    with SessionLocal() as db:
+        rating = db.query(CriterionRating).one()
+        rating.updated_at = datetime(2000, 1, 1)
+        db.commit()
+    assert (
+        client.get(f"{base}?date_from=2026-08-01&date_to=2026-08-31").json()["total_ratings"] == 1
+    )
+    with SessionLocal() as db:
+        rating = db.query(CriterionRating).one()
+        rating.updated_at = datetime(2100, 1, 1)
+        db.commit()
+    assert (
+        client.get(f"{base}?date_from=2026-08-01&date_to=2026-08-31").json()["total_ratings"] == 1
+    )
+
+
+def test_summary_period_boundaries_inclusive(client):
+    # документы ровно на границах периода входят в статистику
+    analyst_id, _ = _seed(
+        "Границы",
+        [[(0, 4)], [(0, 5)]],
+        created=[datetime(2026, 8, 1), datetime(2026, 8, 31, 23, 59, 59, 999999)],
+    )
+    base = f"/api/analysts/{analyst_id}/ratings-summary"
+    body = client.get(f"{base}?date_from=2026-08-01&date_to=2026-08-31").json()
+    assert body["total_ratings"] == 2
+
+
+def test_summary_period_excludes_null_created_at(client):
+    # оценка на документе без даты создания: вне периода, в «за всё время» — есть
+    analyst_id, _ = _seed("Без даты", [[(0, 3)]], created=[None])
+    base = f"/api/analysts/{analyst_id}/ratings-summary"
+    assert (
+        client.get(f"{base}?date_from=2000-01-01&date_to=2100-01-01").json()["total_ratings"] == 0
+    )
+    assert client.get(base).json()["total_ratings"] == 1
+
+
+def test_summary_period_naive_aware_mixture_ok(client):
+    # date_from date-only (naive) + date_to со «Z» (aware): не 500, а честный ответ
+    analyst_id, _ = _seed("Смешение", [[(0, 4)]], created=[datetime(2026, 8, 10)])
+    resp = client.get(
+        f"/api/analysts/{analyst_id}/ratings-summary"
+        "?date_from=2026-08-01&date_to=2026-08-31T00:00:00Z"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total_ratings"] == 1
+
+
+def test_summary_period_from_after_to_422(client):
+    analyst_id, _ = _seed("Перевёрнутый", [[(0, 3)]], created=[datetime(2026, 8, 10)])
     assert (
         client.get(
-            f"{base}?date_from=2000-01-01T00:00:00&date_to=2100-01-01T00:00:00"
-        ).json()["total_ratings"]
-        == 1
+            f"/api/analysts/{analyst_id}/ratings-summary?date_from=2026-08-31&date_to=2026-08-01"
+        ).status_code
+        == 422
     )
-    # границы периода возвращаются в ответе
-    body = client.get(f"{base}?date_from=2000-01-01T00:00:00").json()
-    assert body["date_from"] == "2000-01-01T00:00:00"
 
 
 def test_summary_unknown_analyst_404(client):
