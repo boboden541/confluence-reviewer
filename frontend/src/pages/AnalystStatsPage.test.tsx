@@ -49,7 +49,7 @@ const SUMMARY = {
   analyst_id: 5,
   date_from: null,
   date_to: null,
-  overall_average: 3.67,
+  overall_average: 7.33,
   total_ratings: 3,
   criteria: [
     {
@@ -57,7 +57,7 @@ const SUMMARY = {
       code: "neprotivorechivost",
       name: "Непротиворечивость требований",
       is_archived: true,
-      average: 5,
+      average: 10,
       ratings_count: 1,
     },
     {
@@ -65,7 +65,7 @@ const SUMMARY = {
       code: "polnota",
       name: "Полнота описания",
       is_archived: false,
-      average: 3,
+      average: 6,
       ratings_count: 2,
     },
   ],
@@ -110,12 +110,13 @@ describe("AnalystStatsPage", () => {
     );
     const meta = document.querySelector(".page-meta")?.textContent ?? "";
     expect(meta).toContain("Иван Тестов");
+    expect(meta).toContain("шкала 1–10");
     expect(meta).toContain("за всё время");
     // название видно и в крошках, и в заголовке страницы
     expect(screen.getAllByText("Статистика оценок")).toHaveLength(2);
 
     // hero: общий балл и число оценок
-    expect(screen.getByText(ru(3.67))).toBeInTheDocument();
+    expect(screen.getByText(ru(7.33))).toBeInTheDocument();
     expect(screen.getByText(/3 оценки/)).toBeInTheDocument();
 
     // бары в порядке убывания среднего: первый ряд — сильнейший критерий
@@ -125,7 +126,7 @@ describe("AnalystStatsPage", () => {
     expect(rows[0].textContent).toContain("в архиве");
     expect(rows[1].textContent).toContain("Полнота описания");
 
-    // ширина бара = среднее против шкалы 5: 5 → 100%, 3 → 60%
+    // ширина бара = среднее против шкалы 10: 10 → 100%, 6 → 60%
     const fills = document.querySelectorAll<HTMLElement>(".stats-bar-fill");
     expect(fills[0].style.width).toBe("100%");
     expect(fills[1].style.width).toBe("60%");

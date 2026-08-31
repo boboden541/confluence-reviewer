@@ -2431,14 +2431,16 @@ textarea.prompt.locked {
   color: #7a5d00;
 }
 
+/* Пикер 10 кружков + «—» должен попадать в одну строку рядом с названием
+   критерия: кружки компактнее и зазор уже (26×10 + 30 + 4×10 = 330px) */
 .score-picker {
   display: inline-flex;
-  gap: 6px;
+  gap: 4px;
 }
 
 .score-btn {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -2461,7 +2463,7 @@ textarea.prompt.locked {
 
 /* «—»: не выбранный балл, а явное «без оценки» — чуть тише */
 .score-btn.dash {
-  width: 34px;
+  width: 30px;
   border-radius: var(--radius);
 }
 
@@ -2568,7 +2570,7 @@ textarea.prompt.locked {
   gap: 10px;
 }
 
-/* трек до полной ширины: бар читается против шкалы 0–5 */
+/* трек до полной ширины: бар читается против шкалы 0–10 */
 .stats-bar-track {
   flex: 1 1 auto;
   min-width: 120px;

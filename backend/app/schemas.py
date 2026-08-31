@@ -466,7 +466,7 @@ class RatingItem(BaseModel):
     """Одна оценка в PUT: score=None — снять оценку («—»)."""
 
     criterion_id: int
-    score: int | None = Field(default=None, ge=1, le=5)
+    score: int | None = Field(default=None, ge=1, le=10)
 
 
 class RatingsUpdate(BaseModel):

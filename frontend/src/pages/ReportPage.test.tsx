@@ -475,6 +475,13 @@ describe("ReportPage", () => {
       { name: "3" },
     );
     expect(checked).toHaveAttribute("aria-checked", "true");
+    // шкала 1..10: крайние баллы на месте, всего кружков 11 (10 + «—»)
+    const full = ratingGroup("Оценка «Полнота описания»");
+    expect(full.getByRole("radio", { name: "1" })).toBeDefined();
+    expect(full.getByRole("radio", { name: "10" })).toBeDefined();
+    expect(full.getAllByRole("radio")).toHaveLength(11);
+    // хинт поясняет новую шкалу
+    expect(screen.getByText(/1 — плохо, 10 — отлично/)).toBeInTheDocument();
   });
 
   it("picking a score sends PUT immediately; clicking the picked score clears it", async () => {
@@ -488,7 +495,7 @@ describe("ReportPage", () => {
 
     await screen.findByRole("radiogroup", { name: "Оценка «Полнота описания»" });
     const group = ratingGroup("Оценка «Полнота описания»");
-    fireEvent.click(group.getByRole("radio", { name: "4" }));
+    fireEvent.click(group.getByRole("radio", { name: "10" }));
 
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
@@ -497,7 +504,7 @@ describe("ReportPage", () => {
       );
       expect(call).toBeDefined();
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
-        ratings: [{ criterion_id: 1, score: 4 }],
+        ratings: [{ criterion_id: 1, score: 10 }],
       });
     });
   });

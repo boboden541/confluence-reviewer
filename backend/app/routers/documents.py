@@ -455,7 +455,7 @@ def get_ratings(document_id: int, db: Session = Depends(get_db)):
 
 @router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
 def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
-    """Выставить/изменить оценки (1..5); score=None — снять («—»)."""
+    """Выставить/изменить оценки (1..10); score=None — снять («—»)."""
     get_document_or_404(document_id, db)
     try:
         return ratings.apply_ratings(db, document_id, payload.ratings)
