@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.confluence import ConfluenceError
+from app.clients.confluence import ConfluenceError
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationReport
 from app.services.comments import (

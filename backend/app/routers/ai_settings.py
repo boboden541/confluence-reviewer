@@ -21,12 +21,12 @@ from app.schemas import (
     AIConnectionUpdate,
     AIEnvInfo,
 )
+from app.clients.ai_validator import AIValidationError, AIValidator
 from app.services.ai_settings import (
     get_ai_connection,
     mask_api_key,
     normalize_base_url,
 )
-from app.services.ai_validator import AIValidationError, AIValidator
 from app.utils import now_utc
 
 router = APIRouter(prefix="/api/ai-settings", tags=["ai-settings"])

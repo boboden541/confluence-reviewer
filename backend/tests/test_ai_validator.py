@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import anthropic
 
 from app.config import Settings
-from app.services.ai_validator import (
+from app.clients.ai_validator import (
     AIValidationError,
     AIValidator,
     _extract_json,
@@ -274,7 +274,7 @@ def test_openai_content_as_parts():
     (500, "Ошибка ИИ \\(HTTP 500\\)"),
 ])
 def test_openai_error_mapping(monkeypatch, status, expected):
-    monkeypatch.setattr("app.services.ai_validator._RETRY_DELAYS", ())  # без пауз
+    monkeypatch.setattr("app.clients.ai_validator._RETRY_DELAYS", ())  # без пауз
     validator, _ = make_openai_validator(
         lambda request, status=status: httpx.Response(
             status, json={"error": {"message": "boom"}}
@@ -285,7 +285,7 @@ def test_openai_error_mapping(monkeypatch, status, expected):
 
 
 def test_openai_bad_request_shows_excerpt(monkeypatch):
-    monkeypatch.setattr("app.services.ai_validator._RETRY_DELAYS", ())
+    monkeypatch.setattr("app.clients.ai_validator._RETRY_DELAYS", ())
     validator, _ = make_openai_validator(
         lambda request: httpx.Response(400, json={"error": {"message": "Unknown model"}})
     )

@@ -11,7 +11,7 @@ import pytest
 from app.database import SessionLocal
 from app.models import AIConnectionSettings
 from app.services.ai_settings import mask_api_key
-from app.services.ai_validator import AIValidationError
+from app.clients.ai_validator import AIValidationError
 
 
 class FakeValidator:

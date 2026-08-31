@@ -13,7 +13,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.services import tasks
 from app.services.ai_settings import AIConnection
-from app.services.ai_validator import AIValidationResult
+from app.clients.ai_validator import AIValidationResult
 from app.services.criteria import (
     PROMPT_HEAD,
     assemble_prompt,

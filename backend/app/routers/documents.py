@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.confluence import ConfluenceError
+from app.clients.confluence import ConfluenceError
 from app.database import get_db
 from app.models import Analyst, ConfluenceDocument, DocumentNote, TemplateVersion, TriggerType
 from app.schemas import (
@@ -29,7 +29,7 @@ from app.schemas import (
 )
 from app.services import tasks
 from app.services import ratings
-from app.services.ai_validator import SYSTEM_PROMPT
+from app.clients.ai_validator import SYSTEM_PROMPT
 from app.services.comments import (
     CommentError,
     NoReportError,
@@ -41,7 +41,7 @@ from app.services.criteria import (
     seed_criteria_if_missing,
     select_criteria,
 )
-from app.services.semantic_search import SemanticSearchError, SemanticSearcher
+from app.clients.semantic_search import SemanticSearchError, SemanticSearcher
 from app.services.template_store import get_active_version, list_templates, seed_if_missing
 from app.services.validation import (
     AI_CHECK,

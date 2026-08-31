@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from app.config import get_settings
-from app.confluence import ConfluenceClient
+from app.clients.confluence import ConfluenceClient
 from app.database import SessionLocal
 from app.models import ConfluenceDocument, ValidationReport
 from app.services.validation import DocumentNotFound, _latest_report

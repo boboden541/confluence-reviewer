@@ -27,8 +27,8 @@ from app.models import (
     ValidationReport,
     ValidationStatus,
 )
+from app.clients.ai_validator import AIValidationError, AIValidator
 from app.services.ai_settings import get_ai_connection
-from app.services.ai_validator import AIValidationError, AIValidator
 from app.services.criteria import assemble_prompt, select_criteria, seed_criteria_if_missing
 from app.services.html_to_markdown import html_to_markdown
 from app.services.template_store import get_template_for_validation

@@ -1,10 +1,11 @@
 """ИИ-валидация содержимого документа требований через GLM (ФТ-CR-11).
 
-Подключение настраивается глобально (env + таблица ai_connection_settings,
-см. services.ai_settings): Anthropic-совместимый API (по умолчанию z.ai)
-или OpenAI-совместимый (POST {base_url}/chat/completions). Оценка идёт по
-трём критериям качества: полнота, непротиворечивость, однозначность для
-разработчика.
+Транспортный клиент: Anthropic-совместимый API (по умолчанию z.ai) или
+OpenAI-совместимый (POST {base_url}/chat/completions). Подключение
+склеивается из env и таблицы ai_connection_settings (склейка с БД —
+в usecase.ai_settings, здесь — протокол-агностичный вызов). Оценка идёт
+по трём критериям качества: полнота, непротиворечивость, однозначность
+для разработчика.
 
 passed вычисляется дважды: модель даёт свою оценку, но любое замечание
 серьёзности critical гарантированно проваливает проверку — защита от
@@ -22,10 +23,40 @@ import anthropic
 import httpx
 
 from app.config import Settings, get_settings
-from app.services.ai_settings import AIConnection, connection_from_settings
 
 CRITERIA = ("полнота", "непротиворечивость", "однозначность")
 SEVERITIES = ("critical", "major", "minor")
+
+PROTOCOLS = ("anthropic", "openai")
+
+
+@dataclass(frozen=True, slots=True)
+class AIConnection:
+    """Эффективные параметры обращения к ИИ (после склейки строка+env)."""
+
+    protocol: str
+    base_url: str
+    api_key: str
+    model: str
+    max_tokens: int
+    timeout_seconds: float
+
+
+def normalize_base_url(value: str) -> str:
+    """URL без пробелов и хвостовых слэшей (путь дополним при запросе)."""
+    return value.strip().rstrip("/")
+
+
+def connection_from_settings(s: Settings) -> AIConnection:
+    """Подключение из настроек окружения (загрузочный дефолт)."""
+    return AIConnection(
+        protocol=s.ai_protocol if s.ai_protocol in PROTOCOLS else "anthropic",
+        base_url=normalize_base_url(s.ai_base_url),
+        api_key=s.ai_api_key,
+        model=s.ai_model,
+        max_tokens=s.ai_max_tokens,
+        timeout_seconds=s.ai_timeout_seconds,
+    )
 
 SYSTEM_PROMPT = f"""Ты — опытный ведущий системный аналитик, ревьюер технических требований.
 

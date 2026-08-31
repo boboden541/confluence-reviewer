@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument
-from app.services.ai_validator import AIValidationResult
+from app.clients.ai_validator import AIValidationResult
 from app.services.validation import run_validation
 from app.utils import now_utc
 

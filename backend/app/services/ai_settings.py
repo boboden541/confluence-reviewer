@@ -3,42 +3,34 @@
 Одна строка (id=1) перекрывает env по-полю: пустое поле строки или её
 отсутствие = значение из окружения. api_key наружу отдаётся только маской
 и нигде не логируется.
+
+Пока модуль живёт в services (перенос в usecase — отдельным шагом):
+параметры подключения (AIConnection, connection_from_settings, PROTOCOLS,
+normalize_base_url) уже переехали в clients.ai_validator и реэкспортируются
+сюда для сохранения контракта импортов.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sqlalchemy.orm import Session
 
-from app.config import Settings, get_settings
+from app.clients.ai_validator import (
+    PROTOCOLS,
+    AIConnection,
+    connection_from_settings,
+    normalize_base_url,
+)
+from app.config import get_settings
 from app.models import AIConnectionSettings
 
-PROTOCOLS = ("anthropic", "openai")
-
-
-@dataclass(frozen=True, slots=True)
-class AIConnection:
-    """Эффективные параметры обращения к ИИ (после склейки строка+env)."""
-
-    protocol: str
-    base_url: str
-    api_key: str
-    model: str
-    max_tokens: int
-    timeout_seconds: float
-
-
-def connection_from_settings(s: Settings) -> AIConnection:
-    """Подключение из настроек окружения (загрузочный дефолт)."""
-    return AIConnection(
-        protocol=s.ai_protocol if s.ai_protocol in PROTOCOLS else "anthropic",
-        base_url=normalize_base_url(s.ai_base_url),
-        api_key=s.ai_api_key,
-        model=s.ai_model,
-        max_tokens=s.ai_max_tokens,
-        timeout_seconds=s.ai_timeout_seconds,
-    )
+__all__ = [
+    "PROTOCOLS",
+    "AIConnection",
+    "connection_from_settings",
+    "get_ai_connection",
+    "mask_api_key",
+    "normalize_base_url",
+]
 
 
 def get_ai_connection(db: Session) -> AIConnection:
@@ -70,8 +62,3 @@ def mask_api_key(value: str) -> str:
     if len(value) <= 8:
         return "••••"
     return f"{value[:3]}…{value[-3:]}"
-
-
-def normalize_base_url(value: str) -> str:
-    """URL без пробелов и хвостовых слэшей (путь дополним при запросе)."""
-    return value.strip().rstrip("/")

@@ -15,7 +15,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.services import tasks
 from app.services.ai_settings import AIConnection
-from app.services.ai_validator import AIValidationResult, SYSTEM_PROMPT
+from app.clients.ai_validator import AIValidationResult, SYSTEM_PROMPT
 from app.services.validation import run_validation
 from app.utils import now_utc
 

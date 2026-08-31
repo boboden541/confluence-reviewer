@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.confluence import ConfluenceClient, ConfluenceError, PageSummary, creator_candidates
+from app.clients.confluence import ConfluenceClient, ConfluenceError, PageSummary, creator_candidates
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.utils import now_utc
