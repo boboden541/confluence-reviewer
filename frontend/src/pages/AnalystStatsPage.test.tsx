@@ -4,9 +4,22 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AnalystStatsPage from "./AnalystStatsPage";
 import { AUTH_STORAGE_KEY } from "../api";
 
-function mockFetch(responses: Record<string, unknown>) {
+function mockFetch(
+  responses: Record<string, unknown>,
+  // ответы на точные URL (с query): нестандартный статус (422 от guard) или
+  // другой payload для отфильтрованного запроса; матчатся до bare-путей
+  exact: Record<string, { status: number; payload: unknown }> = {},
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const path = String(input).split("?")[0];
+    const url = String(input);
+    if (url in exact) {
+      const { status, payload } = exact[url];
+      return new Response(JSON.stringify(payload), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const path = url.split("?")[0];
     for (const [route, payload] of Object.entries(responses)) {
       if (path === route) {
         return new Response(JSON.stringify(payload), {
@@ -126,8 +139,13 @@ describe("AnalystStatsPage", () => {
     renderPage();
     await screen.findByText(/Средние по критериям/);
 
-    fireEvent.change(screen.getByLabelText("Оценки с"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), {
+      target: { value: "2026-08-01" },
+    });
     fireEvent.change(screen.getByLabelText("по"), { target: { value: "2026-08-31" } });
+    // инпуты связаны: «с» не позже «по», «по» не раньше «с»
+    expect(screen.getByLabelText("Документы созданы с")).toHaveAttribute("max", "2026-08-31");
+    expect(screen.getByLabelText("по")).toHaveAttribute("min", "2026-08-01");
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
     await waitFor(() => {
@@ -139,7 +157,7 @@ describe("AnalystStatsPage", () => {
       expect(call).toBeDefined();
     });
     // период виден в подписи страницы
-    expect(screen.getByText(/период: 2026-08-01 — 2026-08-31/)).toBeInTheDocument();
+    expect(screen.getByText(/документы созданы: 2026-08-01 — 2026-08-31/)).toBeInTheDocument();
   });
 
   it("resets the filter back to all time", async () => {
@@ -150,7 +168,9 @@ describe("AnalystStatsPage", () => {
     renderPage();
     await screen.findByText(/Средние по критериям/);
 
-    fireEvent.change(screen.getByLabelText("Оценки с"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), {
+      target: { value: "2026-08-01" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
     await waitFor(() =>
       expect(
@@ -166,7 +186,7 @@ describe("AnalystStatsPage", () => {
       expect(calls.length).toBeGreaterThanOrEqual(2);
       expect(String(calls[calls.length - 1][0])).toBe("/api/analysts/5/ratings-summary");
     });
-    expect((screen.getByLabelText("Оценки с") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Документы созданы с") as HTMLInputElement).value).toBe("");
     expect(screen.queryByRole("button", { name: "За всё время" })).not.toBeInTheDocument();
   });
 
@@ -179,6 +199,92 @@ describe("AnalystStatsPage", () => {
 
     expect(await screen.findByText(/Оценок пока нет/)).toBeInTheDocument();
     expect(screen.queryByText(/Средние по критериям/)).not.toBeInTheDocument();
+  });
+
+  it("says no data for the period when the filtered set is empty", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/ratings-summary": { ...SUMMARY, overall_average: null, total_ratings: 0, criteria: [] },
+    });
+    renderPage();
+    await screen.findByText(/Оценок пока нет/);
+
+    // период без данных: текст уведомляет именно о периоде, а не об отсутствии оценок
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+    expect(await screen.findByText(/За выбранный период оценок нет/)).toBeInTheDocument();
+    expect(screen.queryByText(/Оценок пока нет/)).not.toBeInTheDocument();
+  });
+
+  it("describes the applied period, not the draft in the inputs", async () => {
+    // очистка полей без «Применить» — черновик: тексты описывают загруженные данные
+    const EMPTY = {
+      ...SUMMARY,
+      date_from: "2026-01-01T00:00:00",
+      date_to: "2026-01-31T23:59:59.999999",
+      overall_average: null,
+      total_ratings: 0,
+      criteria: [],
+    };
+    mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/ratings-summary": SUMMARY,
+      },
+      {
+        "/api/analysts/5/ratings-summary?date_from=2026-01-01&date_to=2026-01-31": {
+          status: 200,
+          payload: EMPTY,
+        },
+      },
+    );
+    renderPage();
+    await screen.findByText(/Средние по критериям/);
+
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.change(screen.getByLabelText("по"), { target: { value: "2026-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+    expect(await screen.findByText(/За выбранный период оценок нет/)).toBeInTheDocument();
+    expect(screen.getByText(/документы созданы: 2026-01-01 — 2026-01-31/)).toBeInTheDocument();
+
+    // очистили «с», но «Применить» не нажимали — подпись и текст остаются про период
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), { target: { value: "" } });
+    expect(screen.getByText(/документы созданы: 2026-01-01 — 2026-01-31/)).toBeInTheDocument();
+    expect(screen.getByText(/За выбранный период оценок нет/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "За всё время" })).toBeInTheDocument();
+  });
+
+  it("shows a readable error for an inverted period", async () => {
+    // инпуты с min/max не дают выбрать перевёрнутый период мышью, но ручной
+    // ввод его допускает — guard бэкенда отвечает 422, страница показывает текст
+    mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/ratings-summary": SUMMARY,
+      },
+      {
+        "/api/analysts/5/ratings-summary?date_from=2026-08-31&date_to=2026-08-01": {
+          status: 422,
+          payload: { detail: "Дата начала периода позже даты окончания" },
+        },
+      },
+    );
+    renderPage();
+    await screen.findByText(/Средние по критериям/);
+
+    fireEvent.change(screen.getByLabelText("Документы созданы с"), {
+      target: { value: "2026-08-31" },
+    });
+    fireEvent.change(screen.getByLabelText("по"), { target: { value: "2026-08-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+    const alert = await screen.findByText("Дата начала периода позже даты окончания");
+    expect(alert.closest(".alert.error")).not.toBeNull();
   });
 
   it("shows the backend error for a missing analyst", async () => {

@@ -61,10 +61,13 @@ export default function DocumentsPage() {
   const [loaded, setLoaded] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
-  // фильтры живут в адресе (?q=…&url=…): вернувшись кнопкой «Назад»,
-  // пользователь попадает в тот же результат поиска
+  // фильтры живут в адресе (?q=…&url=…&created_from=…&created_to=…):
+  // вернувшись кнопкой «Назад», пользователь попадает в тот же результат поиска
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [urlFilter, setUrlFilter] = useState(() => searchParams.get("url") ?? "");
+  // период по дате создания в Confluence, границы включительны (YYYY-MM-DD)
+  const [createdFrom, setCreatedFrom] = useState(() => searchParams.get("created_from") ?? "");
+  const [createdTo, setCreatedTo] = useState(() => searchParams.get("created_to") ?? "");
   const [semantic, setSemantic] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -109,7 +112,7 @@ export default function DocumentsPage() {
   // смена фильтра или аналитика — выделение больше не относится к списку
   useEffect(() => {
     setSelected(new Set());
-  }, [analystId, query, urlFilter]);
+  }, [analystId, query, urlFilter, createdFrom, createdTo]);
 
   const allLoadedSelected = items.length > 0 && items.every((doc) => selected.has(doc.id));
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -199,6 +202,8 @@ export default function DocumentsPage() {
           });
           if (trimmed) params.set("query", trimmed);
           if (urlFilter.trim()) params.set("url", urlFilter.trim());
+          if (createdFrom) params.set("created_from", createdFrom);
+          if (createdTo) params.set("created_to", createdTo);
           data = await api<DocumentPage>(`/api/analysts/${analystId}/documents?${params}`);
           more = targetPage * data.page_size < data.total;
         }
@@ -217,7 +222,7 @@ export default function DocumentsPage() {
         if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [analystId, query, urlFilter, semantic],
+    [analystId, query, urlFilter, createdFrom, createdTo, semantic],
   );
 
   // Смена фильтров/аналитика — перезагрузка с первой страницы.
@@ -403,12 +408,21 @@ export default function DocumentsPage() {
 
   // Смена фильтра: обновляем стейт и адрес (replace — история не засоряется).
   // Открытую панель просмотра (doc=) сохраняем.
-  const applyFilters = (nextQuery: string, nextUrl: string) => {
+  const applyFilters = (
+    nextQuery: string,
+    nextUrl: string,
+    nextCreatedFrom: string,
+    nextCreatedTo: string,
+  ) => {
     setQuery(nextQuery);
     setUrlFilter(nextUrl);
+    setCreatedFrom(nextCreatedFrom);
+    setCreatedTo(nextCreatedTo);
     const params = new URLSearchParams();
     if (nextQuery.trim()) params.set("q", nextQuery.trim());
     if (nextUrl.trim()) params.set("url", nextUrl.trim());
+    if (nextCreatedFrom) params.set("created_from", nextCreatedFrom);
+    if (nextCreatedTo) params.set("created_to", nextCreatedTo);
     if (docParam) params.set("doc", docParam);
     setSearchParams(params, { replace: true });
   };
@@ -492,7 +506,7 @@ export default function DocumentsPage() {
             placeholder="Поиск по названию…"
             style={{ width: "260px" }}
             value={query}
-            onChange={(e) => applyFilters(e.target.value, urlFilter)}
+            onChange={(e) => applyFilters(e.target.value, urlFilter, createdFrom, createdTo)}
           />
         </span>
         <span className="field">
@@ -505,7 +519,35 @@ export default function DocumentsPage() {
             value={urlFilter}
             disabled={semantic}
             title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
-            onChange={(e) => applyFilters(query, e.target.value)}
+            onChange={(e) => applyFilters(query, e.target.value, createdFrom, createdTo)}
+          />
+        </span>
+        <span className="field">
+          <label htmlFor="doc-created-from-search">Создан с</label>
+          <input
+            id="doc-created-from-search"
+            type="date"
+            className="text-input"
+            style={{ width: "150px" }}
+            value={createdFrom}
+            max={createdTo || undefined}
+            disabled={semantic}
+            title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
+            onChange={(e) => applyFilters(query, urlFilter, e.target.value, createdTo)}
+          />
+        </span>
+        <span className="field">
+          <label htmlFor="doc-created-to-search">по</label>
+          <input
+            id="doc-created-to-search"
+            type="date"
+            className="text-input"
+            style={{ width: "150px" }}
+            value={createdTo}
+            min={createdFrom || undefined}
+            disabled={semantic}
+            title={semantic ? "Недоступно в режиме поиска по смыслу" : undefined}
+            onChange={(e) => applyFilters(query, urlFilter, createdFrom, e.target.value)}
           />
         </span>
         <label
@@ -609,7 +651,11 @@ export default function DocumentsPage() {
               <td colSpan={8} className="table-empty">
                 {semantic && query.trim().length < SEMANTIC_MIN
                   ? `Введите минимум ${SEMANTIC_MIN} символа — поиск по смыслу через ИИ`
-                  : "Документы не найдены"}
+                  : // вину на период возлагаем, только если других фильтров нет:
+                    // пустота может быть из-за опечатки в «Названии»/«Ссылке»
+                    !semantic && (createdFrom || createdTo) && !query.trim() && !urlFilter.trim()
+                    ? "За выбранный период документов нет"
+                    : "Документы не найдены"}
               </td>
             </tr>
           )}

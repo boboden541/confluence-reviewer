@@ -68,8 +68,22 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!resp.ok) {
     let detail = "";
     try {
-      const body = (await resp.json()) as { detail?: string };
-      detail = body.detail ?? "";
+      const body = (await resp.json()) as { detail?: unknown };
+      // наш бэкенд шлёт detail-строку; FastAPI-валидация (422) — массив
+      // объектов [{type, loc, msg}]. Массив нельзя отдавать в Error.message
+      // («[object Object]»), собираем из него человекочитаемые msg
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        detail = body.detail
+          .map((item) =>
+            item && typeof item === "object" && "msg" in item
+              ? String((item as { msg: unknown }).msg)
+              : "",
+          )
+          .filter(Boolean)
+          .join("; ");
+      }
     } catch {
       detail = resp.statusText;
     }
@@ -248,7 +262,9 @@ export interface CriterionSummaryItem {
   ratings_count: number;
 }
 
-/** GET /api/analysts/:id/ratings-summary — статистика оценок за период */
+/** GET /api/analysts/:id/ratings-summary — статистика оценок за период
+ * (период — по дате создания документов в Confluence, границы включительны;
+ * date_to возвращается эффективной границей — конец суток для date-only «по») */
 export interface RatingsSummary {
   analyst_id: number;
   date_from: string | null;
