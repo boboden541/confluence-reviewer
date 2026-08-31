@@ -445,9 +445,10 @@ def _get_note(db: Session, document_id: int) -> DocumentNote | None:
 
 @router.get("/documents/{document_id}/ratings", response_model=RatingsOut)
 def get_ratings(document_id: int, db: Session = Depends(get_db)):
-    """Блок оценивания: критерии последнего прогона с оценками руководителя.
+    """Блок оценивания: все активные критерии справочника с оценками руководителя.
 
-    Прогона с ИИ-проверкой ещё не было — criteria пуст (оценивать нечего).
+    Виден до первого ИИ-прогона; пустой criteria — в справочнике
+    нет активных критериев.
     """
     get_document_or_404(document_id, db)
     return ratings.get_ratings_view(db, document_id)
@@ -455,7 +456,10 @@ def get_ratings(document_id: int, db: Session = Depends(get_db)):
 
 @router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
 def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
-    """Выставить/изменить оценки (1..10); score=None — снять («—»)."""
+    """Выставить/изменить оценки (1..10); score=None — снять («—»).
+
+    Архивный или несуществующий критерий — 404 (молча вычеркнуть нельзя).
+    """
     get_document_or_404(document_id, db)
     try:
         return ratings.apply_ratings(db, document_id, payload.ratings)

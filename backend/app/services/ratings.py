@@ -1,40 +1,33 @@
 """Оценки руководителя по ИИ-критериям документа (1..10 и «—»).
 
-Блок оценивания строится по последнему прогону документа: какие критерии
-участвовали (ai_criteria_codes отчёта) — те и оцениваются, в порядке прогона.
-Записи оценок переживают новые прогоны: актуальность каждой показывает
-stale (оценка выставлена до created_at текущего отчёта).
+Блок оценивания строится по всем активным критериям справочника —
+независимо от прогонов: руководитель оценивает документ по каждому
+заведённому критерию, даже если последний прогон шёл по узкому набору
+или документа ещё не касался ИИ. Архивные критерии из блока скрыты
+(их прошлые оценки живут в БД и статистике). Записи оценок переживают
+новые прогоны: актуальность каждой показывает stale (оценка выставлена
+до created_at текущего отчёта).
 """
 
 from __future__ import annotations
 
-import json
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AiCriterion, CriterionRating
+from app.models import CriterionRating
 from app.schemas import RatingItem, RatingItemOut, RatingsOut
+from app.services.criteria import select_criteria
 from app.services.validation import _latest_report
 
 
 class CriterionNotFound(LookupError):
-    """Критерий из запроса не существует (оценить нельзя)."""
+    """Критерий из запроса не существует или в архиве (оценить нельзя)."""
 
 
 def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
-    """Критерии последнего прогона с оценками; порядок — порядок прогона."""
+    """Все активные критерии справочника с оценками; порядок — справочника."""
+    criteria = select_criteria(db)
     report = _latest_report(db, document_id)
-    if report is None or not report.ai_criteria_codes:
-        return RatingsOut(document_id=document_id, criteria=[])
-
-    codes: list[str] = json.loads(report.ai_criteria_codes)
-    criteria = {
-        criterion.code: criterion
-        for criterion in db.scalars(
-            select(AiCriterion).where(AiCriterion.code.in_(codes))
-        ).all()
-    }
     ratings = {
         rating.criterion_id: rating
         for rating in db.scalars(
@@ -43,20 +36,19 @@ def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
     }
 
     items: list[RatingItemOut] = []
-    for code in dict.fromkeys(codes):  # дубликаты схлопываем, порядок сохраняем
-        criterion = criteria.get(code)
-        if criterion is None:
-            continue  # критерий удалён из справочника физически — оценивать нечего
+    for criterion in criteria:
         rating = ratings.get(criterion.id)
         items.append(
             RatingItemOut(
                 criterion_id=criterion.id,
                 code=criterion.code,
                 name=criterion.name,
-                is_archived=criterion.is_archived,
+                is_archived=criterion.is_archived,  # всегда False: взяли активные
                 score=rating.score if rating else None,
                 updated_at=rating.updated_at if rating else None,
-                stale=bool(rating) and rating.updated_at < report.created_at,
+                stale=bool(rating)
+                and report is not None
+                and rating.updated_at < report.created_at,
             )
         )
     return RatingsOut(document_id=document_id, criteria=items)
@@ -64,9 +56,12 @@ def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
 
 def apply_ratings(db: Session, document_id: int, items: list[RatingItem]) -> RatingsOut:
     """Upsert оценок: score=None удаляет запись (идемпотентно)."""
-    for item in items:
-        if db.get(AiCriterion, item.criterion_id) is None:
-            raise CriterionNotFound(f"Критерий {item.criterion_id} не найден")
+    # валидация набора — единый паттерн с прогоном (services.criteria):
+    # несуществующий/архивный критерий — ошибка, молча вычеркивать нельзя
+    try:
+        select_criteria(db, [item.criterion_id for item in items])
+    except LookupError as exc:
+        raise CriterionNotFound(str(exc)) from exc
 
     for item in items:
         rating = db.scalar(
@@ -84,6 +79,6 @@ def apply_ratings(db: Session, document_id: int, items: list[RatingItem]) -> Rat
             rating.score = item.score
     db.commit()
 
-    # после применения блок переосмысливается целиком: порядок прогона,
-    # stale-флаги, критерии, добавленные в справочник после отчёта
+    # после применения блок переосмысливается целиком: оценки, stale-флаги,
+    # критерии, ушедшие в архив после выставления
     return get_ratings_view(db, document_id)

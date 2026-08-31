@@ -80,7 +80,7 @@ export default function DocumentReport({
       const noteResp = await api<Note>(`/api/documents/${documentId}/note`);
       setNote(noteResp.content);
       setNoteOriginal(noteResp.content);
-      // блок оценивания: критерии последнего прогона с оценками
+      // блок оценивания: все активные критерии справочника с оценками
       setRatings(
         await api<DocumentRatings>(`/api/documents/${documentId}/ratings`).catch(() => null),
       );
@@ -405,7 +405,8 @@ export default function DocumentReport({
         </>
       )}
 
-      {/* оценивать можно только после ИИ-прогона: пустой criteria — зоны нет */}
+      {/* блок — по активным критериям справочника, виден и до ИИ-прогона;
+          пустой criteria — активных нет, зоны тоже нет */}
       {ratings && ratings.criteria.length > 0 && (
         <>
           <div className="zone-label">Оценка руководителя</div>

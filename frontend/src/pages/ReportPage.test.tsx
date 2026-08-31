@@ -72,7 +72,7 @@ const RATINGS = {
       criterion_id: 2,
       code: "neprotivorechivost_trebovanii",
       name: "Непротиворечивость требований",
-      is_archived: true,
+      is_archived: false,
       score: 3,
       updated_at: "2026-08-11T13:00:00",
       stale: true,
@@ -450,13 +450,13 @@ describe("ReportPage", () => {
     expect(reportLoads()).toBe(before);
   });
 
-  // --- Оценка руководителя по ИИ-критериям последнего прогона ---
+  // --- Оценка руководителя по активным критериям справочника ---
 
   function ratingGroup(name: string) {
     return within(screen.getByRole("radiogroup", { name }));
   }
 
-  it("shows the rating zone with stale and archived marks", async () => {
+  it("shows the rating zone with a stale mark", async () => {
     mockFetch({
       "/api/documents/42": DOCUMENT,
       "/api/documents/42/report": REPORT,
@@ -466,9 +466,8 @@ describe("ReportPage", () => {
     renderPage();
 
     expect(await screen.findByText("Оценка руководителя")).toBeInTheDocument();
-    // обе группы-кружка на месте; у второго — архив и устаревшая оценка
+    // обе группы-кружка на месте; у второго — устаревшая оценка
     expect(ratingGroup("Оценка «Полнота описания»")).toBeDefined();
-    expect(screen.getByText("в архиве")).toBeInTheDocument();
     expect(screen.getByText(/перепроверено после оценки/)).toBeInTheDocument();
     const checked = ratingGroup("Оценка «Непротиворечивость требований»").getByRole(
       "radio",
@@ -534,7 +533,7 @@ describe("ReportPage", () => {
     });
   });
 
-  it("hides the rating zone when the last run has no AI criteria", async () => {
+  it("hides the rating zone when the catalog has no active criteria", async () => {
     mockFetch({
       "/api/documents/42": DOCUMENT,
       "/api/documents/42/report": REPORT,
