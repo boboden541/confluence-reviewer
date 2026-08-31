@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
+from app.dependencies import add_catch_all, install_auth, require_basic_auth
 
 logger = logging.getLogger("confluence_reviewer")
 logging.basicConfig(level=logging.INFO)
@@ -67,18 +68,15 @@ def create_app(settings=None) -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         lifespan=lifespan,
+        # НФТ-CR-7: basic-auth на всё, кроме /api/health. 401 генерируется
+        # внутри приложения, поэтому CORS-заголовки ставит внешняя
+        # CORSMiddleware — как раньше, при middleware-реализации
+        dependencies=[Depends(require_basic_auth)],
     )
 
-    # НФТ-CR-7: basic-auth на всё, кроме /api/health. Добавляется раньше CORS,
-    # чтобы ошибки 401 тоже получали CORS-заголовки (middleware идёт позже — внешне).
-    if settings.auth_enabled:
-        from app.auth import BasicAuthMiddleware
-
-        app.add_middleware(
-            BasicAuthMiddleware,
-            username=settings.app_username,
-            password=settings.app_password,
-        )
+    # Параметры авторизации в app.state + закрытые docs/catch-all (детали —
+    # в dependencies.auth: глобальная зависимость туда не дотягивается)
+    install_auth(app, settings)
 
     # Для локальной разработки frontend (vite) ходит на backend напрямую;
     # в docker-стеке запросы идут через nginx same-origin.
@@ -112,6 +110,9 @@ def create_app(settings=None) -> FastAPI:
     app.include_router(templates_router)
     app.include_router(templates_multi_router)
     app.include_router(ai_settings_router)
+
+    # последним: неизвестные пути без учётки — 401, а не 404
+    add_catch_all(app)
 
     return app
 

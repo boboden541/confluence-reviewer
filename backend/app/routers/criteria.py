@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.dependencies import get_db
 from app.models import AiCriterion
 from app.schemas import AiCriterionCreate, AiCriterionOut, AiCriterionUpdate
 from app.services.criteria import (

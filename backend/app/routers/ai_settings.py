@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.database import get_db
+from app.dependencies import get_db
 from app.models import AIConnectionSettings
 from app.schemas import (
     AIConnectionOut,

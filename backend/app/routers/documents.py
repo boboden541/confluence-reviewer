@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.clients.confluence import ConfluenceError
-from app.database import get_db
+from app.dependencies import get_db
 from app.models import Analyst, ConfluenceDocument, DocumentNote, TemplateVersion, TriggerType
 from app.schemas import (
     CriterionOptionOut,

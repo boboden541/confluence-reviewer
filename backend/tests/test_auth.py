@@ -71,3 +71,19 @@ def test_empty_password_config_denies_all(empty_password_client):
 def test_auth_disabled_allows_anonymous(client):
     """Обычный клиент conftest: AUTH_ENABLED=false — доступ без учётки."""
     assert client.get("/api/analysts").status_code == 200
+
+
+def test_docs_require_auth(auth_client):
+    """/docs и /openapi.json регистрируются мимо глобальной зависимости —
+    закрываются перерегистрацией (dependencies.auth._protect_docs)."""
+    assert auth_client.get("/docs").status_code == 401
+    assert auth_client.get("/openapi.json").status_code == 401
+    assert auth_client.get("/docs", auth=(USERNAME, PASSWORD)).status_code == 200
+    assert auth_client.get("/openapi.json", auth=(USERNAME, PASSWORD)).status_code == 200
+
+
+def test_unknown_path_requires_auth(auth_client):
+    """Неизвестный путь без учётки — 401 (паритет с middleware), с учёткой — 404."""
+    assert auth_client.get("/api/no-such-endpoint").status_code == 401
+    resp = auth_client.get("/api/no-such-endpoint", auth=(USERNAME, PASSWORD))
+    assert resp.status_code == 404
