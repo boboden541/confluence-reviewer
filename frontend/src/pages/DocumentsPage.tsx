@@ -39,6 +39,19 @@ function formatDate(value: string | null): string {
   });
 }
 
+/** Дата+время последней синхронизации для подзаголовка: «31.08, 10:15».
+ * Бэкенд хранит наивный UTC — без суффикса Z браузер спарсит его как
+ * локальное время и сдвинет на часовой пояс пользователя. */
+function formatSyncedAt(value: string): string {
+  const utc = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`;
+  return new Date(utc).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function DocumentsPage() {
   const { analystId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,10 +69,22 @@ export default function DocumentsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
+  // синхронизация аналитика из шапки: состояние прогона и его итог.
+  // Итог живёт в собственных состояниях, а не в error: load() по успехе
+  // чистит error, и сообщение о сбое синхронизации жило бы ровно один
+  // запрос перезагрузки списка.
+  const [syncing, setSyncing] = useState(false);
+  const [info, setInfo] = useState("");
+  const [syncError, setSyncError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   // защита от устаревших ответов: сменили режим/фильтр — старый ответ
   // не должен затирать новое состояние списка
   const loadSeq = useRef(0);
+  // «наблюдали запуск прогона»: флаги в ref, а не в замыкании эффекта —
+  // подписка пересоздаётся на каждый символ в поиске (load меняет
+  // идентичность), и замыкание начиналось бы заново, теряя запуск
+  const sawBulkRunRef = useRef(false);
+  const sawSyncRunRef = useRef(false);
 
   // Выбранные для проверки документы (чекбоксы в таблице). Выделение
   // живёт до запуска проверки или смены фильтра/аналитика.
@@ -215,42 +240,85 @@ export default function DocumentsPage() {
     return () => clearTimeout(timer);
   }, [load, semantic]);
 
-  useEffect(() => {
+  const loadAnalyst = useCallback(async () => {
     if (!analystId) return;
-    api<Analyst>(`/api/analysts/${analystId}`)
-      .then(setAnalyst)
-      .catch(() => setAnalyst(null));
+    try {
+      setAnalyst(await api<Analyst>(`/api/analysts/${analystId}`));
+    } catch {
+      setAnalyst(null);
+    }
+  }, [analystId]);
+
+  useEffect(() => {
+    loadAnalyst();
+  }, [loadAnalyst]);
+
+  // сменили аналитика — итоги его прошлой синхронизации неактуальны
+  useEffect(() => {
+    setInfo("");
+    setSyncError("");
   }, [analystId]);
 
   // Прогресс и завершение проверки приходят событиями (SSE): строка «k из N…»
   // живёт на событиях bulk, список обновляется по финалу наблюдаемого прогона.
-  // Синхронизация тоже меняет список — обновляем и её итог.
+  // Синхронизация (кнопкой из шапки, из другой вкладки или плановая) тоже
+  // меняет список — обновляем список, карточку аналитика и показываем итог.
   useEffect(() => {
-    let sawBulkRun = false;
-    let sawSyncRun = false;
     const offBulk = on("bulk", (e) => {
       setBulk(e.running ? e : null);
       if (e.running) {
-        sawBulkRun = true;
+        sawBulkRunRef.current = true;
         return;
       }
-      if (sawBulkRun) {
-        sawBulkRun = false;
+      if (sawBulkRunRef.current) {
+        sawBulkRunRef.current = false;
         void load(1, false);
       }
     });
     const offSync = on("sync", (e) => {
-      if (e.running) sawSyncRun = true;
-      else if (sawSyncRun) {
-        sawSyncRun = false;
-        void load(1, false);
+      if (e.running) {
+        sawSyncRunRef.current = true;
+        setSyncing(true);
+        return;
+      }
+      setSyncing(false);
+      if (!sawSyncRunRef.current) return;
+      sawSyncRunRef.current = false;
+      void load(1, false);
+      void loadAnalyst(); // обновить дату последней синхронизации
+      // итог — только по этому аналитику: массовый прогон трогает и других
+      const mine = (e.last_results ?? []).find((r) => r.analyst_id === Number(analystId));
+      if (!mine) return;
+      if (mine.error) {
+        setSyncError(`Синхронизация завершилась с ошибкой: ${mine.error}`);
+        setInfo("");
+      } else {
+        setSyncError("");
+        setInfo(`Синхронизация завершена: новых ${mine.created}, обновлено ${mine.updated}`);
       }
     });
     return () => {
       offBulk();
       offSync();
     };
-  }, [load]);
+  }, [load, loadAnalyst, analystId]);
+
+  const syncAnalyst = async () => {
+    if (!analystId || syncing) return;
+    // busy сразу: повторный клик до ответа 202 не запустит второй прогон
+    // (бэкенд ответил бы 409), а финал SSE не «воскресит» занятость
+    setSyncing(true);
+    setInfo("");
+    setSyncError("");
+    try {
+      await api(`/api/analysts/${analystId}/sync`, { method: "POST" });
+    } catch (exc) {
+      setSyncing(false);
+      setSyncError(
+        exc instanceof ApiError ? exc.message : "Не удалось запустить синхронизацию",
+      );
+    }
+  };
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {
@@ -359,14 +427,27 @@ export default function DocumentsPage() {
             {analyst ? analyst.full_name : "Документы аналитика"}
           </h1>
           <div className="page-meta">
-            <span className="muted">{loaded ? `Всего документов: ${total}` : ""}</span>
+            <span className="muted">
+              {loaded ? `Всего документов: ${total}` : ""}
+              {loaded && analyst?.last_synced_at
+                ? ` · Синхронизировано: ${formatSyncedAt(analyst.last_synced_at)}`
+                : ""}
+            </span>
           </div>
         </div>
         <div className="head-actions">
           <button
+            className="btn subtle"
+            onClick={syncAnalyst}
+            disabled={syncing}
+            title="Подтянуть новые и изменённые страницы аналитика из Confluence"
+          >
+            <span aria-hidden="true">⟳</span> {syncing ? "Синхронизация…" : "Синхронизировать"}
+          </button>
+          <button
             className="btn primary"
             onClick={openBulkDialog}
-            disabled={selected.size === 0}
+            disabled={syncing || selected.size === 0}
             title="Отметьте документы чекбоксами — настройки проверки спросят шаблон и промт ИИ"
           >
             <span aria-hidden="true">▶</span> Проверить выбранные
@@ -388,6 +469,8 @@ export default function DocumentsPage() {
       )}
 
       {error && <div className="alert error">{error}</div>}
+      {syncError && <div className="alert error">{syncError}</div>}
+      {info && <div className="alert ok">{info}</div>}
 
       {bulk?.running && (
         <div className="progress-line">

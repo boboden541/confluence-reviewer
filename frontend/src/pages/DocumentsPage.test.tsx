@@ -38,10 +38,16 @@ const DOC_REPORT = {
 
 const DOC_NOTE = { document_id: 11, content: "", created_at: null, updated_at: null };
 
-function mockFetch(responses: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+function mockFetch(responses: Record<string, unknown>, posts: string[] = []) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     const bare = path.split("?")[0];
+    if (init?.method === "POST" && posts.includes(bare)) {
+      return new Response(JSON.stringify({}), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     for (const [prefix, payload] of Object.entries(responses)) {
       // точное совпадение (с query-строкой) либо без неё
       if (path === prefix || bare === prefix) {
@@ -133,6 +139,28 @@ const BULK_IDLE = {
   error: null,
 };
 
+/** Событие запуска синхронизации (его шлёт бэкенд сразу после 202). */
+const syncRunEvent = {
+  type: "sync" as const,
+  running: true,
+  started_at: "2026-08-31T12:30:00",
+  finished_at: null,
+  error: null,
+  last_results: [],
+};
+
+/** Событие завершения синхронизации с результатами по аналитикам. */
+function syncDoneEvent(results: Array<{ analyst_id: number; created: number; updated: number; error: string | null }>) {
+  return {
+    type: "sync" as const,
+    running: false,
+    started_at: "2026-08-31T12:30:00",
+    finished_at: "2026-08-31T12:40:00",
+    error: null,
+    last_results: results.map((r) => ({ analyst_name: "Никулин Владислав", ...r })),
+  };
+}
+
 describe("DocumentsPage", () => {
   beforeEach(() => {
     localStorage.setItem(AUTH_STORAGE_KEY, btoa("u:p"));
@@ -163,8 +191,194 @@ describe("DocumentsPage", () => {
     expect(screen.getByText("не пройдено")).toBeInTheDocument();
     expect(screen.getByText("не проверено")).toBeInTheDocument();
     expect(screen.getByText("Всего документов: 2")).toBeInTheDocument();
+    // никогда не синхронизировали — подзаголовок остаётся просто счётчиком
+    expect(screen.queryByText(/Синхронизировано:/)).toBeNull();
     // у первого документа есть заметка — это видно в списке
     expect(screen.getByTitle("Есть заметка руководителя").textContent).toBe("📝");
+  });
+
+  it("shows last sync date next to the documents count", async () => {
+    mockFetch({
+      "/api/analysts/5": { ...ANALYST, last_synced_at: "2026-08-31T10:15:00" },
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("[СТ] GDS-15 Загрузка кино");
+    // формат из макета «31.08, 10:15»: без года и секунд
+    expect(
+      screen.getByText(/Всего документов: 2 · Синхронизировано: \d{2}\.\d{2}, \d{2}:\d{2}/),
+    ).toBeInTheDocument();
+  });
+
+  it("sync button runs analyst sync and reports the SSE result", async () => {
+    const fetchMock = mockFetch(
+      {
+        "/api/analysts/5": { ...ANALYST, last_synced_at: "2026-08-31T10:15:00" },
+        "/api/analysts/5/documents": DOCUMENTS,
+      },
+      ["/api/analysts/5/sync"],
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // выделяем документ до запуска — чтобы «Проверить выбранные» была
+    // активна и блокировку на прогоне было чем проверить
+    fireEvent.click(await screen.findByLabelText("Выбрать документ: [СТ] GDS-15 Загрузка кино"));
+    const run = screen.getByRole("button", { name: /Проверить выбранные \(1\)/ });
+    expect(run).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Синхронизировать" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => String(input) === "/api/analysts/5/sync" && init?.method === "POST",
+        ),
+      ).toBe(true);
+    });
+
+    // на время прогона заняты обе кнопки шапки
+    expect(screen.getByRole("button", { name: "Синхронизация…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Проверить выбранные \(1\)/ })).toBeDisabled();
+
+    emitServerEvent("sync", syncRunEvent);
+    emitServerEvent("sync", syncDoneEvent([{ analyst_id: 5, created: 3, updated: 1, error: null }]));
+
+    // итог — зелёной строкой
+    const summary = await screen.findByText("Синхронизация завершена: новых 3, обновлено 1");
+    expect(summary.closest(".alert")).toHaveClass("ok");
+    // кнопки вернулись, список и карточка аналитика перечитаны
+    expect(screen.getByRole("button", { name: "Синхронизировать" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Проверить выбранные \(1\)/ })).toBeEnabled();
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/analysts/5/documents")).length).toBe(2);
+      expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/analysts/5").length).toBe(2);
+    });
+  });
+
+  it("sync error is reported as a red alert that survives the list reload", async () => {
+    const fetchMock = mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+      },
+      ["/api/analysts/5/sync"],
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Синхронизировать" }));
+
+    emitServerEvent("sync", syncRunEvent);
+    emitServerEvent(
+      "sync",
+      syncDoneEvent([{ analyst_id: 5, created: 0, updated: 0, error: "Confluence недоступен (timeout)" }]),
+    );
+
+    const alert = await screen.findByText(/Синхронизация завершилась с ошибкой/);
+    expect(alert.closest(".alert")).toHaveClass("error");
+
+    // done-обработчик перечитывает список — успех GET не должен стирать
+    // красный итог (ошибка живёт в собственном состоянии, не в error)
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/analysts/5/documents")).length,
+      ).toBe(2);
+    });
+    expect(screen.getByText(/Синхронизация завершилась с ошибкой/)).toBeInTheDocument();
+  });
+
+  it("failed sync launch shows a red alert and frees the button", async () => {
+    // POST /sync не зарегистрирован в моке → 404, запуск не удался
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Синхронизировать" }));
+
+    const alert = await screen.findByText("не найдено");
+    expect(alert.closest(".alert")).toHaveClass("error");
+    // кнопка не застряла в busy
+    expect(screen.getByRole("button", { name: "Синхронизировать" })).toBeEnabled();
+    expect(screen.queryByText(/Синхронизация завершена/)).toBeNull();
+  });
+
+  it("sync started elsewhere locks the header via SSE alone", async () => {
+    // синхронизацию запустили из другой вкладки (или планово) — без клика
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("[СТ] GDS-15 Загрузка кино");
+
+    emitServerEvent("sync", syncRunEvent);
+    expect(await screen.findByRole("button", { name: "Синхронизация…" })).toBeDisabled();
+  });
+
+  it("ignores sync results of other analysts", async () => {
+    mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+      },
+      ["/api/analysts/5/sync"],
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Синхронизировать" }));
+
+    emitServerEvent("sync", syncRunEvent);
+    emitServerEvent("sync", syncDoneEvent([{ analyst_id: 2, created: 5, updated: 0, error: null }]));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Синхронизировать" })).toBeEnabled();
+    });
+    expect(screen.queryByText(/Синхронизация завершена/)).toBeNull();
   });
 
   it("passes search query to the API", async () => {
