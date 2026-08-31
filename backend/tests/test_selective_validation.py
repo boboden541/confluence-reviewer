@@ -85,7 +85,7 @@ class FakeAIValidator:
     def __init__(self, *args, **kwargs):
         pass  # продакшн-код передаёт connection= — фейку он не нужен
 
-    def validate(self, title, markdown, system_prompt=None):
+    def validate(self, title, markdown, system_prompt=None, expected_criteria=None):
         type(self).calls += 1
         type(self).prompts.append(system_prompt)
         return type(self).result

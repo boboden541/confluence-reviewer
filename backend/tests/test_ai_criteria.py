@@ -63,7 +63,7 @@ class FakeAIValidator:
     def __init__(self, *args, **kwargs):
         pass  # продакшн-код передаёт connection= — фейку он не нужен
 
-    def validate(self, title, markdown, system_prompt=None):
+    def validate(self, title, markdown, system_prompt=None, expected_criteria=None):
         type(self).calls += 1
         type(self).prompts.append(system_prompt)
         return AIValidationResult(
@@ -129,6 +129,25 @@ def test_assemble_prompt_head_blocks_tail(client):
     assert "2. «Непротиворечивость требований» — " in prompt
     assert "3. «Однозначность формулировок» — " in prompt
     assert "Ответ строго в JSON" in prompt  # хвост с контрактом ответа
+
+
+def test_prompt_tail_binds_findings_to_chosen_criteria(client):
+    """Хвост промта не тащит легаси-представление о «правильных» критериях
+    (эпоха зашитых полноты/непротиворечивости/однозначности): проверка идёт
+    строго по выбранным критериям, вне-критериальные замечания запрещены —
+    иначе ИИ сам расширяет проверку, даже когда выбран один специфичный
+    критерий (например, «Соответствие шаблону»)."""
+    with SessionLocal() as db:
+        seed_criteria_if_missing(db)
+        criteria = select_criteria(db, [1])  # один критерий — как узкий запуск
+    prompt = assemble_prompt(criteria)
+    # легаси-запрет «не соответствие шаблону» конфликтовал с пользовательским
+    # критерием про шаблон и вынуждал модель вернуться к «содержимому»
+    assert "не соответствие шаблону" not in prompt
+    assert "строго по перечисленным выше критериям" in prompt
+    # «|другое» в контракте приглашало модель к вне-критериальным находкам
+    assert "название одного из перечисленных критериев" in prompt
+    assert "|другое" not in prompt
 
 
 # --- CRUD справочника: создать / править / архив / восстановить ---

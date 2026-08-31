@@ -103,7 +103,18 @@ def _extract_json(text: str) -> dict:
     return data
 
 
-def _parse_findings(raw) -> list[AIFinding]:
+def _parse_findings(
+    raw, expected_criteria: list[str] | None = None
+) -> list[AIFinding]:
+    """Находки модели; ярлык критерия канонизируется по списку прогона.
+
+    Контракт промта («criterion» — название одного из критериев прогона) —
+    просьба, а не гарантия: ярлык сверяется с expected_criteria без учёта
+    регистра и заменяется каноническим названием критерия; чужой или пустой
+    помечается «вне критериев» (находку не теряем, но помечаем честно).
+    Без списка (легаси-вызов) ярлык проходит как есть.
+    """
+    canonical = {name.casefold(): name for name in (expected_criteria or [])}
     findings: list[AIFinding] = []
     if not isinstance(raw, list):
         return findings
@@ -113,9 +124,11 @@ def _parse_findings(raw) -> list[AIFinding]:
         message = str(item.get("message") or "").strip()
         if not message:
             continue
-        # критерий — название из промта прогона (критерии настраиваются
-        # в справочнике, зашитой тройки больше нет); длинный мусор обрезаем
-        criterion = (str(item.get("criterion") or "").strip().lower() or "другое")[:64]
+        label = str(item.get("criterion") or "").strip()
+        if canonical:
+            criterion = canonical.get(label.casefold(), "вне критериев")
+        else:
+            criterion = label or "вне критериев"
         severity = str(item.get("severity") or "minor").strip().lower()
         if severity not in SEVERITIES:
             severity = "minor"
@@ -223,12 +236,18 @@ class AIValidator:
         return f"Подключение установлено (модель {model} ответила пусто)"
 
     def validate(
-        self, title: str, markdown: str, system_prompt: str | None = None
+        self,
+        title: str,
+        markdown: str,
+        system_prompt: str | None = None,
+        expected_criteria: list[str] | None = None,
     ) -> AIValidationResult:
         """Оценить документ (заголовок + содержимое в Markdown).
 
         system_prompt — переопределение стандартного промта на один запуск
         (выбор пользователя в диалоге проверки); None — стандартный.
+        expected_criteria — названия критериев прогона: по ним канонизируются
+        ярлыки находок (см. _parse_findings).
         """
         user_message = f"Документ требований «{title}»:\n\n{markdown}"
         text, model = self._complete(system_prompt or SYSTEM_PROMPT, user_message)
@@ -240,7 +259,7 @@ class AIValidator:
         except (ValueError, json.JSONDecodeError) as exc:
             raise AIValidationError(f"Не удалось разобрать ответ ИИ как JSON: {exc}") from exc
 
-        findings = _parse_findings(data.get("findings"))
+        findings = _parse_findings(data.get("findings"), expected_criteria)
         summary = str(data.get("summary") or "").strip()
         # критичное замечание проваливает проверку, даже если модель сказала passed
         passed = bool(data.get("passed")) and not any(f.severity == "critical" for f in findings)
