@@ -12,7 +12,7 @@ import pytest
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationStatus
 from app.config import get_settings
-from app.services import tasks
+from app.usecase import tasks
 from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationError, AIValidationResult
 from app.usecase.validation import DocumentNotFound

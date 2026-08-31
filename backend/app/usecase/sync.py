@@ -9,8 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
-
+from app import repository
 from app.config import get_settings
 from app.clients.confluence import ConfluenceClient, ConfluenceError, PageSummary, creator_candidates
 from app.database import SessionLocal
@@ -72,11 +71,7 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
                 summaries = await _find_pages(client, analyst)
                 for summary in summaries:
                     try:
-                        doc = db.scalar(
-                            select(ConfluenceDocument).where(
-                                ConfluenceDocument.confluence_page_id == summary.page_id
-                            )
-                        )
+                        doc = repository.documents.get_by_page_id(db, summary.page_id)
                         is_new = doc is None
                         if is_new:
                             doc = ConfluenceDocument(
@@ -137,7 +132,7 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
 async def sync_all() -> list[SyncResult]:
     """Синхронизация всех аналитиков (ФТ-CR-5)."""
     with SessionLocal() as db:
-        ids = db.scalars(select(Analyst.id).order_by(Analyst.id)).all()
+        ids = repository.analysts.list_ids(db)
     results: list[SyncResult] = []
     for analyst_id in ids:
         results.append(await sync_analyst(analyst_id))

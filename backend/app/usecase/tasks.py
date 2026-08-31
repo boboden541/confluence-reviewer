@@ -11,11 +11,10 @@ import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy import select
-
+from app import repository
 from app.database import SessionLocal
-from app.models import ConfluenceDocument, TriggerType
-from app.services.sync import SyncResult, sync_all, sync_analyst
+from app.models import TriggerType
+from app.usecase.sync import SyncResult, sync_all, sync_analyst
 from app.usecase.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
 
@@ -295,14 +294,7 @@ def start_bulk_validation(
 def start_analyst_bulk_validation(analyst_id: int) -> tuple[bool, str]:
     """«Проверить все документы аналитика»: набор id из БД (legacy-эндпоинт)."""
     with SessionLocal() as db:
-        doc_ids = (
-            db.scalars(
-                select(ConfluenceDocument.id)
-                .where(ConfluenceDocument.analyst_id == analyst_id)
-                .order_by(ConfluenceDocument.id)
-            )
-            .all()
-        )
+        doc_ids = repository.documents.ids_for_analyst(db, analyst_id)
     if not doc_ids:
         return False, "У аналитика нет документов для проверки"
     return start_bulk_validation(doc_ids, analyst_id)

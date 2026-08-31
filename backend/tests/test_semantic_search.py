@@ -8,7 +8,7 @@ import pytest
 
 from app.database import SessionLocal
 from app.models import Analyst, ConfluenceDocument, DocumentNote
-from app.routers import documents as documents_router
+from app.usecase import documents as documents_router
 from app.clients import semantic_search as ss
 from app.clients.semantic_search import SemanticSearchError
 

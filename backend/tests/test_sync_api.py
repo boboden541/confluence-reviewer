@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from app.services import tasks
-from app.services.sync import SyncResult
+from app.usecase import tasks
+from app.usecase.sync import SyncResult
 
 
 @pytest.fixture()

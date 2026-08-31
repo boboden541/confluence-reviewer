@@ -40,3 +40,7 @@ class NoReportError(LookupError):
 
 class CommentError(RuntimeError):
     """Не удалось опубликовать комментарий в Confluence."""
+
+
+class AnalystEmailTaken(RuntimeError):
+    """Аналитик с таким email уже существует (конфликт создания/правки)."""

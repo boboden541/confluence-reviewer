@@ -21,7 +21,7 @@ from app.database import Base, SessionLocal, engine
 from app.main import create_app
 from app.models import Analyst, ConfluenceDocument
 from app.routers.events import format_event
-from app.services import tasks
+from app.usecase import tasks
 from app.utils import now_utc
 
 import pytest

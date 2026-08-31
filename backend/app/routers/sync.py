@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.services import tasks
+from app.usecase import tasks
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 

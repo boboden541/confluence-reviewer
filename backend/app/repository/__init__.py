@@ -8,6 +8,22 @@
 usecase работает без отдельного import подмодуля.
 """
 
-from app.repository import ai_settings, criteria, ratings, reports, templates
+from app.repository import (
+    ai_settings,
+    analysts,
+    criteria,
+    documents,
+    ratings,
+    reports,
+    templates,
+)
 
-__all__ = ["ai_settings", "criteria", "ratings", "reports", "templates"]
+__all__ = [
+    "ai_settings",
+    "analysts",
+    "criteria",
+    "documents",
+    "ratings",
+    "reports",
+    "templates",
+]

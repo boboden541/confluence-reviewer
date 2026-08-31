@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     if settings.confluence_base_url:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        from app.services.tasks import start_sync
+        from app.usecase.tasks import start_sync
 
         scheduler = AsyncIOScheduler(timezone="UTC")
         scheduler.add_job(

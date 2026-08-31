@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from app.database import Base, SessionLocal, engine
 from app.models import Analyst, ConfluenceDocument, ValidationStatus
-from app.services import tasks
+from app.usecase import tasks
 from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationResult, SYSTEM_PROMPT
 from app.usecase.validation import run_validation as _run_validation
