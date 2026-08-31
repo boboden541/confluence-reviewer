@@ -26,6 +26,11 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
         # смена промта критерия меняет хэш → документ перевалидируется (ФТ-CR-14)
         ("ai_prompt_hash", "VARCHAR(64)"),
     ],
+    # Контейнер-шаблон у версии (поддержка нескольких шаблонов); nullable —
+    # существующие строки заполняет _migrate_template_containers
+    "template_versions": [
+        ("template_id", "INTEGER REFERENCES templates(id) ON DELETE CASCADE"),
+    ],
 }
 
 
@@ -65,6 +70,26 @@ def _migrate_nullable_columns() -> None:
                         text(f"ALTER TABLE {table} ALTER COLUMN {name} DROP NOT NULL")
                     )
                     logger.info("Миграция: колонка %s.%s теперь nullable", table, name)
+
+
+def _migrate_template_containers() -> None:
+    """Существующая цепочка версий (эпоха одного шаблона) → первый шаблон.
+
+    Однократно и идемпотентно: срабатывает, только когда контейнеров ещё
+    нет, а версии уже есть. Новый шаблон получает пометку «по умолчанию» —
+    поведение для пользователей не меняется."""
+    from sqlalchemy import func, insert, select, update
+
+    from app.models import Template, TemplateVersion
+
+    with engine.begin() as conn:
+        if conn.execute(select(func.count()).select_from(Template)).scalar():
+            return  # контейнеры уже есть — миграция не нужна
+        if not conn.execute(select(func.count()).select_from(TemplateVersion)).scalar():
+            return  # версий нет — первый шаблон создаст сид
+        template_id = conn.execute(insert(Template).values(is_default=True)).inserted_primary_key[0]
+        conn.execute(update(TemplateVersion).values(template_id=template_id))
+        logger.info("Миграция: версии шаблона объединены в шаблон №%s", template_id)
 
 
 class Base(DeclarativeBase):
@@ -119,6 +144,7 @@ def init_db(retries: int = 15, delay: float = 2.0) -> None:
             Base.metadata.create_all(bind=engine)
             _migrate_added_columns()
             _migrate_nullable_columns()
+            _migrate_template_containers()
             return
         except Exception as exc:  # pragma: no cover - зависит от окружения
             last_error = exc

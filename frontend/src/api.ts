@@ -349,6 +349,28 @@ export interface TemplateInfo {
   created_at: string;
 }
 
+/** GET /api/templates — карточка шаблона в списке раздела */
+export interface TemplateCard {
+  id: number;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  is_archived: boolean;
+  /** Активная версия: её id уходит в проверку как template_id */
+  active_version_id: number | null;
+  active_version_created_at: string | null;
+  section_count: number;
+  title_marker: string;
+}
+
+/** POST /api/templates и PUT /api/templates/:id */
+export interface TemplateSaveRequest {
+  name: string;
+  description: string | null;
+  title_marker: string;
+  sections: TemplateSection[];
+}
+
 export interface TemplateVersionInfo {
   id: number;
   name: string;

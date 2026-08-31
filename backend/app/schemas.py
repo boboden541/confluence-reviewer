@@ -388,7 +388,7 @@ class TemplateSection(BaseModel):
 
 
 class TemplateUpdate(BaseModel):
-    """PUT /api/template: маркер названия + плоский список разделов.
+    """PUT /api/template (legacy): маркер названия + плоский список разделов.
 
     name/description и повторяемые блоки из UI не редактируются —
     переносятся из предыдущей версии (см. services.template_store).
@@ -396,6 +396,46 @@ class TemplateUpdate(BaseModel):
 
     title_marker: str = Field(default="", max_length=100)
     sections: list[TemplateSection] = Field(default_factory=list, max_length=200)
+
+
+class TemplateSave(BaseModel):
+    """POST/PUT /api/templates: название, описание, маркер и структура.
+
+    Название видно в диалоге проверки; каждое сохранение создаёт новую
+    версию — история помнит, как шаблон назывался в момент проверки."""
+
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    title_marker: str = Field(default="", max_length=100)
+    sections: list[TemplateSection] = Field(default_factory=list, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Название шаблона не может быть пустым")
+        return cleaned
+
+    @field_validator("description")
+    @classmethod
+    def description_clean(cls, value: str | None) -> str | None:
+        return value.strip() if value else value
+
+
+class TemplateCardOut(BaseModel):
+    """Карточка шаблона в списке раздела (и архивный блок)."""
+
+    id: int
+    name: str
+    description: str | None = None
+    is_default: bool
+    is_archived: bool
+    # Активная версия: её id уходит в проверку как template_id
+    active_version_id: int | None = None
+    active_version_created_at: datetime | None = None
+    section_count: int = 0
+    title_marker: str = ""
 
 
 class TemplateOut(BaseModel):
