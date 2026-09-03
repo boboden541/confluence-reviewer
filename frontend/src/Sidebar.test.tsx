@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "./App";
-import type { Analyst } from "./api";
+import type { Analyst, Cluster } from "./api";
 import { emitServerEvent } from "./events";
 
 // мок: ключи вида "METHOD /path" точечно, голый путь — для GET
@@ -32,6 +32,11 @@ const ANALYSTS: Analyst[] = [
     documents_count: 17,
     last_synced_at: null,
     sync_error: null,
+    team_id: null,
+    team_name: null,
+    cluster_id: null,
+    cluster_name: null,
+    domains: [],
   },
   {
     id: 6,
@@ -42,6 +47,35 @@ const ANALYSTS: Analyst[] = [
     documents_count: 0,
     last_synced_at: null,
     sync_error: null,
+    team_id: null,
+    team_name: null,
+    cluster_id: null,
+    cluster_name: null,
+    domains: [],
+  },
+];
+
+// аналитик, распределённый по структуре: кластер «Медиа» → команда «SEO»
+const SEO_ANALYST: Analyst = {
+  ...ANALYSTS[0],
+  id: 5,
+  team_id: 12,
+  team_name: "Развитие SEO",
+  cluster_id: 3,
+  cluster_name: "Медиа",
+};
+
+const CLUSTERS: Cluster[] = [
+  {
+    id: 3,
+    name: "Медиа",
+    description: "Медиа-экосистема",
+    color: "#6E5DC6",
+    created_at: "2026-01-01T00:00:00",
+    teams_count: 1,
+    analysts_count: 1,
+    documents_count: 17,
+    teams: [{ id: 12, name: "Развитие SEO", description: null, analysts_count: 1 }],
   },
 ];
 
@@ -78,6 +112,7 @@ const DOC_PAGES = {
 function baseMocks(extra: Record<string, unknown> = {}) {
   return {
     "/api/analysts": ANALYSTS,
+    "/api/clusters": [] as Cluster[],
     "/api/sync/status": { running: false, started_at: null, finished_at: null, error: null, last_results: [] },
     ...DOC_PAGES,
     ...extra,
@@ -92,6 +127,12 @@ function renderSidebar(path = "/") {
   );
 }
 
+/** В тестовых данных аналитики без команды: их ветки живут внутри
+ *  «Без команды», которую надо раскрыть до кликов по документам. */
+async function openNoTeam() {
+  fireEvent.click(await screen.findByRole("button", { name: "Аналитики без команды" }));
+}
+
 describe("Sidebar", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -103,26 +144,55 @@ describe("Sidebar", () => {
     localStorage.clear();
   });
 
-  it("renders the analysts tree: group link to / and analyst links to their pages", async () => {
+  it("renders the structure tree: home link, all-analysts link, lazy doc branches", async () => {
     const fetchMock = mockFetch(baseMocks());
     renderSidebar();
 
-    const group = await screen.findByRole("link", { name: "👥 Аналитики" });
-    expect(group).toHaveAttribute("href", "/");
-    const analyst = screen.getByRole("link", { name: "Иванов Иван" });
-    expect(analyst).toHaveAttribute("href", "/analysts/5");
-    // старого пункта «Документы» больше нет — дублирование навигации убрано
-    expect(screen.queryByText("Документы")).not.toBeInTheDocument();
+    const home = await screen.findByRole("link", { name: "🗂 Кластеры" });
+    expect(home).toHaveAttribute("href", "/");
+    const all = screen.getByRole("link", { name: "👥 Все аналитики" });
+    expect(all).toHaveAttribute("href", "/analysts");
+    // аналитик скрыт в закрытой ветке «Без команды» — линки появляются
+    // только после раскрытия
+    expect(screen.queryByRole("link", { name: "Иванов Иван" })).not.toBeInTheDocument();
     // без раскрытия ветки документы не грузятся — запроса нет вовсе (ленивость)
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).includes("/api/analysts/5/documents")),
     ).toBe(false);
   });
 
+  it("renders clusters with teams and their analysts from the structure", async () => {
+    mockFetch(
+      baseMocks({
+        "/api/clusters": CLUSTERS,
+        "/api/analysts": [SEO_ANALYST],
+      }),
+    );
+    renderSidebar();
+
+    // кластер виден сразу; команды — внутри раскрытого кластера
+    const cluster = await screen.findByRole("link", { name: "Медиа" });
+    expect(cluster).toHaveAttribute("href", "/clusters/3");
+    expect(screen.queryByRole("link", { name: "Развитие SEO" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Команды кластера Медиа" }));
+    const team = await screen.findByRole("link", { name: "Развитие SEO" });
+    expect(team).toHaveAttribute("href", "/teams/12");
+    // аналитик команды скрыт до раскрытия команды
+    expect(screen.queryByRole("link", { name: "Иванов Иван" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Аналитики команды Развитие SEO" }));
+    expect(await screen.findByRole("link", { name: "Иванов Иван" })).toHaveAttribute(
+      "href",
+      "/analysts/5",
+    );
+  });
+
   it("expanding an analyst lazily loads 5 docs (page_size=5) and shows the rest-link", async () => {
     const fetchMock = mockFetch(baseMocks());
     renderSidebar();
 
+    await openNoTeam();
     fireEvent.click(await screen.findByRole("button", { name: "Документы аналитика Иванов Иван" }));
 
     const docLink = await screen.findByRole("link", { name: "ТЗ Автоматизация отчётности" });
@@ -151,6 +221,7 @@ describe("Sidebar", () => {
     );
     renderSidebar();
 
+    await openNoTeam();
     // один документ — строки «остальные» нет
     fireEvent.click(await screen.findByRole("button", { name: "Документы аналитика Козлов Кирилл" }));
     expect(await screen.findByRole("link", { name: "Единственный документ" })).toBeInTheDocument();
@@ -161,6 +232,7 @@ describe("Sidebar", () => {
     mockFetch(baseMocks());
     renderSidebar();
 
+    await openNoTeam();
     fireEvent.click(await screen.findByRole("button", { name: "Документы аналитика Козлов Кирилл" }));
     expect(await screen.findByText("нет документов")).toBeInTheDocument();
   });
@@ -169,11 +241,32 @@ describe("Sidebar", () => {
     mockFetch(baseMocks());
     renderSidebar("/analysts/5");
 
-    // ветка раскрыта без кликов, документы на месте
+    // ветка «Без команды» и документы раскрыты без кликов
     expect(await screen.findByRole("link", { name: "ТЗ Автоматизация отчётности" })).toBeInTheDocument();
     const analyst = screen.getByRole("link", { name: "Иванов Иван" });
     expect(analyst).toHaveClass("active");
     expect(screen.getByRole("button", { name: "Документы аналитика Иванов Иван" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("auto-expands the analyst's cluster and team chain on /analysts/5", async () => {
+    mockFetch(
+      baseMocks({
+        "/api/clusters": CLUSTERS,
+        "/api/analysts": [SEO_ANALYST],
+      }),
+    );
+    renderSidebar("/analysts/5");
+
+    // кластер и команда раскрыты сами, аналитик на месте
+    expect(await screen.findByRole("link", { name: "Иванов Иван" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Команды кластера Медиа" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Аналитики команды Развитие SEO" })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
@@ -184,6 +277,7 @@ describe("Sidebar", () => {
     renderSidebar("/documents/102");
 
     // на странице документа активного аналитика в URL нет — ветку раскрываем вручную
+    await openNoTeam();
     fireEvent.click(await screen.findByRole("button", { name: "Документы аналитика Иванов Иван" }));
     const active = await screen.findByRole("link", { name: "Требования к модулю интеграции с СМЭВ" });
     expect(active).toHaveClass("active");
@@ -207,6 +301,7 @@ describe("Sidebar", () => {
       }
       const map: Record<string, unknown> = {
         "/api/analysts": ANALYSTS,
+        "/api/clusters": [],
         "/api/sync/status": { running: false, started_at: null, finished_at: null, error: null, last_results: [] },
       };
       return new Response(JSON.stringify(map[path] ?? { detail: "не найдено" }), { status: 200 });
@@ -214,6 +309,7 @@ describe("Sidebar", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderSidebar();
 
+    await openNoTeam();
     fireEvent.click(await screen.findByRole("button", { name: "Документы аналитика Иванов Иван" }));
     expect(await screen.findByText("не удалось загрузить")).toBeInTheDocument();
 
@@ -224,23 +320,24 @@ describe("Sidebar", () => {
     expect(docAttempts).toBe(2);
   });
 
-  it("collapses the whole analysts group with the group arrow", async () => {
+  it("collapses the whole structure with the group arrow", async () => {
     mockFetch(baseMocks());
     renderSidebar();
 
-    const group = await screen.findByRole("button", { name: "Список аналитиков в дереве" });
+    const group = await screen.findByRole("button", { name: "Структура в дереве" });
     expect(group).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(group);
-    expect(screen.queryByRole("link", { name: "Иванов Иван" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Аналитики без команды" })).not.toBeInTheDocument();
     expect(group).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(group);
-    expect(await screen.findByRole("link", { name: "Иванов Иван" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Аналитики без команды" })).toBeInTheDocument();
   });
 
   it("caches the branch: re-expanding does not refetch", async () => {
     const fetchMock = mockFetch(baseMocks());
     renderSidebar();
 
+    await openNoTeam();
     const disc = await screen.findByRole("button", { name: "Документы аналитика Иванов Иван" });
     fireEvent.click(disc);
     expect(await screen.findByRole("link", { name: "BRD Платёжный шлюз" })).toBeInTheDocument();
@@ -309,7 +406,7 @@ describe("Sidebar", () => {
     mockFetch(baseMocks());
     const { container } = renderSidebar();
 
-    await screen.findByRole("link", { name: "Иванов Иван" });
+    await screen.findByRole("link", { name: "🗂 Кластеры" });
     expect(
       (container.querySelector(".sidebar") as HTMLElement).style.getPropertyValue("--sidebar-w"),
     ).toBe("300px");
@@ -320,7 +417,7 @@ describe("Sidebar", () => {
     mockFetch(baseMocks());
     const { container } = renderSidebar();
 
-    await screen.findByRole("link", { name: "Иванов Иван" });
+    await screen.findByRole("link", { name: "🗂 Кластеры" });
     expect(
       (container.querySelector(".sidebar") as HTMLElement).style.getPropertyValue("--sidebar-w"),
     ).toBe("256px");

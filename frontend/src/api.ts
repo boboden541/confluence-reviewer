@@ -104,6 +104,62 @@ export interface Analyst {
   documents_count: number;
   last_synced_at: string | null;
   sync_error: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  domains: string[];
+}
+
+// --- организационная структура: кластеры и команды ---
+
+export interface AnalystBrief {
+  id: number;
+  full_name: string;
+  email: string;
+  documents_count: number;
+  domains: string[];
+}
+
+export interface TeamBrief {
+  id: number;
+  name: string;
+  description: string | null;
+  analysts_count: number;
+}
+
+export interface Cluster {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  created_at: string;
+  teams_count: number;
+  analysts_count: number;
+  documents_count: number;
+  teams: TeamBrief[];
+}
+
+export interface Team {
+  id: number;
+  cluster_id: number;
+  cluster_name: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  analysts: AnalystBrief[];
+  domains: string[];
+}
+
+export interface ClusterInput {
+  name: string;
+  description: string | null;
+  color: string | null;
+}
+
+export interface TeamInput {
+  name: string;
+  description: string | null;
 }
 
 export type ValidationStatus =

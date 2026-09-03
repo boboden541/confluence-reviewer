@@ -9,10 +9,15 @@ import {
   UNAUTHORIZED_EVENT,
   api,
   type Analyst,
+  type Cluster,
   type DocumentListItem,
   type DocumentPage,
   type SyncStatus,
 } from "./api";
+import { clusterColor } from "./orgUi";
+import ClustersPage from "./pages/ClustersPage";
+import ClusterPage from "./pages/ClusterPage";
+import TeamPage from "./pages/TeamPage";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
 import AnalystStatsPage from "./pages/AnalystStatsPage";
@@ -84,6 +89,82 @@ interface DocBranch {
   error: boolean;
 }
 
+/** Ветка аналитика в дереве: строка с ФИО + лениво раскрываемые последние
+ *  документы. Общая для команд и группы «Без команды». */
+function AnalystBranch({
+  analyst,
+  isActive,
+  isOpen,
+  branch,
+  activeDocId,
+  onToggle,
+  onClose,
+}: {
+  analyst: Analyst;
+  isActive: boolean;
+  isOpen: boolean;
+  branch: DocBranch | undefined;
+  activeDocId: number;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="nav-branch">
+      <div className="nav-row">
+        <button
+          type="button"
+          className="disc"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          aria-label={`Документы аналитика ${analyst.full_name}`}
+        >
+          {isOpen ? "▾" : "▸"}
+        </button>
+        <Link
+          to={`/analysts/${analyst.id}`}
+          className={`nav-item${isActive ? " active" : ""}`}
+          aria-current={isActive ? "page" : undefined}
+          onClick={onClose}
+        >
+          <span>{analyst.full_name}</span>
+        </Link>
+      </div>
+      {isOpen && (
+        <div className="nav-tree">
+          {!branch || branch.loading ? (
+            <div className="nav-empty">загрузка…</div>
+          ) : branch.error ? (
+            <div className="nav-empty">не удалось загрузить</div>
+          ) : branch.docs.length === 0 ? (
+            <div className="nav-empty">нет документов</div>
+          ) : (
+            <>
+              {branch.docs.map((doc) => (
+                <Link
+                  key={doc.id}
+                  to={`/documents/${doc.id}`}
+                  className={`nav-doc${doc.id === activeDocId ? " active" : ""}`}
+                  aria-current={doc.id === activeDocId ? "page" : undefined}
+                  onClick={onClose}
+                >
+                  {/* маркер-точка декоративный — из accessible name ссылки исключён */}
+                  <span className="dot" aria-hidden="true">•</span>
+                  <span className="t">{doc.title}</span>
+                </Link>
+              ))}
+              {branch.total > branch.docs.length && (
+                <Link to={`/analysts/${analyst.id}/documents`} className="nav-more" onClick={onClose}>
+                  Показать остальные документы · {branch.total - branch.docs.length}
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ширина сайдбара: тянем правый край, запоминаем выбор
 const SIDEBAR_W_KEY = "cr-sidebar-w";
 const SIDEBAR_MIN = 200;
@@ -95,13 +176,18 @@ function loadSidebarWidth(): number {
   return saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : SIDEBAR_DEFAULT;
 }
 
-/** Сайдбар пространства: навигация + дерево «Аналитики → аналитики → последние
- *  5 документов» (стиль Confluence). Документы ветки грузятся лениво, при первом
- *  раскрытии. На узких экранах прячется off-canvas и открывается кнопкой «Меню». */
+/** Сайдбар пространства: навигация + дерево структуры «Кластеры → команды →
+ *  аналитики → последние 5 документов» (плюс ветка «Без команды»).
+ *  Документы ветки грузятся лениво, при первом раскрытии. На узких экранах
+ *  прячется off-canvas и открывается кнопкой «Меню». */
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation();
+  const [clusters, setClusters] = useState<Cluster[]>([]);
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
-  const [groupOpen, setGroupOpen] = useState(true);
+  const [structureOpen, setStructureOpen] = useState(true);
+  const [openClusters, setOpenClusters] = useState<Set<number>>(new Set());
+  const [openTeams, setOpenTeams] = useState<Set<number>>(new Set());
+  const [noTeamOpen, setNoTeamOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [branches, setBranches] = useState<Record<number, DocBranch>>({});
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -117,12 +203,23 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       .catch(() => setAnalysts([]));
   }, []);
 
-  useEffect(() => {
+  const loadClusters = useCallback(() => {
+    api<Cluster[]>("/api/clusters")
+      .then(setClusters)
+      .catch(() => setClusters([]));
+  }, []);
+
+  const loadStructure = useCallback(() => {
+    loadClusters();
     loadAnalysts();
+  }, [loadClusters, loadAnalysts]);
+
+  useEffect(() => {
+    loadStructure();
     api<SyncStatus>("/api/sync/status")
       .then(setSync)
       .catch(() => setSync(null));
-  }, [loadAnalysts]);
+  }, [loadStructure]);
 
   // документы ветки: грузим при первом раскрытии и кэшируем на монтирование;
   // после ошибки разрешаем повторить — id выкидываем из защиты
@@ -150,7 +247,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   }, []);
 
   // живые события синхронизации (в т.ч. плановой по расписанию): статус в
-  // футере — всегда актуальный; дерево аналитиков обновляем по завершении
+  // футере — всегда актуальный; дерево структуры обновляем по завершении
   // реально наблюдаемого прогона (снимок при подключении — не повод
   // перезагружать ветки)
   useEffect(() => {
@@ -163,13 +260,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       }
       if (!sawRun) return;
       sawRun = false;
-      loadAnalysts();
+      loadStructure();
       // раскрытые ветки: перечитаем последние документы аналитиков
       const loaded = [...loadedRef.current];
       loadedRef.current.clear();
       loaded.forEach((id) => loadDocs(id));
     });
-  }, [loadAnalysts, loadDocs]);
+  }, [loadStructure, loadDocs]);
 
   const toggleBranch = (analystId: number) => {
     if (!expanded.has(analystId)) loadDocs(analystId);
@@ -181,20 +278,68 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     });
   };
 
-  const onAnalysts = location.pathname === "/";
+  const toggleCluster = (clusterId: number) => {
+    setOpenClusters((prev) => {
+      const next = new Set(prev);
+      if (next.has(clusterId)) next.delete(clusterId);
+      else next.add(clusterId);
+      return next;
+    });
+  };
+
+  const toggleTeam = (teamId: number) => {
+    setOpenTeams((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  };
+
+  const onHome = location.pathname === "/";
+  const onAllAnalysts = location.pathname.startsWith("/analysts");
   const onTemplate = location.pathname.startsWith("/template");
   const onAiConnection = location.pathname.startsWith("/ai-connection");
   const onCriteria = location.pathname.startsWith("/criteria");
+  const activeClusterId = Number(location.pathname.match(/^\/clusters\/(\d+)/)?.[1] ?? NaN);
+  const activeTeamId = Number(location.pathname.match(/^\/teams\/(\d+)/)?.[1] ?? NaN);
   const activeAnalystId = Number(
     location.pathname.match(/^\/analysts\/(\d+)/)?.[1] ?? NaN,
   );
   const activeDocId = Number(
     location.pathname.match(/^\/documents\/(\d+)/)?.[1] ?? NaN,
   );
-  // открыли страницу аналитика — раскрываем группу и его ветку в дереве
+  // аналитики вне команд — ветка «Без команды» наравне с кластерами
+  const freeAnalysts = analysts.filter((a) => a.team_id === null);
+  // открыли страницу кластера/команды — раскрываем цепочку до неё
+  useEffect(() => {
+    if (Number.isNaN(activeClusterId) && Number.isNaN(activeTeamId)) return;
+    setStructureOpen(true);
+    if (!Number.isNaN(activeClusterId)) {
+      setOpenClusters((prev) => new Set(prev).add(activeClusterId));
+    }
+    if (!Number.isNaN(activeTeamId)) {
+      setOpenTeams((prev) => new Set(prev).add(activeTeamId));
+      // кластер команды раскрываем, как только дерево догрузится
+      const owner = clusters.find((c) => c.teams.some((t) => t.id === activeTeamId));
+      if (owner) setOpenClusters((prev) => new Set(prev).add(owner.id));
+    }
+  }, [activeClusterId, activeTeamId, clusters]);
+
+  // открыли страницу аналитика — раскрываем его кластер/команду (или «Без
+  // команды») и ветку документов в дереве
   useEffect(() => {
     if (Number.isNaN(activeAnalystId)) return;
-    setGroupOpen(true);
+    setStructureOpen(true);
+    const analyst = analysts.find((a) => a.id === activeAnalystId);
+    if (analyst?.team_id != null) {
+      setOpenTeams((prev) => new Set(prev).add(analyst.team_id as number));
+      if (analyst.cluster_id != null) {
+        setOpenClusters((prev) => new Set(prev).add(analyst.cluster_id as number));
+      }
+    } else if (analyst) {
+      setNoTeamOpen(true);
+    }
     setExpanded((prev) => {
       if (prev.has(activeAnalystId)) return prev;
       const next = new Set(prev);
@@ -202,7 +347,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       return next;
     });
     loadDocs(activeAnalystId);
-  }, [activeAnalystId, loadDocs]);
+  }, [activeAnalystId, analysts, loadDocs]);
 
   // --- ресайз: тянем правый край сайдбара, ширина запоминается ---
   const applyWidth = (w: number) => {
@@ -257,94 +402,164 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <span className="space-name">Ревью требований</span>
       </div>
 
-      <div className="nav-label">Обзор</div>
-      {/* группа: стрелка раскрывает дерево аналитиков, клик по названию —
-          страница списка аналитиков */}
+      <div className="nav-label">Структура</div>
+      {/* группа: стрелка раскрывает дерево структуры, клик по названию —
+          карта кластеров */}
       <div className="nav-row">
         <button
           type="button"
           className="disc"
-          onClick={() => setGroupOpen((v) => !v)}
-          aria-expanded={groupOpen}
-          aria-label="Список аналитиков в дереве"
+          onClick={() => setStructureOpen((v) => !v)}
+          aria-expanded={structureOpen}
+          aria-label="Структура в дереве"
         >
-          {groupOpen ? "▾" : "▸"}
+          {structureOpen ? "▾" : "▸"}
         </button>
         <Link
           to="/"
-          className={`nav-item${onAnalysts ? " active" : ""}`}
-          aria-current={onAnalysts ? "page" : undefined}
+          className={`nav-item${onHome ? " active" : ""}`}
+          aria-current={onHome ? "page" : undefined}
           onClick={onClose}
         >
-          <span className="ic">👥</span> <span>Аналитики</span>
+          <span className="ic">🗂</span> <span>Кластеры</span>
         </Link>
       </div>
-      {groupOpen && (
+      {structureOpen && (
         <div className="nav-tree">
-          {analysts.length === 0 && <div className="nav-empty">аналитики не заведены</div>}
-          {analysts.map((analyst) => {
-            const branch = branches[analyst.id];
-            const isOpen = expanded.has(analyst.id);
+          {clusters.length === 0 && analysts.length === 0 && (
+            <div className="nav-empty">структура не заведена</div>
+          )}
+          {clusters.map((cluster) => {
+            const clusterOpen = openClusters.has(cluster.id);
             return (
-              <div className="nav-branch" key={analyst.id}>
+              <div className="nav-branch nav-cluster" key={cluster.id}>
                 <div className="nav-row">
                   <button
                     type="button"
                     className="disc"
-                    onClick={() => toggleBranch(analyst.id)}
-                    aria-expanded={isOpen}
-                    aria-label={`Документы аналитика ${analyst.full_name}`}
+                    onClick={() => toggleCluster(cluster.id)}
+                    aria-expanded={clusterOpen}
+                    aria-label={`Команды кластера ${cluster.name}`}
                   >
-                    {isOpen ? "▾" : "▸"}
+                    {clusterOpen ? "▾" : "▸"}
                   </button>
+                  <span
+                    className="org-dot"
+                    style={{ background: clusterColor(cluster.color, cluster.id) }}
+                    aria-hidden="true"
+                  />
                   <Link
-                    to={`/analysts/${analyst.id}`}
-                    className={`nav-item${analyst.id === activeAnalystId ? " active" : ""}`}
-                    aria-current={analyst.id === activeAnalystId ? "page" : undefined}
+                    to={`/clusters/${cluster.id}`}
+                    className={`nav-item${cluster.id === activeClusterId ? " active" : ""}`}
+                    aria-current={cluster.id === activeClusterId ? "page" : undefined}
                     onClick={onClose}
                   >
-                    <span>{analyst.full_name}</span>
+                    <span>{cluster.name}</span>
                   </Link>
+                  <span className="nav-count">{cluster.teams_count}</span>
                 </div>
-                {isOpen && (
+                {clusterOpen && (
                   <div className="nav-tree">
-                    {!branch || branch.loading ? (
-                      <div className="nav-empty">загрузка…</div>
-                    ) : branch.error ? (
-                      <div className="nav-empty">не удалось загрузить</div>
-                    ) : branch.docs.length === 0 ? (
-                      <div className="nav-empty">нет документов</div>
-                    ) : (
-                      <>
-                        {branch.docs.map((doc) => (
-                          <Link
-                            key={doc.id}
-                            to={`/documents/${doc.id}`}
-                            className={`nav-doc${doc.id === activeDocId ? " active" : ""}`}
-                            aria-current={doc.id === activeDocId ? "page" : undefined}
-                            onClick={onClose}
-                          >
-                            {/* маркер-точка декоративный — из accessible name ссылки исключён */}
-                            <span className="dot" aria-hidden="true">•</span>
-                            <span className="t">{doc.title}</span>
-                          </Link>
-                        ))}
-                        {branch.total > branch.docs.length && (
-                          <Link
-                            to={`/analysts/${analyst.id}/documents`}
-                            className="nav-more"
-                            onClick={onClose}
-                          >
-                            Показать остальные документы · {branch.total - branch.docs.length}
-                          </Link>
-                        )}
-                      </>
-                    )}
+                    {cluster.teams.length === 0 && <div className="nav-empty">нет команд</div>}
+                    {cluster.teams.map((team) => {
+                      const teamOpen = openTeams.has(team.id);
+                      const members = analysts.filter((a) => a.team_id === team.id);
+                      return (
+                        <div className="nav-branch nav-team" key={team.id}>
+                          <div className="nav-row">
+                            <button
+                              type="button"
+                              className="disc"
+                              onClick={() => toggleTeam(team.id)}
+                              aria-expanded={teamOpen}
+                              aria-label={`Аналитики команды ${team.name}`}
+                            >
+                              {teamOpen ? "▾" : "▸"}
+                            </button>
+                            <Link
+                              to={`/teams/${team.id}`}
+                              className={`nav-item${team.id === activeTeamId ? " active" : ""}`}
+                              aria-current={team.id === activeTeamId ? "page" : undefined}
+                              onClick={onClose}
+                            >
+                              <span>{team.name}</span>
+                            </Link>
+                            <span className="nav-count">{members.length}</span>
+                          </div>
+                          {teamOpen && (
+                            <div className="nav-tree">
+                              {members.length === 0 && (
+                                <div className="nav-empty">нет аналитиков</div>
+                              )}
+                              {members.map((analyst) => (
+                                <AnalystBranch
+                                  key={analyst.id}
+                                  analyst={analyst}
+                                  isActive={analyst.id === activeAnalystId}
+                                  isOpen={expanded.has(analyst.id)}
+                                  branch={branches[analyst.id]}
+                                  activeDocId={activeDocId}
+                                  onToggle={() => toggleBranch(analyst.id)}
+                                  onClose={onClose}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
             );
           })}
+
+          {/* аналитики вне структуры: ровно та же ветка аналитика */}
+          <div className="nav-branch nav-cluster nav-no-team">
+            <div className="nav-row">
+              <button
+                type="button"
+                className="disc"
+                onClick={() => setNoTeamOpen((v) => !v)}
+                aria-expanded={noTeamOpen}
+                aria-label="Аналитики без команды"
+              >
+                {noTeamOpen ? "▾" : "▸"}
+              </button>
+              <span className={`nav-item${onAllAnalysts ? "" : " nav-item-muted"}`}>
+                Без команды
+              </span>
+              <span className="nav-count">{freeAnalysts.length}</span>
+            </div>
+            {noTeamOpen && (
+              <div className="nav-tree">
+                {freeAnalysts.length === 0 && (
+                  <div className="nav-empty">все распределены</div>
+                )}
+                {freeAnalysts.map((analyst) => (
+                  <AnalystBranch
+                    key={analyst.id}
+                    analyst={analyst}
+                    isActive={analyst.id === activeAnalystId}
+                    isOpen={expanded.has(analyst.id)}
+                    branch={branches[analyst.id]}
+                    activeDocId={activeDocId}
+                    onToggle={() => toggleBranch(analyst.id)}
+                    onClose={onClose}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Link
+            to="/analysts"
+            className={`nav-item nav-all-analysts${onAllAnalysts ? " active" : ""}`}
+            aria-current={onAllAnalysts ? "page" : undefined}
+            onClick={onClose}
+          >
+            <span className="ic">👥</span> <span>Все аналитики</span>
+          </Link>
         </div>
       )}
 
@@ -480,7 +695,10 @@ export default function App() {
         />
         <main className="content">
           <Routes>
-            <Route path="/" element={<AnalystsPage />} />
+            <Route path="/" element={<ClustersPage />} />
+            <Route path="/analysts" element={<AnalystsPage />} />
+            <Route path="/clusters/:clusterId" element={<ClusterPage />} />
+            <Route path="/teams/:teamId" element={<TeamPage />} />
             <Route path="/analysts/:analystId" element={<AnalystProfilePage />} />
             <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
             <Route path="/analysts/:analystId/stats" element={<AnalystStatsPage />} />
