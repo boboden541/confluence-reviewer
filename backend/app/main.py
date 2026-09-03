@@ -98,12 +98,15 @@ def create_app(settings=None) -> FastAPI:
     from app.api.documents import router as documents_router
     from app.api.events import router as events_router
     from app.api.health import router as health_router
+    from app.api.org import clusters_router, teams_router
     from app.api.sync import router as sync_router
     from app.api.templates import multi_router as templates_multi_router
     from app.api.templates import router as templates_router
 
     app.include_router(health_router)
     app.include_router(analysts_router)
+    app.include_router(clusters_router)
+    app.include_router(teams_router)
     app.include_router(criteria_router)
     app.include_router(documents_router)
     app.include_router(events_router)

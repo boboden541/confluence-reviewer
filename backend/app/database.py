@@ -30,6 +30,13 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "template_versions": [
         ("template_id", "INTEGER REFERENCES templates(id) ON DELETE CASCADE"),
     ],
+    # Организационная структура: команда аналитика (NULL — «без команды») и
+    # его домены (JSON-список строк, default '[]'). Без ON DELETE каскада —
+    # при удалении команды usecase сначала отвязывает участников.
+    "analysts": [
+        ("team_id", "INTEGER REFERENCES teams(id)"),
+        ("domains", "TEXT DEFAULT '[]'"),
+    ],
 }
 
 
