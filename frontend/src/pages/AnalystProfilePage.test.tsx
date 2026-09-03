@@ -30,6 +30,21 @@ const ANALYST = {
   documents_count: 12,
   last_synced_at: "2026-08-20T10:00:00",
   sync_error: null,
+  team_id: null,
+  team_name: null,
+  cluster_id: null,
+  cluster_name: null,
+  domains: [],
+};
+
+// аналитик, распределённый по структуре
+const IN_TEAM = {
+  ...ANALYST,
+  team_id: 12,
+  team_name: "GDS",
+  cluster_id: 3,
+  cluster_name: "Билетный бизнес",
+  domains: ["вывод на витрину"],
 };
 
 const NOTE = { analyst_id: 5, content: "", created_at: null, updated_at: null };
@@ -95,7 +110,7 @@ describe("AnalystProfilePage", () => {
       await screen.findByRole("heading", { level: 2, name: "Профиль" }),
     ).toBeInTheDocument();
     expect(screen.getByText("декомпозиция").tagName).toBe("STRONG");
-    const editor = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const editor = screen.getByRole("textbox", { name: "Заметка руководителя" }) as HTMLTextAreaElement;
     expect(editor.value).toBe("## Профиль\n- сильные стороны: **декомпозиция**");
   });
 
@@ -106,7 +121,9 @@ describe("AnalystProfilePage", () => {
     });
     renderPage();
 
-    const editor = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
+    const editor = (await screen.findByRole("textbox", {
+      name: "Заметка руководителя",
+    })) as HTMLTextAreaElement;
     fireEvent.change(editor, { target: { value: "новая заметка" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить заметку" }));
 
@@ -146,5 +163,58 @@ describe("AnalystProfilePage", () => {
     renderPage();
 
     expect(await screen.findByText("не найдено")).toBeInTheDocument();
+  });
+
+  it("shows cluster/team breadcrumbs for an assigned analyst", async () => {
+    mockFetch({
+      "/api/analysts/5": IN_TEAM,
+      "/api/analysts/5/note": NOTE,
+    });
+    renderPage();
+
+    // путь кластер → команда → аналитик, всё кликабельно
+    const cluster = await screen.findByText("Билетный бизнес");
+    expect(cluster).toHaveAttribute("href", "/clusters/3");
+    const team = screen.getByText("GDS");
+    expect(team).toHaveAttribute("href", "/teams/12");
+    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/");
+  });
+
+  it("keeps plain breadcrumbs for an analyst without a team", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/note": NOTE,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Аналитики")).toHaveAttribute("href", "/analysts");
+    expect(screen.queryByText("Кластеры")).not.toBeInTheDocument();
+  });
+
+  it("saves edited domains via PUT", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": IN_TEAM,
+      "/api/analysts/5/note": NOTE,
+      "/api/analysts/5/domains": ["вывод на витрину", "загрузка данных"],
+    });
+    renderPage();
+
+    // существующий домен загружен, добавляем второй и сохраняем
+    expect(await screen.findByText("вывод на витрину")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Новый домен"), { target: { value: "загрузка данных" } });
+    fireEvent.click(screen.getByRole("button", { name: "＋ добавить домен" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить домены" }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url) === "/api/analysts/5/domains" && init?.method === "PUT",
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        domains: ["вывод на витрину", "загрузка данных"],
+      });
+    });
+    expect(await screen.findByText("Домены сохранены")).toBeInTheDocument();
   });
 });
