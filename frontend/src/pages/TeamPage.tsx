@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { api, ApiError, type Team } from "../api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { api, ApiError, type Team, type TeamInput } from "../api";
 import { clusterColor, initials } from "../orgUi";
+import { TeamModal } from "../TeamModal";
+import { AddAnalystModal } from "../AddAnalystModal";
 
 /** Экран команды: шапка с описанием, агрегированные домены участников и
- *  карточки аналитиков с их доменами. Управление составом — следующий шаг. */
+ *  карточки аналитиков. Здесь же управление: редактирование/удаление
+ *  команды, добавление и удаление участников. */
 export default function TeamPage() {
   const { teamId } = useParams();
+  const navigate = useNavigate();
   const id = Number(teamId);
   const [team, setTeam] = useState<Team | null>(null);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [editingTeam, setEditingTeam] = useState<TeamInput | null>(null);
+  const [addingAnalyst, setAddingAnalyst] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -24,6 +32,64 @@ export default function TeamPage() {
     setTeam(null);
     void load();
   }, [load]);
+
+  const saveTeam = async (form: TeamInput) => {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/teams/${id}`, { method: "PUT", body: JSON.stringify(form) });
+      setInfo("Команда сохранена");
+      setEditingTeam(null);
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить команду");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteTeam = async () => {
+    if (!team) return;
+    if (!window.confirm(`Удалить команду «${team.name}»? Аналитики останутся без команды.`)) return;
+    setError("");
+    try {
+      await api(`/api/teams/${id}`, { method: "DELETE" });
+      navigate(`/clusters/${team.cluster_id}`);
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось удалить команду");
+    }
+  };
+
+  const addAnalyst = async (analystId: number, domains: string[]) => {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/teams/${id}/analysts`, {
+        method: "POST",
+        body: JSON.stringify({ analyst_id: analystId, domains }),
+      });
+      setInfo("Аналитик добавлен в команду");
+      setAddingAnalyst(false);
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитика");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeAnalyst = async (analystId: number, analystName: string) => {
+    if (!window.confirm(`Убрать «${analystName}» из команды? Документы и оценки останутся.`)) return;
+    setError("");
+    setInfo("");
+    try {
+      await api(`/api/teams/${id}/analysts/${analystId}`, { method: "DELETE" });
+      setInfo(`«${analystName}» убран из команды`);
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось убрать аналитика");
+    }
+  };
 
   if (!team) {
     return error ? <div className="alert error">{error}</div> : <p className="muted">Загрузка…</p>;
@@ -57,7 +123,24 @@ export default function TeamPage() {
             </span>
           </div>
         </div>
+        <div className="head-actions">
+          <button
+            className="btn subtle"
+            onClick={() => setEditingTeam({ name: team.name, description: team.description ?? "" })}
+          >
+            <span aria-hidden="true">✎</span> Редактировать
+          </button>
+          <button className="btn subtle danger" onClick={deleteTeam}>
+            Удалить
+          </button>
+          <button className="btn primary" onClick={() => setAddingAnalyst(true)}>
+            <span aria-hidden="true">＋</span> Добавить аналитика
+          </button>
+        </div>
       </div>
+
+      {error && <div className="alert error">{error}</div>}
+      {info && <div className="alert ok">{info}</div>}
 
       {team.domains.length > 0 && (
         <div className="team-domains">
@@ -73,12 +156,14 @@ export default function TeamPage() {
       <div className="zone-label">Состав команды</div>
       <div className="people-grid">
         {team.analysts.map((analyst) => (
-          <Link key={analyst.id} to={`/analysts/${analyst.id}`} className="person-card person-card-link">
+          <div key={analyst.id} className="person-card">
             <span className="p-avatar" style={{ background: clusterHue }} aria-hidden="true">
               {initials(analyst.full_name)}
             </span>
             <span className="person-card-body">
-              <span className="person-card-name">{analyst.full_name}</span>
+              <Link className="person-card-name" to={`/analysts/${analyst.id}`}>
+                {analyst.full_name}
+              </Link>
               <span className="person-card-sub">
                 {analyst.email} · {analyst.documents_count} док.
               </span>
@@ -92,12 +177,42 @@ export default function TeamPage() {
                 </span>
               )}
             </span>
-          </Link>
+            <span className="person-card-actions">
+              <button
+                className="btn small subtle danger"
+                onClick={() => removeAnalyst(analyst.id, analyst.full_name)}
+              >
+                Убрать
+              </button>
+            </span>
+          </div>
         ))}
         {team.analysts.length === 0 && (
-          <div className="panel table-empty">В команде ещё нет аналитиков.</div>
+          <div className="panel table-empty">В команде ещё нет аналитиков — добавьте первого.</div>
         )}
       </div>
+
+      {editingTeam && (
+        <TeamModal
+          title={`Редактирование команды «${team.name}»`}
+          initial={editingTeam}
+          saving={busy}
+          onSave={(form) => {
+            setEditingTeam(form);
+            void saveTeam(form);
+          }}
+          onClose={() => setEditingTeam(null)}
+        />
+      )}
+      {addingAnalyst && (
+        <AddAnalystModal
+          teamName={team.name}
+          memberIds={new Set(team.analysts.map((a) => a.id))}
+          saving={busy}
+          onSave={(analystId, domains) => void addAnalyst(analystId, domains)}
+          onClose={() => setAddingAnalyst(false)}
+        />
+      )}
     </section>
   );
 }

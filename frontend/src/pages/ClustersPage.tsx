@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type Analyst, type Cluster, type ClusterInput } from "../api";
-import { CLUSTER_PALETTE, clusterColor, clusterColorBg, initials } from "../orgUi";
+import { clusterColor, clusterColorBg, initials } from "../orgUi";
+import { ClusterModal } from "../ClusterModal";
 
 /** Главная страница: карта кластеров (цветные плитки с командами и
  *  счётчиками) и секция «Без команды» — аналитики вне структуры. */
@@ -49,15 +50,16 @@ export default function ClustersPage() {
       },
     });
 
-  const saveCluster = async () => {
-    if (!editing || !editing.form.name.trim()) return;
+  const saveClusterWith = async (form: ClusterInput) => {
+    if (!editing || !form.name.trim()) return;
+    setEditing({ ...editing, form });
     setSaving(true);
     setError("");
     try {
       const payload: ClusterInput = {
-        name: editing.form.name.trim(),
-        description: editing.form.description?.trim() || null,
-        color: editing.form.color,
+        name: form.name.trim(),
+        description: form.description?.trim() || null,
+        color: form.color,
       };
       if (editing.id === null) {
         await api("/api/clusters", { method: "POST", body: JSON.stringify(payload) });
@@ -211,84 +213,16 @@ export default function ClustersPage() {
       )}
 
       {editing && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setEditing(null);
+        <ClusterModal
+          title={editing.id === null ? "Новый кластер" : "Редактирование кластера"}
+          initial={editing.form}
+          saving={saving}
+          onSave={(form) => {
+            setEditing({ ...editing, form });
+            void saveClusterWith(form);
           }}
-        >
-          <div className="modal-panel" role="dialog" aria-label="Кластер">
-            <div className="modal-head">
-              <h2>{editing.id === null ? "Новый кластер" : "Редактирование кластера"}</h2>
-              <button className="modal-close" onClick={() => setEditing(null)} aria-label="Закрыть">
-                ✕
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void saveCluster();
-              }}
-            >
-              <div className="modal-body">
-                <span className="field">
-                  <label htmlFor="cluster-name">Название *</label>
-                  <input
-                    id="cluster-name"
-                    className="text-input"
-                    placeholder="Например: Билетный бизнес"
-                    value={editing.form.name}
-                    onChange={(e) =>
-                      setEditing({ ...editing, form: { ...editing.form, name: e.target.value } })
-                    }
-                    autoFocus
-                  />
-                </span>
-                <span className="field">
-                  <label htmlFor="cluster-desc">Описание</label>
-                  <textarea
-                    id="cluster-desc"
-                    className="text-input"
-                    rows={3}
-                    placeholder="Для чего этот кластер, что в него входит"
-                    value={editing.form.description ?? ""}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        form: { ...editing.form, description: e.target.value },
-                      })
-                    }
-                  />
-                </span>
-                <span className="field">
-                  <label>Цвет</label>
-                  <div className="swatches" role="radiogroup" aria-label="Цвет кластера">
-                    {CLUSTER_PALETTE.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        role="radio"
-                        aria-label={hex}
-                        aria-checked={editing.form.color === hex}
-                        className={`swatch${editing.form.color === hex ? " active" : ""}`}
-                        style={{ background: hex }}
-                        onClick={() => setEditing({ ...editing, form: { ...editing.form, color: hex } })}
-                      />
-                    ))}
-                  </div>
-                </span>
-              </div>
-              <div className="modal-foot">
-                <button className="btn subtle" type="button" onClick={() => setEditing(null)}>
-                  Отмена
-                </button>
-                <button className="btn primary" type="submit" disabled={saving || !editing.form.name.trim()}>
-                  {saving ? "Сохранение…" : "Сохранить"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          onClose={() => setEditing(null)}
+        />
       )}
     </section>
   );

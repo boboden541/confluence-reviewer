@@ -3176,3 +3176,140 @@ a.person-card-link:hover {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* модалка добавления аналитика: список найденных */
+.found-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.found-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.found-row:hover:not(:disabled) {
+  background: var(--row-hover, #f8f9fa);
+}
+.found-row.picked {
+  background: var(--blue-subtle-bg, #e9f2ff);
+  outline: 1px solid var(--blue, #0c66e4);
+}
+.found-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.p-avatar.small {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+.found-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.found-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.found-sub {
+  font-size: 11.5px;
+  color: var(--text-subtlest);
+}
+.found-state {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-subtlest);
+}
+
+/* чипы доменов с редактированием */
+.dom-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 2px dashed var(--border, #d0d5dd);
+  border-radius: 8px;
+}
+.dom-add-row {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.dom-input {
+  font: inherit;
+  font-size: 12.5px;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 6px;
+  padding: 3px 8px;
+  width: 140px;
+}
+.dom-add {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--blue, #0c66e4);
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 10px;
+}
+.dom-add:hover {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}
+.chip-x {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 12px;
+  opacity: 0.6;
+  color: inherit;
+}
+.chip-x:hover {
+  opacity: 1;
+}
+
+/* карточки команд с действиями, карточки участников с действиями */
+.team-card-static {
+  padding: 0;
+}
+.team-card-link {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  flex: 1;
+}
+.team-card-actions,
+.person-card-actions {
+  display: flex;
+  gap: 2px;
+  align-items: flex-start;
+}
+.team-card-static {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.team-card-static > .team-card-actions {
+  padding: 6px 10px;
+  justify-content: flex-end;
+}
+.person-card-actions {
+  margin-left: auto;
+}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ClusterPage from "./ClusterPage";
 import type { Cluster } from "../api";
@@ -72,5 +72,116 @@ describe("ClusterPage", () => {
     mockFetch({});
     renderPage("999");
     expect(await screen.findByText("не найдено")).toBeInTheDocument();
+  });
+
+  it("creates a team through the modal and reloads", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      const method = init?.method ?? "GET";
+      if (path === "/api/teams" && method === "POST") {
+        return new Response(JSON.stringify({ id: 14 }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const map: Record<string, unknown> = { "/api/clusters/3": CLUSTER };
+      const payload = map[path];
+      return payload !== undefined
+        ? new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Добавить команду/ }));
+    fireEvent.change(await screen.findByLabelText("Название *"), { target: { value: "Возвраты" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        ([url, init]) => String(url) === "/api/teams" && init?.method === "POST",
+      );
+      expect(post).toBeDefined();
+      expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+        cluster_id: 3,
+        name: "Возвраты",
+        description: null,
+      });
+    });
+    expect(await screen.findByText("Команда «Возвраты» создана")).toBeInTheDocument();
+  });
+
+  it("deletes a team after confirm", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      const method = init?.method ?? "GET";
+      if (path === "/api/teams/12" && method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+      const map: Record<string, unknown> = { "/api/clusters/3": CLUSTER };
+      const payload = map[path];
+      return payload !== undefined
+        ? new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+
+    // у каждой команды-колонны свои кнопки; удаляем первую (GDS)
+    const card = (await screen.findByText("GDS")).closest(".team-card");
+    fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /Удалить/ }));
+
+    await waitFor(() => {
+      const del = fetchMock.mock.calls.find(
+        ([url, init]) => String(url) === "/api/teams/12" && init?.method === "DELETE",
+      );
+      expect(del).toBeDefined();
+    });
+    expect(await screen.findByText("Команда «GDS» удалена")).toBeInTheDocument();
+  });
+
+  it("edits the cluster through the modal", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      const method = init?.method ?? "GET";
+      if (path === "/api/clusters/3" && method === "PUT") {
+        return new Response(JSON.stringify({ ...CLUSTER, description: "Новое описание" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const map: Record<string, unknown> = { "/api/clusters/3": CLUSTER };
+      const payload = map[path];
+      return payload !== undefined
+        ? new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Редактировать/ }));
+    fireEvent.change(await screen.findByLabelText("Описание"), {
+      target: { value: "Новое описание" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(
+        ([url, init]) => String(url) === "/api/clusters/3" && init?.method === "PUT",
+      );
+      expect(put).toBeDefined();
+      expect(JSON.parse(String(put?.[1]?.body))["description"]).toBe("Новое описание");
+    });
+    expect(await screen.findByText("Кластер сохранён")).toBeInTheDocument();
   });
 });
