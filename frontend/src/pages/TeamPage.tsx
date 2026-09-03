@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, type Team, type TeamInput } from "../api";
+import { api, ApiError, notifyOrgChanged, type Team, type TeamInput } from "../api";
 import { clusterColor, initials } from "../orgUi";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
@@ -40,6 +40,7 @@ export default function TeamPage() {
       await api(`/api/teams/${id}`, { method: "PUT", body: JSON.stringify(form) });
       setInfo("Команда сохранена");
       setEditingTeam(null);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить команду");
@@ -54,13 +55,14 @@ export default function TeamPage() {
     setError("");
     try {
       await api(`/api/teams/${id}`, { method: "DELETE" });
+      notifyOrgChanged();
       navigate(`/clusters/${team.cluster_id}`);
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось удалить команду");
     }
   };
 
-  const addAnalyst = async (analystId: number, domains: string[]) => {
+  const addAnalyst = async (analystId: number, domains: string[] | null) => {
     setBusy(true);
     setError("");
     try {
@@ -70,6 +72,7 @@ export default function TeamPage() {
       });
       setInfo("Аналитик добавлен в команду");
       setAddingAnalyst(false);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитика");
@@ -85,6 +88,7 @@ export default function TeamPage() {
     try {
       await api(`/api/teams/${id}/analysts/${analystId}`, { method: "DELETE" });
       setInfo(`«${analystName}» убран из команды`);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось убрать аналитика");
@@ -95,7 +99,7 @@ export default function TeamPage() {
     return error ? <div className="alert error">{error}</div> : <p className="muted">Загрузка…</p>;
   }
 
-  const clusterHue = clusterColor(null, team.cluster_id);
+  const clusterHue = clusterColor(team.cluster_color, team.cluster_id);
 
   return (
     <section className="page">

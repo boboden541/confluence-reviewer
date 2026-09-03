@@ -27,26 +27,37 @@ def get_analyst(db, analyst_id: int) -> Analyst:
     return analyst
 
 
-def _to_out(db, analyst: Analyst, documents_count: int) -> AnalystOut:
-    """Карточка аналитика с контекстом структуры: команда, кластер, домены."""
+def _to_out(
+    db,
+    analyst: Analyst,
+    documents_count: int,
+    contexts: dict[int, tuple[str, int, str, str | None]] | None = None,
+) -> AnalystOut:
+    """Карточка аналитика с контекстом структуры: команда, кластер, домены.
+
+    contexts — карта команды → (название, id кластера, название кластера,
+    цвет) для списков (один join-запрос вместо двух point-lookup'ов на
+    аналитика); для одиночной карточки собирается на месте.
+    """
     item = AnalystOut.model_validate(analyst)
     item.documents_count = documents_count
     if analyst.team_id is not None:
-        team = repository.org.get_team(db, analyst.team_id)
-        if team is not None:
-            item.team_id = team.id
-            item.team_name = team.name
-            cluster = repository.org.get_cluster(db, team.cluster_id)
-            if cluster is not None:
-                item.cluster_id = cluster.id
-                item.cluster_name = cluster.name
+        if contexts is None:
+            contexts = repository.org.team_contexts(db)
+        ctx = contexts.get(analyst.team_id)
+        if ctx is not None:
+            team_name, cluster_id, cluster_name, _color = ctx
+            item.team_name = team_name
+            item.cluster_id = cluster_id
+            item.cluster_name = cluster_name
     return item
 
 
 def list_analysts(db) -> list[AnalystOut]:
     """ФТ-CR-2: все аналитики с ФИО, email и числом документов."""
+    contexts = repository.org.team_contexts(db)
     return [
-        _to_out(db, analyst, count)
+        _to_out(db, analyst, count, contexts)
         for analyst, count in repository.analysts.list_with_documents_count(db)
     ]
 

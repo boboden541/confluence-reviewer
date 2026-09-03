@@ -50,6 +50,14 @@ export function authHeaders(): Record<string, string> {
   return creds ? { Authorization: `Basic ${creds}` } : {};
 }
 
+// Мутации орг-структуры дёргают это событие: сайдбар (он живёт вне роутов и
+// не перемонтируется) перечитывает дерево без перезагрузки страницы.
+export const ORG_CHANGED_EVENT = "org-changed";
+
+export function notifyOrgChanged(): void {
+  window.dispatchEvent(new Event(ORG_CHANGED_EVENT));
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const resp = await fetch(path, {
     ...options,
@@ -149,6 +157,7 @@ export interface Team {
   id: number;
   cluster_id: number;
   cluster_name: string;
+  cluster_color: string | null;
   name: string;
   description: string | null;
   created_at: string;

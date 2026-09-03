@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ClusterInput } from "./api";
 import { CLUSTER_PALETTE } from "./orgUi";
 
@@ -19,6 +19,15 @@ export function ClusterModal({
   onClose: () => void;
 }) {
   const [form, setForm] = useState<ClusterInput>(initial);
+
+  // Esc закрывает модалку, как и крестик
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
 
   return (
     <div

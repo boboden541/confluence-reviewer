@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TeamInput } from "./api";
 
 /** Модалка создания/редактирования команды: название (уникально в кластере)
@@ -17,6 +17,15 @@ export function TeamModal({
   onClose: () => void;
 }) {
   const [form, setForm] = useState<TeamInput>(initial);
+
+  // Esc закрывает модалку, как и крестик
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
 
   return (
     <div

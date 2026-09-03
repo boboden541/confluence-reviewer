@@ -111,8 +111,10 @@ def update_analyst_domains(
     analyst_id: int, payload: AnalystDomainsUpdate, db: Session = Depends(get_db)
 ):
     """Домены аналитика (свободные теги); возвращает применённый список."""
-    _get_analyst_or_404(analyst_id, db)
-    return analysts_uc.update_analyst_domains(db, analyst_id, payload)
+    try:
+        return analysts_uc.update_analyst_domains(db, analyst_id, payload)
+    except AnalystNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден") from exc
 
 
 @router.get("/{analyst_id}/ratings-summary", response_model=RatingsSummaryOut)

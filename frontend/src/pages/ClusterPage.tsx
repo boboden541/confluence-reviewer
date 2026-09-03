@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, type Cluster, type ClusterInput, type TeamInput } from "../api";
+import { api, ApiError, notifyOrgChanged, type Cluster, type ClusterInput, type TeamInput } from "../api";
 import { clusterColor, clusterColorBg } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
@@ -41,6 +41,7 @@ export default function ClusterPage() {
       await api(`/api/clusters/${id}`, { method: "PUT", body: JSON.stringify(form) });
       setInfo("Кластер сохранён");
       setEditingCluster(null);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить кластер");
@@ -58,6 +59,7 @@ export default function ClusterPage() {
     setError("");
     try {
       await api(`/api/clusters/${id}`, { method: "DELETE" });
+      notifyOrgChanged();
       navigate("/");
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось удалить кластер");
@@ -80,6 +82,7 @@ export default function ClusterPage() {
         setInfo("Команда сохранена");
       }
       setTeamModal(null);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить команду");
@@ -95,6 +98,7 @@ export default function ClusterPage() {
     try {
       await api(`/api/teams/${teamId}`, { method: "DELETE" });
       setInfo(`Команда «${teamName}» удалена`);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось удалить команду");

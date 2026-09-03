@@ -65,12 +65,3 @@ def list_by_team(db: Session, team_id: int) -> list[Analyst]:
             select(Analyst).where(Analyst.team_id == team_id).order_by(Analyst.full_name)
         ).all()
     )
-
-
-def list_without_team(db: Session) -> list[Analyst]:
-    """Аналитики вне структуры («Без команды»), по алфавиту."""
-    return list(
-        db.scalars(
-            select(Analyst).where(Analyst.team_id.is_(None)).order_by(Analyst.full_name)
-        ).all()
-    )

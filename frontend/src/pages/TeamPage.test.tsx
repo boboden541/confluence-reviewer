@@ -25,6 +25,7 @@ const TEAM: Team = {
   id: 12,
   cluster_id: 3,
   cluster_name: "Билетный бизнес",
+  cluster_color: null,
   name: "GDS",
   description: "Бронирование и обмен данными",
   created_at: "2026-01-01T00:00:00",
@@ -157,6 +158,64 @@ describe("TeamPage", () => {
       });
     });
     expect(await screen.findByText("Аналитик добавлен в команду")).toBeInTheDocument();
+  });
+
+  it("sends domains: null when nothing typed, keeping the analyst's tags", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      const method = init?.method ?? "GET";
+      if (path === "/api/teams/12/analysts" && method === "POST") {
+        return new Response(JSON.stringify({ id: 12 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const map: Record<string, unknown> = {
+        "/api/teams/12": TEAM,
+        "/api/analysts": [
+          {
+            id: 9,
+            full_name: "Сидоров Пётр",
+            email: "sidorov@company.ru",
+            confluence_username: null,
+            created_at: "2026-01-01T00:00:00",
+            documents_count: 2,
+            last_synced_at: null,
+            sync_error: null,
+            team_id: null,
+            team_name: null,
+            cluster_id: null,
+            cluster_name: null,
+            domains: ["букинг"],
+          },
+        ],
+      };
+      const payload = map[path];
+      return payload !== undefined
+        ? new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Добавить аналитика/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Сидоров Пётр/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        ([url, init]) => String(url) === "/api/teams/12/analysts" && init?.method === "POST",
+      );
+      expect(post).toBeDefined();
+      // null = «домены не трогать»: перевод не стирает теги аналитика
+      expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+        analyst_id: 9,
+        domains: null,
+      });
+    });
   });
 
   it("removes an analyst after confirm", async () => {

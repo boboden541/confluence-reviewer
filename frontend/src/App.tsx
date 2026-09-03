@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   AUTH_STORAGE_KEY,
@@ -13,6 +13,7 @@ import {
   type DocumentListItem,
   type DocumentPage,
   type SyncStatus,
+  ORG_CHANGED_EVENT,
 } from "./api";
 import { clusterColor } from "./orgUi";
 import ClustersPage from "./pages/ClustersPage";
@@ -191,34 +192,46 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [branches, setBranches] = useState<Record<number, DocBranch>>({});
   const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [structureError, setStructureError] = useState(false);
+  // структура загружена хотя бы раз: эффекты автоподкрытия реагируют только
+  // на первый приход данных, а не на каждый рефреш (иначе свёрнутое
+  // пользователем раскрывается обратно после синхронизации)
+  const [structureLoaded, setStructureLoaded] = useState(false);
   const [width, setWidth] = useState<number>(loadSidebarWidth);
   const [resizing, setResizing] = useState(false);
   const widthRef = useRef(width);
   // ветки, чьи документы уже грузятся/загружены: защита от повторных запросов
   const loadedRef = useRef<Set<number>>(new Set());
 
-  const loadAnalysts = useCallback(() => {
-    api<Analyst[]>("/api/analysts")
-      .then(setAnalysts)
-      .catch(() => setAnalysts([]));
-  }, []);
-
-  const loadClusters = useCallback(() => {
-    api<Cluster[]>("/api/clusters")
-      .then(setClusters)
-      .catch(() => setClusters([]));
-  }, []);
-
+  const clustersRef = useRef<Cluster[]>([]);
+  const analystsRef = useRef<Analyst[]>([]);
   const loadStructure = useCallback(() => {
-    loadClusters();
-    loadAnalysts();
-  }, [loadClusters, loadAnalysts]);
+    // ошибка структуры не глотается молча: без кластеров дерево пустое и
+    // пользователи команд исчезают из навигации — показываем сбой явно
+    Promise.all([api<Cluster[]>("/api/clusters"), api<Analyst[]>("/api/analysts")])
+      .then(([clusterList, analystList]) => {
+        clustersRef.current = clusterList;
+        analystsRef.current = analystList;
+        setClusters(clusterList);
+        setAnalysts(analystList);
+        setStructureError(false);
+        setStructureLoaded(true);
+      })
+      .catch(() => setStructureError(true));
+  }, []);
 
   useEffect(() => {
     loadStructure();
     api<SyncStatus>("/api/sync/status")
       .then(setSync)
       .catch(() => setSync(null));
+  }, [loadStructure]);
+
+  // мутации структуры (кластеры/команды/состав) со своих страниц обновляют
+  // дерево через событие org-changed — без перезагрузки страницы
+  useEffect(() => {
+    window.addEventListener(ORG_CHANGED_EVENT, loadStructure);
+    return () => window.removeEventListener(ORG_CHANGED_EVENT, loadStructure);
   }, [loadStructure]);
 
   // документы ветки: грузим при первом раскрытии и кэшируем на монтирование;
@@ -310,9 +323,27 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     location.pathname.match(/^\/documents\/(\d+)/)?.[1] ?? NaN,
   );
   // аналитики вне команд — ветка «Без команды» наравне с кластерами
-  const freeAnalysts = analysts.filter((a) => a.team_id === null);
-  // открыли страницу кластера/команды — раскрываем цепочку до неё
+  const freeAnalysts = useMemo(
+    () => analysts.filter((a) => a.team_id === null),
+    [analysts],
+  );
+  // участники команд: карта для дерева, чтобы не фильтровать всех аналитиков
+  // на каждую команду в каждом рендере
+  const membersByTeam = useMemo(() => {
+    const map = new Map<number, Analyst[]>();
+    analysts.forEach((a) => {
+      if (a.team_id == null) return;
+      const list = map.get(a.team_id);
+      if (list) list.push(a);
+      else map.set(a.team_id, [a]);
+    });
+    return map;
+  }, [analysts]);
+  // открыли страницу кластера/команды — раскрываем цепочку до неё; зависим
+  // от факта первой загрузки, а не самих данных (рефресы после sync не
+  // переоткрывают свёрнутое пользователем)
   useEffect(() => {
+    if (!structureLoaded) return;
     if (Number.isNaN(activeClusterId) && Number.isNaN(activeTeamId)) return;
     setStructureOpen(true);
     if (!Number.isNaN(activeClusterId)) {
@@ -320,18 +351,19 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     }
     if (!Number.isNaN(activeTeamId)) {
       setOpenTeams((prev) => new Set(prev).add(activeTeamId));
-      // кластер команды раскрываем, как только дерево догрузится
-      const owner = clusters.find((c) => c.teams.some((t) => t.id === activeTeamId));
+      // кластер команды раскрываем по данным, уже пришедшим к этому моменту
+      const owner = clustersRef.current.find((c) => c.teams.some((t) => t.id === activeTeamId));
       if (owner) setOpenClusters((prev) => new Set(prev).add(owner.id));
     }
-  }, [activeClusterId, activeTeamId, clusters]);
+  }, [activeClusterId, activeTeamId, structureLoaded]);
 
   // открыли страницу аналитика — раскрываем его кластер/команду (или «Без
   // команды») и ветку документов в дереве
   useEffect(() => {
+    if (!structureLoaded) return;
     if (Number.isNaN(activeAnalystId)) return;
     setStructureOpen(true);
-    const analyst = analysts.find((a) => a.id === activeAnalystId);
+    const analyst = analystsRef.current.find((a) => a.id === activeAnalystId);
     if (analyst?.team_id != null) {
       setOpenTeams((prev) => new Set(prev).add(analyst.team_id as number));
       if (analyst.cluster_id != null) {
@@ -347,7 +379,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       return next;
     });
     loadDocs(activeAnalystId);
-  }, [activeAnalystId, analysts, loadDocs]);
+  }, [activeAnalystId, structureLoaded, loadDocs]);
 
   // --- ресайз: тянем правый край сайдбара, ширина запоминается ---
   const applyWidth = (w: number) => {
@@ -426,7 +458,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       </div>
       {structureOpen && (
         <div className="nav-tree">
-          {clusters.length === 0 && analysts.length === 0 && (
+          {structureError && (
+            <div className="nav-empty">не удалось загрузить структуру</div>
+          )}
+          {!structureError && clusters.length === 0 && analysts.length === 0 && (
             <div className="nav-empty">структура не заведена</div>
           )}
           {clusters.map((cluster) => {
@@ -463,7 +498,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     {cluster.teams.length === 0 && <div className="nav-empty">нет команд</div>}
                     {cluster.teams.map((team) => {
                       const teamOpen = openTeams.has(team.id);
-                      const members = analysts.filter((a) => a.team_id === team.id);
+                      const members = membersByTeam.get(team.id) ?? [];
                       return (
                         <div className="nav-branch nav-team" key={team.id}>
                           <div className="nav-row">
@@ -551,17 +586,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               </div>
             )}
           </div>
-
-          <Link
-            to="/analysts"
-            className={`nav-item nav-all-analysts${onAllAnalysts ? " active" : ""}`}
-            aria-current={onAllAnalysts ? "page" : undefined}
-            onClick={onClose}
-          >
-            <span className="ic">👥</span> <span>Все аналитики</span>
-          </Link>
         </div>
       )}
+
+      {/* путь к реестру аналитиков доступен и при свёрнутом дереве */}
+      <Link
+        to="/analysts"
+        className={`nav-item nav-all-analysts${onAllAnalysts ? " active" : ""}`}
+        aria-current={onAllAnalysts ? "page" : undefined}
+        onClick={onClose}
+      >
+        <span className="ic">👥</span> <span>Все аналитики</span>
+      </Link>
 
       <div className="nav-label">Настройка</div>
       <Link

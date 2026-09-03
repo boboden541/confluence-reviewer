@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, type Analyst, type Cluster, type ClusterInput } from "../api";
+import { api, ApiError, notifyOrgChanged, type Analyst, type Cluster, type ClusterInput } from "../api";
 import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 
@@ -72,6 +72,7 @@ export default function ClustersPage() {
         setInfo("Кластер сохранён");
       }
       setEditing(null);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить кластер");
@@ -90,6 +91,7 @@ export default function ClustersPage() {
     try {
       await api(`/api/clusters/${cluster.id}`, { method: "DELETE" });
       setInfo(`Кластер «${cluster.name}» удалён`);
+      notifyOrgChanged();
       await load();
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось удалить кластер");

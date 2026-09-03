@@ -86,6 +86,7 @@ class TeamOut(BaseModel):
     id: int
     cluster_id: int
     cluster_name: str
+    cluster_color: str | None = None
     name: str
     description: str | None = None
     created_at: datetime

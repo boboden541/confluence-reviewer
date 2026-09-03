@@ -61,25 +61,17 @@ def _domains_json(domains: list[str]) -> str:
 
 
 def _team_domains(analysts: list[Analyst]) -> list[str]:
-    """Уникальные домены команды: объединение доменов участников."""
-    result: list[str] = []
-    seen: set[str] = set()
-    for analyst in analysts:
-        for domain in _analyst_domains(analyst):
-            key = domain.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(domain)
-    return result
+    """Уникальные домены команды: объединение доменов участников (правила
+    нормализации те же, что у одиночного списка)."""
+    return normalize_domains([d for analyst in analysts for d in _analyst_domains(analyst)])
 
 
-def _to_brief(db, analyst: Analyst) -> AnalystBrief:
+def _to_brief(analyst: Analyst, doc_counts: dict[int, int]) -> AnalystBrief:
     return AnalystBrief(
         id=analyst.id,
         full_name=analyst.full_name,
         email=analyst.email,
-        documents_count=repository.analysts.count_documents(db, analyst.id),
+        documents_count=doc_counts.get(analyst.id, 0),
         domains=_analyst_domains(analyst),
     )
 
@@ -87,23 +79,29 @@ def _to_brief(db, analyst: Analyst) -> AnalystBrief:
 # --- кластеры ---
 
 
-def _cluster_out(db, cluster: Cluster) -> ClusterOut:
+def _cluster_out(
+    db,
+    cluster: Cluster,
+    stats: dict[int, tuple[int, int, int]],
+    team_counts: dict[int, int],
+) -> ClusterOut:
     teams = repository.org.list_teams(db, cluster.id)
+    teams_n, analysts_n, documents_n = stats.get(cluster.id, (0, 0, 0))
     return ClusterOut(
         id=cluster.id,
         name=cluster.name,
         description=cluster.description,
         color=cluster.color,
         created_at=cluster.created_at,
-        teams_count=len(teams),
-        analysts_count=repository.org.analysts_count(db, cluster.id),
-        documents_count=repository.org.documents_count(db, cluster.id),
+        teams_count=teams_n,
+        analysts_count=analysts_n,
+        documents_count=documents_n,
         teams=[
             TeamBrief(
                 id=team.id,
                 name=team.name,
                 description=team.description,
-                analysts_count=repository.org.team_analysts_count(db, team.id),
+                analysts_count=team_counts.get(team.id, 0),
             )
             for team in teams
         ],
@@ -118,12 +116,20 @@ def _get_cluster(db, cluster_id: int) -> Cluster:
 
 
 def list_clusters(db) -> list[ClusterOut]:
-    """Все кластеры по алфавиту, с командами и счётчиками."""
-    return [_cluster_out(db, cluster) for cluster in repository.org.list_clusters(db)]
+    """Все кластеры по алфавиту, с командами и счётчиками (батчево: три
+    групповых запроса на счётчики + один на составы, без N+1)."""
+    stats = repository.org.cluster_stats(db)
+    team_counts = repository.org.team_analyst_counts(db)
+    return [
+        _cluster_out(db, cluster, stats, team_counts)
+        for cluster in repository.org.list_clusters(db)
+    ]
 
 
 def get_cluster_view(db, cluster_id: int) -> ClusterOut:
-    return _cluster_out(db, _get_cluster(db, cluster_id))
+    stats = repository.org.cluster_stats(db)
+    team_counts = repository.org.team_analyst_counts(db)
+    return _cluster_out(db, _get_cluster(db, cluster_id), stats, team_counts)
 
 
 def create_cluster(db, payload: ClusterCreate) -> ClusterOut:
@@ -139,7 +145,7 @@ def create_cluster(db, payload: ClusterCreate) -> ClusterOut:
     db.add(cluster)
     db.commit()
     db.refresh(cluster)
-    return _cluster_out(db, cluster)
+    return _cluster_out(db, cluster, repository.org.cluster_stats(db), repository.org.team_analyst_counts(db))
 
 
 def update_cluster(db, cluster_id: int, payload: ClusterUpdate) -> ClusterOut:
@@ -153,7 +159,7 @@ def update_cluster(db, cluster_id: int, payload: ClusterUpdate) -> ClusterOut:
     cluster.color = payload.color
     db.commit()
     db.refresh(cluster)
-    return _cluster_out(db, cluster)
+    return _cluster_out(db, cluster, repository.org.cluster_stats(db), repository.org.team_analyst_counts(db))
 
 
 def delete_cluster(db, cluster_id: int) -> None:
@@ -171,14 +177,16 @@ def delete_cluster(db, cluster_id: int) -> None:
 def _team_out(db, team: Team) -> TeamOut:
     cluster = repository.org.get_cluster(db, team.cluster_id)
     members = repository.analysts.list_by_team(db, team.id)
+    doc_counts = repository.org.documents_count_map(db, [member.id for member in members])
     return TeamOut(
         id=team.id,
         cluster_id=team.cluster_id,
         cluster_name=cluster.name if cluster else "?",
+        cluster_color=cluster.color if cluster else None,
         name=team.name,
         description=team.description,
         created_at=team.created_at,
-        analysts=[_to_brief(db, analyst) for analyst in members],
+        analysts=[_to_brief(analyst, doc_counts) for analyst in members],
         domains=_team_domains(members),
     )
 
@@ -274,11 +282,3 @@ def set_analyst_domains(db, analyst_id: int, domains: list[str]) -> list[str]:
     analyst.domains = _domains_json(applied)
     db.commit()
     return applied
-
-
-def list_without_team(db) -> list[AnalystBrief]:
-    """Аналитики вне структуры — секция «Без команды» на карте кластеров."""
-    return [
-        _to_brief(db, analyst)
-        for analyst in repository.analysts.list_without_team(db)
-    ]

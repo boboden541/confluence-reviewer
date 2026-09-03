@@ -4,7 +4,9 @@ import { initials } from "./orgUi";
 import { DomainsInput } from "./DomainsInput";
 
 /** Модалка «Добавить аналитика в команду»: поиск по ФИО/email среди всех
- *  аналитиков (уже состоящие в команде помечены), домены нового участника. */
+ *  аналитиков (уже состоящие в команде помечены), домены нового участника.
+ *  Пустой список доменов отправляется как null — «оставить как есть», чтобы
+ *  перевод аналитика не стирал его домены. */
 export function AddAnalystModal({
   teamName,
   memberIds,
@@ -15,7 +17,7 @@ export function AddAnalystModal({
   teamName: string;
   memberIds: Set<number>;
   saving: boolean;
-  onSave: (analystId: number, domains: string[]) => void;
+  onSave: (analystId: number, domains: string[] | null) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -32,10 +34,25 @@ export function AddAnalystModal({
       );
   }, []);
 
+  // Esc закрывает модалку, как и крестик
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   const needle = query.trim().toLowerCase();
   const found = analysts
     .filter((a) => !needle || a.full_name.toLowerCase().includes(needle) || a.email.toLowerCase().includes(needle))
     .slice(0, 8);
+
+  const pick = (analyst: Analyst, inTeam: boolean) => {
+    if (inTeam) return;
+    setSelected(analyst);
+    setDomains([]); // домены не переносятся от предыдущего выбора
+  };
 
   return (
     <div
@@ -54,7 +71,7 @@ export function AddAnalystModal({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (selected) onSave(selected.id, domains);
+            if (selected) onSave(selected.id, domains.length ? domains : null);
           }}
         >
           <div className="modal-body">
@@ -67,6 +84,10 @@ export function AddAnalystModal({
                 placeholder="Начните вводить…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter в поиске — не «отправить форму», а просто очистить ввод
+                  if (e.key === "Enter") e.preventDefault();
+                }}
                 autoFocus
               />
             </span>
@@ -81,9 +102,7 @@ export function AddAnalystModal({
                     key={analyst.id}
                     type="button"
                     className={`found-row${isPicked ? " picked" : ""}`}
-                    onClick={() => {
-                      if (!inTeam) setSelected(analyst);
-                    }}
+                    onClick={() => pick(analyst, inTeam)}
                     disabled={inTeam}
                   >
                     <span className="p-avatar small" aria-hidden="true">
@@ -106,6 +125,7 @@ export function AddAnalystModal({
               <span className="field">
                 <label>Домены участника (свободные теги)</label>
                 <DomainsInput domains={domains} onChange={setDomains} />
+                <div className="hint">Пусто — домены аналитика останутся прежними.</div>
               </span>
             )}
             <div className="hint">

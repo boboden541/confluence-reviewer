@@ -211,7 +211,7 @@ export default function DocumentReport({
 
   const crumbs = (
     <nav className="breadcrumbs">
-      <Link to="/">Аналитики</Link>
+      <Link to="/analysts">Аналитики</Link>
       <span className="sep">/</span>
       <Link to={`/analysts/${doc.analyst_id}/documents`}>{analystName}</Link>
       <span className="sep">/</span>

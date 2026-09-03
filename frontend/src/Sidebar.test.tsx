@@ -328,6 +328,8 @@ describe("Sidebar", () => {
     expect(group).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(group);
     expect(screen.queryByRole("button", { name: "Аналитики без команды" })).not.toBeInTheDocument();
+    // путь к реестру аналитиков не пропадает вместе с деревом
+    expect(screen.getByRole("link", { name: "👥 Все аналитики" })).toBeInTheDocument();
     expect(group).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(group);
     expect(await screen.findByRole("button", { name: "Аналитики без команды" })).toBeInTheDocument();

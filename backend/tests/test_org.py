@@ -62,6 +62,8 @@ def test_cluster_duplicate_name_conflict(client):
     dup = _cluster(client, description="другой")
     assert dup.status_code == 409
     assert "уже существует" in dup.json()["detail"]
+    # регистр не важен — как у команд
+    assert _cluster(client, name="билетный бизнес").status_code == 409
 
 
 def test_cluster_update_duplicate_name_conflict(client):

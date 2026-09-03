@@ -3096,7 +3096,8 @@ a.person-card-link:hover {
   background: rgba(9, 30, 66, 0.44);
   display: grid;
   place-items: center;
-  z-index: 60;
+  /* выше drawer'ов, мобильного сайдбара, поиска и ValidationDialog */
+  z-index: 120;
   padding: 20px;
 }
 .modal-panel {
