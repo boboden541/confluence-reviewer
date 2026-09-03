@@ -44,3 +44,23 @@ class CommentError(RuntimeError):
 
 class AnalystEmailTaken(RuntimeError):
     """Аналитик с таким email уже существует (конфликт создания/правки)."""
+
+
+class ClusterNotFound(LookupError):
+    """Кластер с таким id не существует."""
+
+
+class TeamNotFound(LookupError):
+    """Команда с таким id не существует."""
+
+
+class ClusterNameTaken(RuntimeError):
+    """Кластер с таким названием уже существует."""
+
+
+class TeamNameTaken(RuntimeError):
+    """Команда с таким названием уже есть в этом кластере."""
+
+
+class ClusterNotEmpty(RuntimeError):
+    """Кластер нельзя удалить, пока в нём есть команды."""

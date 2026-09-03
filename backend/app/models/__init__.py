@@ -1,8 +1,8 @@
 """Модель данных: аналитики, Confluence-документы, отчёты валидации, заметки,
-версии шаблона требований.
+версии шаблона требований, организационная структура.
 
-Пакет разбит по доменам (analysts / documents / validation / templates / ai);
-этот фасад собирает все ORM-классы и enum'ы вместе: мапперы SQLAlchemy
+Пакет разбит по доменам (analysts / documents / validation / templates / ai /
+org); этот фасад собирает все ORM-классы и enum'ы вместе: мапперы SQLAlchemy
 конфигурируются при импорте всех подмодулей, а потребители продолжают
 писать `from app.models import Analyst`.
 
@@ -13,6 +13,7 @@
 from app.models.ai import AIConnectionSettings, AiCriterion, CriterionRating
 from app.models.analysts import Analyst, AnalystNote
 from app.models.documents import ConfluenceDocument, DocumentNote
+from app.models.org import Cluster, Team
 from app.models.templates import Template, TemplateVersion
 from app.models.validation import TriggerType, ValidationReport, ValidationStatus
 
@@ -21,9 +22,11 @@ __all__ = [
     "AiCriterion",
     "Analyst",
     "AnalystNote",
+    "Cluster",
     "ConfluenceDocument",
     "CriterionRating",
     "DocumentNote",
+    "Team",
     "Template",
     "TemplateVersion",
     "TriggerType",

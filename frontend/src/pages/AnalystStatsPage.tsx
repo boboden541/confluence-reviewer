@@ -78,7 +78,7 @@ export default function AnalystStatsPage() {
   return (
     <section className="page">
       <nav className="breadcrumbs">
-        <Link to="/">Аналитики</Link>
+        <Link to="/analysts">Аналитики</Link>
         <span className="sep">/</span>
         <Link to={`/analysts/${id}`}>{analyst.full_name}</Link>
         <span className="sep">/</span>

@@ -2814,3 +2814,503 @@ textarea.prompt.locked {
 .dialog .scroll-hint {
   margin-bottom: 12px;
 }
+
+/* ── Организационная структура: карта кластеров, дерево, команды ── */
+
+/* карта кластеров (главная) */
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.cluster-card {
+  background: var(--surface, #fff);
+  border-radius: 10px;
+  border-top: 4px solid var(--border);
+  box-shadow: var(--shadow, 0 1px 2px rgba(9, 30, 66, 0.1));
+  padding: 14px 16px 12px;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.cluster-card:hover {
+  box-shadow: 0 8px 16px rgba(9, 30, 66, 0.14);
+  transform: translateY(-2px);
+}
+.cluster-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.cluster-glyph {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+.cluster-glyph.big {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+}
+.cluster-card-title {
+  flex: 1;
+  min-width: 0;
+}
+.cluster-card-title a {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+.cluster-card-title a:hover {
+  color: var(--blue, #0c66e4);
+}
+.cluster-card-desc {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+.cluster-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+.cluster-card-stats {
+  display: flex;
+  gap: 18px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-subtlest);
+}
+.cluster-card-stats b {
+  display: block;
+  font-size: 16px;
+  color: var(--text);
+  font-weight: 600;
+}
+.cluster-card-map {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+.cluster-team-chip {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 12px;
+  text-decoration: none;
+}
+.cluster-team-chip:hover {
+  filter: brightness(0.95);
+}
+.cluster-team-chip em {
+  font-style: normal;
+  opacity: 0.65;
+  margin-left: 5px;
+}
+.cluster-team-add {
+  font-size: 11.5px;
+  color: var(--text-subtlest);
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  text-decoration: none;
+}
+.cluster-team-add:hover {
+  color: var(--blue, #0c66e4);
+  border-color: var(--blue, #0c66e4);
+}
+
+/* «Без команды» и составы: карточки аналитиков */
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.person-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  box-shadow: var(--shadow, 0 1px 2px rgba(9, 30, 66, 0.1));
+  padding: 12px 14px;
+}
+a.person-card-link {
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+a.person-card-link:hover {
+  box-shadow: 0 6px 12px rgba(9, 30, 66, 0.14);
+  transform: translateY(-2px);
+}
+.p-avatar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.person-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.person-card-name {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.person-card-sub {
+  font-size: 12px;
+  color: var(--text-subtlest);
+}
+.person-card-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.domain-chip {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 11px;
+  background: var(--blue-subtle-bg, #e9f2ff);
+  color: var(--blue, #0c66e4);
+  font-weight: 500;
+}
+.domains-note {
+  font-size: 11.5px;
+  align-self: center;
+}
+.team-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0 4px;
+}
+
+/* экран кластера: команды-колонны */
+.cluster-head {
+  align-items: center;
+  border-top: 4px solid var(--border);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.org-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.team-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow, 0 1px 2px rgba(9, 30, 66, 0.1));
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+.team-card:hover {
+  box-shadow: 0 8px 16px rgba(9, 30, 66, 0.14);
+  transform: translateY(-2px);
+}
+.team-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-left: 4px solid rgba(0, 0, 0, 0.08);
+}
+.team-card-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.team-card-count {
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  padding: 1px 8px;
+  color: var(--text-subtle);
+}
+.team-card-desc {
+  font-size: 12px;
+  color: var(--text-subtle);
+  padding: 8px 14px 12px;
+}
+
+/* дерево структуры в сайдбаре: цветные точки кластеров, счётчики */
+.org-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 3px;
+  margin-left: -4px;
+}
+.nav-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-subtlest);
+  background: var(--bg, #f1f2f4);
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+.nav-cluster > .nav-row > .nav-item {
+  font-weight: 600;
+}
+.nav-team > .nav-row > .nav-item {
+  font-weight: 500;
+}
+.nav-item.nav-item-muted {
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+.nav-all-analysts {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* модалка (кластер; далее — команды и состав) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 30, 66, 0.44);
+  display: grid;
+  place-items: center;
+  /* выше drawer'ов, мобильного сайдбара, поиска и ValidationDialog */
+  z-index: 120;
+  padding: 20px;
+}
+.modal-panel {
+  background: var(--surface, #fff);
+  border-radius: 10px;
+  box-shadow: 0 20px 32px rgba(9, 30, 66, 0.2);
+  width: 480px;
+  max-width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+.modal-head {
+  padding: 16px 20px 4px;
+  display: flex;
+  align-items: center;
+}
+.modal-head h2 {
+  font-size: 16px;
+  margin: 0;
+  flex: 1;
+}
+.modal-close {
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-subtlest);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.modal-close:hover {
+  background: var(--row-hover, #f8f9fa);
+}
+.modal-body {
+  padding: 10px 20px 4px;
+}
+.modal-body .field {
+  display: block;
+  margin-bottom: 12px;
+}
+.modal-body .field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-bottom: 4px;
+}
+.modal-foot {
+  padding: 12px 20px 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  position: relative;
+  padding: 0;
+}
+.swatch.active {
+  border-color: var(--text);
+}
+.swatch.active::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* модалка добавления аналитика: список найденных */
+.found-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.found-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.found-row:hover:not(:disabled) {
+  background: var(--row-hover, #f8f9fa);
+}
+.found-row.picked {
+  background: var(--blue-subtle-bg, #e9f2ff);
+  outline: 1px solid var(--blue, #0c66e4);
+}
+.found-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.p-avatar.small {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+.found-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.found-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.found-sub {
+  font-size: 11.5px;
+  color: var(--text-subtlest);
+}
+.found-state {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-subtlest);
+}
+
+/* чипы доменов с редактированием */
+.dom-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 2px dashed var(--border, #d0d5dd);
+  border-radius: 8px;
+}
+.dom-add-row {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.dom-input {
+  font: inherit;
+  font-size: 12.5px;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 6px;
+  padding: 3px 8px;
+  width: 140px;
+}
+.dom-add {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--blue, #0c66e4);
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 10px;
+}
+.dom-add:hover {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}
+.chip-x {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 12px;
+  opacity: 0.6;
+  color: inherit;
+}
+.chip-x:hover {
+  opacity: 1;
+}
+
+/* карточки команд с действиями, карточки участников с действиями */
+.team-card-static {
+  padding: 0;
+}
+.team-card-link {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  flex: 1;
+}
+.team-card-actions,
+.person-card-actions {
+  display: flex;
+  gap: 2px;
+  align-items: flex-start;
+}
+.team-card-static {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.team-card-static > .team-card-actions {
+  padding: 6px 10px;
+  justify-content: flex-end;
+}
+.person-card-actions {
+  margin-left: auto;
+}

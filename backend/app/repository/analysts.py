@@ -56,3 +56,12 @@ def count_documents(db: Session, analyst_id: int) -> int:
 def get_note(db: Session, analyst_id: int) -> AnalystNote | None:
     """Заметка аналитика (одна на аналитика)."""
     return db.scalar(select(AnalystNote).where(AnalystNote.analyst_id == analyst_id))
+
+
+def list_by_team(db: Session, team_id: int) -> list[Analyst]:
+    """Участники команды по алфавиту (состав, отвязка при удалении команды)."""
+    return list(
+        db.scalars(
+            select(Analyst).where(Analyst.team_id == team_id).order_by(Analyst.full_name)
+        ).all()
+    )

@@ -29,6 +29,14 @@ class Analyst(Base):
     # Переопределение имени пользователя Confluence, если оно не совпадает
     # с email / локальной частью email (БФТ 3.1 №13)
     confluence_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Команда аналитика (ровно одна; NULL — «без команды»). Без ON DELETE
+    # каскада: при удалении команды usecase сначала отвязывает участников.
+    team_id: Mapped[int | None] = mapped_column(
+        ForeignKey("teams.id"), nullable=True, index=True
+    )
+    # Домены аналитика (бизнес-функционал) — JSON-список строк; паттерн
+    # хранения как у TemplateVersion.sections_json
+    domains: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)

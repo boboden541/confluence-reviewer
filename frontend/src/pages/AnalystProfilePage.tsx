@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError, type Analyst, type AnalystNote } from "../api";
+import { DomainsInput } from "../DomainsInput";
 import Markdown from "../Markdown";
 
 function formatDateTime(value: string | null): string {
@@ -19,6 +20,8 @@ export default function AnalystProfilePage() {
   const [analyst, setAnalyst] = useState<Analyst | null>(null);
   const [note, setNote] = useState("");
   const [noteOriginal, setNoteOriginal] = useState("");
+  const [domains, setDomains] = useState<string[]>([]);
+  const [domainsOriginal, setDomainsOriginal] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,6 +30,8 @@ export default function AnalystProfilePage() {
     try {
       const item = await api<Analyst>(`/api/analysts/${id}`);
       setAnalyst(item);
+      setDomains(item.domains);
+      setDomainsOriginal(item.domains);
       const noteResp = await api<AnalystNote>(`/api/analysts/${id}/note`);
       setNote(noteResp.content);
       setNoteOriginal(noteResp.content);
@@ -40,10 +45,35 @@ export default function AnalystProfilePage() {
     setAnalyst(null);
     setNote("");
     setNoteOriginal("");
+    setDomains([]);
+    setDomainsOriginal([]);
     setError("");
     setInfo("");
     void load();
   }, [load]);
+
+  // домены сохраняются отдельным действием: dirty-check по массивам
+  const domainsDirty =
+    domains.length !== domainsOriginal.length ||
+    domains.some((d, i) => d !== domainsOriginal[i]);
+
+  const saveDomains = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const applied = await api<string[]>(`/api/analysts/${id}/domains`, {
+        method: "PUT",
+        body: JSON.stringify({ domains }),
+      });
+      setDomains(applied);
+      setDomainsOriginal(applied);
+      setInfo("Домены сохранены");
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить домены");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveNote = async () => {
     setBusy(true);
@@ -94,8 +124,22 @@ export default function AnalystProfilePage() {
   return (
     <section className="page">
       <nav className="breadcrumbs">
-        <Link to="/">Аналитики</Link>
-        <span className="sep">/</span>
+        {/* причастность к структуре: кликабельный путь кластер → команда */}
+        {analyst.cluster_id != null && analyst.team_id != null ? (
+          <>
+            <Link to="/">Кластеры</Link>
+            <span className="sep">/</span>
+            <Link to={`/clusters/${analyst.cluster_id}`}>{analyst.cluster_name}</Link>
+            <span className="sep">/</span>
+            <Link to={`/teams/${analyst.team_id}`}>{analyst.team_name}</Link>
+            <span className="sep">/</span>
+          </>
+        ) : (
+          <>
+            <Link to="/analysts">Аналитики</Link>
+            <span className="sep">/</span>
+          </>
+        )}
         <span className="crumb-current">{analyst.full_name}</span>
       </nav>
 
@@ -127,12 +171,25 @@ export default function AnalystProfilePage() {
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
+      <div className="zone-label">Домены (бизнес-функционал)</div>
+
+      <div className="notes-zone">
+        <DomainsInput domains={domains} onChange={setDomains} />
+        <div className="head-actions notes-actions">
+          <button className="btn small primary" onClick={saveDomains} disabled={busy || !domainsDirty}>
+            Сохранить домены
+          </button>
+          {domainsDirty && <span className="muted">Есть несохранённые изменения</span>}
+        </div>
+      </div>
+
       <div className="zone-label">Заметки руководителя</div>
 
       <div className="notes-zone">
         <textarea
           className="text-input"
           rows={5}
+          aria-label="Заметка руководителя"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Сильные стороны, зоны роста, договорённости по документам аналитика…"

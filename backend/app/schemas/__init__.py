@@ -1,8 +1,9 @@
 """Pydantic-схемы API.
 
 Пакет разбит по доменам (analysts / documents / validation / templates / ai /
-ratings); фасад сохраняет контракт `from app.schemas import ...` — потребители
-(роутеры, сервисы, тесты) продолжают импортировать классы с одного места.
+ratings / org); фасад сохраняет контракт `from app.schemas import ...` —
+потребители (роутеры, сервисы, тесты) продолжают импортировать классы
+с одного места.
 """
 
 from app.schemas.ai import (
@@ -17,6 +18,7 @@ from app.schemas.ai import (
 )
 from app.schemas.analysts import (
     AnalystCreate,
+    AnalystDomainsUpdate,
     AnalystNoteOut,
     AnalystNoteUpdate,
     AnalystOut,
@@ -29,6 +31,17 @@ from app.schemas.documents import (
     NoteOut,
     NoteUpdate,
     SearchHit,
+)
+from app.schemas.org import (
+    AnalystBrief,
+    ClusterCreate,
+    ClusterOut,
+    ClusterUpdate,
+    TeamAnalystAdd,
+    TeamBrief,
+    TeamCreate,
+    TeamOut,
+    TeamUpdate,
 )
 from app.schemas.ratings import (
     CriterionSummaryOut,
@@ -65,12 +78,17 @@ __all__ = [
     "AiCriterionCreate",
     "AiCriterionOut",
     "AiCriterionUpdate",
+    "AnalystBrief",
     "AnalystCreate",
+    "AnalystDomainsUpdate",
     "AnalystNoteOut",
     "AnalystNoteUpdate",
     "AnalystOut",
     "AnalystUpdate",
     "CheckName",
+    "ClusterCreate",
+    "ClusterOut",
+    "ClusterUpdate",
     "CriterionOptionOut",
     "CriterionSummaryOut",
     "DocumentListItem",
@@ -84,6 +102,11 @@ __all__ = [
     "RatingsSummaryOut",
     "RatingsUpdate",
     "SearchHit",
+    "TeamAnalystAdd",
+    "TeamBrief",
+    "TeamCreate",
+    "TeamOut",
+    "TeamUpdate",
     "TemplateCardOut",
     "TemplateOptionOut",
     "TemplateOut",

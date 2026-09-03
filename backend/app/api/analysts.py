@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db
 from app.schemas import (
     AnalystCreate,
+    AnalystDomainsUpdate,
     AnalystNoteOut,
     AnalystNoteUpdate,
     AnalystOut,
@@ -103,6 +104,17 @@ def delete_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
     """Удалить заметку аналитика. Идемпотентно: заметки нет — тоже 204."""
     _get_analyst_or_404(analyst_id, db)
     analysts_uc.delete_note(db, analyst_id)
+
+
+@router.put("/{analyst_id}/domains", response_model=list[str])
+def update_analyst_domains(
+    analyst_id: int, payload: AnalystDomainsUpdate, db: Session = Depends(get_db)
+):
+    """Домены аналитика (свободные теги); возвращает применённый список."""
+    try:
+        return analysts_uc.update_analyst_domains(db, analyst_id, payload)
+    except AnalystNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден") from exc
 
 
 @router.get("/{analyst_id}/ratings-summary", response_model=RatingsSummaryOut)

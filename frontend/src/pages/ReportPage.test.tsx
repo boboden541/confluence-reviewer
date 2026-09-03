@@ -110,7 +110,8 @@ function renderPage(initialEntries: string[] = ["/documents/42"]) {
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/documents/:documentId" element={<ReportPage />} />
-        <Route path="/" element={<div>Список аналитиков</div>} />
+        {/* реестр аналитиков живёт на /analysts: крошка «Аналитики» ведёт туда */}
+        <Route path="/analysts" element={<div>Список аналитиков</div>} />
         <Route
           path="/analysts/:analystId/documents"
           element={<div>Список документов</div>}

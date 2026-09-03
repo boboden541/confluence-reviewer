@@ -7,6 +7,7 @@ from app import repository
 from app.models import Analyst, AnalystNote
 from app.schemas import (
     AnalystCreate,
+    AnalystDomainsUpdate,
     AnalystNoteOut,
     AnalystOut,
     AnalystUpdate,
@@ -14,6 +15,7 @@ from app.schemas import (
     RatingsSummaryOut,
 )
 from app.usecase.exceptions import AnalystEmailTaken, AnalystNotFound
+from app.usecase.org import set_analyst_domains
 from app.utils import normalize_period_end
 
 
@@ -25,15 +27,39 @@ def get_analyst(db, analyst_id: int) -> Analyst:
     return analyst
 
 
-def _to_out(analyst: Analyst, documents_count: int) -> AnalystOut:
+def _to_out(
+    db,
+    analyst: Analyst,
+    documents_count: int,
+    contexts: dict[int, tuple[str, int, str, str | None]] | None = None,
+) -> AnalystOut:
+    """Карточка аналитика с контекстом структуры: команда, кластер, домены.
+
+    contexts — карта команды → (название, id кластера, название кластера,
+    цвет) для списков (один join-запрос вместо двух point-lookup'ов на
+    аналитика); для одиночной карточки собирается на месте.
+    """
     item = AnalystOut.model_validate(analyst)
     item.documents_count = documents_count
+    if analyst.team_id is not None:
+        if contexts is None:
+            contexts = repository.org.team_contexts(db)
+        ctx = contexts.get(analyst.team_id)
+        if ctx is not None:
+            team_name, cluster_id, cluster_name, _color = ctx
+            item.team_name = team_name
+            item.cluster_id = cluster_id
+            item.cluster_name = cluster_name
     return item
 
 
 def list_analysts(db) -> list[AnalystOut]:
     """ФТ-CR-2: все аналитики с ФИО, email и числом документов."""
-    return [_to_out(analyst, count) for analyst, count in repository.analysts.list_with_documents_count(db)]
+    contexts = repository.org.team_contexts(db)
+    return [
+        _to_out(db, analyst, count, contexts)
+        for analyst, count in repository.analysts.list_with_documents_count(db)
+    ]
 
 
 def create_analyst(db, payload: AnalystCreate) -> AnalystOut:
@@ -48,7 +74,7 @@ def create_analyst(db, payload: AnalystCreate) -> AnalystOut:
     db.add(analyst)
     db.commit()
     db.refresh(analyst)
-    return AnalystOut.model_validate(analyst)
+    return _to_out(db, analyst, 0)
 
 
 def update_analyst(db, analyst_id: int, payload: AnalystUpdate) -> AnalystOut:
@@ -61,7 +87,7 @@ def update_analyst(db, analyst_id: int, payload: AnalystUpdate) -> AnalystOut:
     analyst.confluence_username = payload.confluence_username
     db.commit()
     db.refresh(analyst)
-    return _to_out(analyst, repository.analysts.count_documents(db, analyst.id))
+    return _to_out(db, analyst, repository.analysts.count_documents(db, analyst.id))
 
 
 def delete_analyst(db, analyst_id: int) -> None:
@@ -74,7 +100,13 @@ def delete_analyst(db, analyst_id: int) -> None:
 def get_analyst_card(db, analyst_id: int) -> AnalystOut:
     """Карточка аналитика с числом документов."""
     analyst = get_analyst(db, analyst_id)
-    return _to_out(analyst, repository.analysts.count_documents(db, analyst.id))
+    return _to_out(db, analyst, repository.analysts.count_documents(db, analyst.id))
+
+
+def update_analyst_domains(db, analyst_id: int, payload: AnalystDomainsUpdate) -> list[str]:
+    """Домены аналитика (свободные теги); возвращает применённый список."""
+    get_analyst(db, analyst_id)  # 404, если аналитика нет
+    return set_analyst_domains(db, analyst_id, payload.domains)
 
 
 def get_note_view(db, analyst_id: int) -> AnalystNoteOut:

@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -430,7 +430,7 @@ export default function DocumentsPage() {
   return (
     <section className="page">
       <nav className="breadcrumbs">
-        <Link to="/">Ревью требований</Link>
+        <span>Ревью требований</span>
         <span className="sep">/</span>
         <span>Аналитики</span>
       </nav>

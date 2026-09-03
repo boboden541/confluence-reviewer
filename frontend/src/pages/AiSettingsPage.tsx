@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -178,7 +177,7 @@ export default function AiSettingsPage() {
   return (
     <section className="page">
       <nav className="breadcrumbs">
-        <Link to="/">Ревью требований</Link>
+        <span>Ревью требований</span>
         <span className="sep">/</span>
         <span>Настройка</span>
         <span className="sep">/</span>
