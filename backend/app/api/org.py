@@ -126,9 +126,10 @@ def delete_team(team_id: int, db: Session = Depends(get_db)):
 
 @teams_router.post("/{team_id}/analysts", response_model=TeamOut)
 def add_analyst(team_id: int, payload: TeamAnalystAdd, db: Session = Depends(get_db)):
-    """Привязать аналитика к команде (из другой — перевести); домены обновляются."""
+    """Привязать аналитиков к команде (одного или нескольких); домены
+    обновляются, если переданы."""
     try:
-        return org_uc.add_analyst(db, team_id, payload.analyst_id, payload.domains)
+        return org_uc.add_analyst(db, team_id, payload.analyst_ids, payload.domains)
     except TeamNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Команда не найдена") from exc
     except AnalystNotFound as exc:

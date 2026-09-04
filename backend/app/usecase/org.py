@@ -246,19 +246,26 @@ def delete_team(db, team_id: int) -> None:
 # --- состав команды и домены ---
 
 
-def add_analyst(db, team_id: int, analyst_id: int, domains: list[str] | None) -> TeamOut:
-    """Привязать аналитика к команде (или обновить домены, если он уже в ней).
+def add_analyst(db, team_id: int, analyst_ids: list[int], domains: list[str] | None) -> TeamOut:
+    """Привязать аналитиков к команде (одного или нескольких сразу).
 
-    Аналитик из другой команды переводится: прежняя привязка заменяется,
-    домены перезаписываются присланным набором (пусто — очистить).
+    Аналитик из другой команды переводится: прежняя привязка заменяется.
+    domains=None — домены не трогаются; список — перезаписывается всем
+    выбранным (пустой — очистить). Все id проверяются до первых изменений:
+    несуществующий аналитик откатывает весь запрос.
     """
     team = _get_team(db, team_id)
-    analyst = repository.analysts.get(db, analyst_id)
-    if analyst is None:
-        raise AnalystNotFound(f"Аналитик {analyst_id} не найден")
-    analyst.team_id = team.id
-    if domains is not None:
-        analyst.domains = _domains_json(normalize_domains(domains))
+    analysts = []
+    for analyst_id in analyst_ids:
+        analyst = repository.analysts.get(db, analyst_id)
+        if analyst is None:
+            raise AnalystNotFound(f"Аналитик {analyst_id} не найден")
+        analysts.append(analyst)
+    normalized = normalize_domains(domains) if domains is not None else None
+    for analyst in analysts:
+        analyst.team_id = team.id
+        if normalized is not None:
+            analyst.domains = _domains_json(normalized)
     db.commit()
     return _team_out(db, team)
 

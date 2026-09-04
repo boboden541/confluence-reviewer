@@ -95,8 +95,9 @@ class TeamOut(BaseModel):
 
 
 class TeamAnalystAdd(BaseModel):
-    """Привязка аналитика к команде; домены None — оставить как есть,
-    список — перезаписать (пустой — очистить)."""
+    """Привязка аналитиков к команде (можно нескольких сразу); домены None —
+    оставить как есть, список — перезаписать всем выбранным (пустой —
+    очистить)."""
 
-    analyst_id: int
+    analyst_ids: list[int] = Field(min_length=1, max_length=50)
     domains: list[str] | None = Field(default=None, max_length=50)
