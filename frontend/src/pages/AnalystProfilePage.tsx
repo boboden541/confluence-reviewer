@@ -52,28 +52,35 @@ export default function AnalystProfilePage() {
     void load();
   }, [load]);
 
-  // домены сохраняются отдельным действием: dirty-check по массивам
+  // домены сохраняются автоматически: добавили по Enter или убрали чип —
+  // короткая пауза и PUT; кнопки «Сохранить» больше не требуется
   const domainsDirty =
     domains.length !== domainsOriginal.length ||
     domains.some((d, i) => d !== domainsOriginal[i]);
 
-  const saveDomains = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const applied = await api<string[]>(`/api/analysts/${id}/domains`, {
-        method: "PUT",
-        body: JSON.stringify({ domains }),
-      });
-      setDomains(applied);
-      setDomainsOriginal(applied);
-      setInfo("Домены сохранены");
-    } catch (exc) {
-      setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить домены");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const saveDomains = useCallback(
+    async (next: string[]) => {
+      try {
+        const applied = await api<string[]>(`/api/analysts/${id}/domains`, {
+          method: "PUT",
+          body: JSON.stringify({ domains: next }),
+        });
+        setDomains(applied);
+        setDomainsOriginal(applied);
+        setInfo("Домены сохранены");
+        setError("");
+      } catch (exc) {
+        setError(exc instanceof ApiError ? exc.message : "Не удалось сохранить домены");
+      }
+    },
+    [id],
+  );
+
+  useEffect(() => {
+    if (!domainsDirty) return;
+    const timer = window.setTimeout(() => void saveDomains(domains), 700);
+    return () => window.clearTimeout(timer);
+  }, [domains, domainsDirty, saveDomains]);
 
   const saveNote = async () => {
     setBusy(true);
@@ -176,10 +183,11 @@ export default function AnalystProfilePage() {
       <div className="notes-zone">
         <DomainsInput domains={domains} onChange={setDomains} />
         <div className="head-actions notes-actions">
-          <button className="btn small primary" onClick={saveDomains} disabled={busy || !domainsDirty}>
-            Сохранить домены
-          </button>
-          {domainsDirty && <span className="muted">Есть несохранённые изменения</span>}
+          {domainsDirty ? (
+            <span className="muted">Сохраняем…</span>
+          ) : (
+            info === "Домены сохранены" && <span className="muted">Домены сохранены ✓</span>
+          )}
         </div>
       </div>
 

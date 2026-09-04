@@ -158,7 +158,7 @@ def test_add_and_remove_analyst_sets_team_context(client):
 
     added = client.post(
         f"/api/teams/{team['id']}/analysts",
-        json={"analyst_id": analyst["id"], "domains": ["вывод на витрину", " загрузка данных "]},
+        json={"analyst_ids": [analyst["id"]], "domains": ["вывод на витрину", " загрузка данных "]},
     )
     assert added.status_code == 200
     assert [a["id"] for a in added.json()["analysts"]] == [analyst["id"]]
@@ -190,13 +190,13 @@ def test_move_analyst_between_teams(client):
 
     assert (
         client.post(
-            f"/api/teams/{gds['id']}/analysts", json={"analyst_id": analyst["id"]}
+            f"/api/teams/{gds['id']}/analysts", json={"analyst_ids": [analyst["id"]]}
         ).status_code
         == 200
     )
     moved = client.post(
         f"/api/teams/{fintech['id']}/analysts",
-        json={"analyst_id": analyst["id"], "domains": ["букинг"]},
+        json={"analyst_ids": [analyst["id"]], "domains": ["букинг"]},
     )
     assert moved.status_code == 200
     assert [a["id"] for a in moved.json()["analysts"]] == [analyst["id"]]
@@ -207,8 +207,39 @@ def test_move_analyst_between_teams(client):
 def test_add_analyst_missing_404(client):
     cluster = _cluster(client).json()
     team = _team(client, cluster["id"]).json()
-    resp = client.post(f"/api/teams/{team['id']}/analysts", json={"analyst_id": 999})
+    resp = client.post(f"/api/teams/{team['id']}/analysts", json={"analyst_ids": [999]})
     assert resp.status_code == 404
+
+
+def test_add_several_analysts_at_once(client):
+    """Чекбоксы в UI: пачка аналитиков добавляется одним запросом; домены —
+    общие для всех выбранных; несуществующий id откатывает всю пачку."""
+    cluster = _cluster(client).json()
+    team = _team(client, cluster["id"]).json()
+    first = _analyst(client, "Иванов Иван", "ivanov@company.ru").json()
+    second = _analyst(client, "Белышева Жанна", "belysheva@company.ru").json()
+
+    added = client.post(
+        f"/api/teams/{team['id']}/analysts",
+        json={"analyst_ids": [first["id"], second["id"]], "domains": ["букинг"]},
+    )
+    assert added.status_code == 200
+    assert {a["id"] for a in added.json()["analysts"]} == {first["id"], second["id"]}
+    assert added.json()["domains"] == ["букинг"]
+    for analyst_id in (first["id"], second["id"]):
+        card = client.get(f"/api/analysts/{analyst_id}").json()
+        assert card["team_id"] == team["id"]
+        assert card["domains"] == ["букинг"]
+
+    # один битый id — никто из пачки не привязывается
+    third = _analyst(client, "Сидоров Пётр", "sidorov@company.ru").json()
+    broken = client.post(
+        f"/api/teams/{team['id']}/analysts",
+        json={"analyst_ids": [third["id"], 999]},
+    )
+    assert broken.status_code == 404
+    card = client.get(f"/api/analysts/{third['id']}").json()
+    assert card["team_id"] is None
 
 
 def test_deleting_team_keeps_analyst_domains(client):
@@ -217,7 +248,7 @@ def test_deleting_team_keeps_analyst_domains(client):
     analyst = _analyst(client).json()
     client.post(
         f"/api/teams/{team['id']}/analysts",
-        json={"analyst_id": analyst["id"], "domains": ["подарочные карты"]},
+        json={"analyst_ids": [analyst["id"]], "domains": ["подарочные карты"]},
     )
     assert client.delete(f"/api/teams/{team['id']}").status_code == 204
     card = client.get(f"/api/analysts/{analyst['id']}").json()
@@ -264,7 +295,7 @@ def test_without_team_and_clusters_list(client):
     team = _team(client, cluster["id"]).json()
     in_team = _analyst(client).json()
     free = _analyst(client, "Сидоров Пётр", "sidorov@company.ru").json()
-    client.post(f"/api/teams/{team['id']}/analysts", json={"analyst_id": in_team["id"]})
+    client.post(f"/api/teams/{team['id']}/analysts", json={"analyst_ids": [in_team["id"]]})
 
     listed = client.get("/api/clusters").json()
     assert len(listed) == 1

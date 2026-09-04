@@ -62,20 +62,20 @@ export default function TeamPage() {
     }
   };
 
-  const addAnalyst = async (analystId: number, domains: string[] | null) => {
+  const addAnalyst = async (analystIds: number[], domains: string[] | null) => {
     setBusy(true);
     setError("");
     try {
       await api(`/api/teams/${id}/analysts`, {
         method: "POST",
-        body: JSON.stringify({ analyst_id: analystId, domains }),
+        body: JSON.stringify({ analyst_ids: analystIds, domains }),
       });
-      setInfo("Аналитик добавлен в команду");
+      setInfo(analystIds.length > 1 ? `Добавлено аналитиков: ${analystIds.length}` : "Аналитик добавлен в команду");
       setAddingAnalyst(false);
       notifyOrgChanged();
       await load();
     } catch (exc) {
-      setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитика");
+      setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитиков");
     } finally {
       setBusy(false);
     }

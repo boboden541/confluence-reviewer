@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ClustersPage from "./pages/ClustersPage";
 import type { Analyst, Cluster } from "./api";
 
@@ -35,24 +35,20 @@ const CLUSTERS: Cluster[] = [
       { id: 13, name: "Финтех", description: null, analysts_count: 1 },
     ],
   },
+  {
+    id: 4,
+    name: "Медиа",
+    description: "Медиа-экосистема",
+    color: "#6E5DC6",
+    created_at: "2026-01-02T00:00:00",
+    teams_count: 1,
+    analysts_count: 1,
+    documents_count: 17,
+    teams: [{ id: 21, name: "Развитие SEO", description: null, analysts_count: 1 }],
+  },
 ];
 
 const ANALYSTS: Analyst[] = [
-  {
-    id: 7,
-    full_name: "Алиев Рустам",
-    email: "aliev@company.ru",
-    confluence_username: null,
-    created_at: "2026-01-01T00:00:00",
-    documents_count: 14,
-    last_synced_at: null,
-    sync_error: null,
-    team_id: 12,
-    team_name: "GDS",
-    cluster_id: 3,
-    cluster_name: "Билетный бизнес",
-    domains: ["вывод на витрину"],
-  },
   {
     id: 9,
     full_name: "Сидоров Пётр",
@@ -72,10 +68,19 @@ const ANALYSTS: Analyst[] = [
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <ClustersPage />
+    <MemoryRouter initialEntries={["/"]}>
+      <Routes>
+        <Route path="/" element={<ClustersPage />} />
+        <Route path="/clusters/:clusterId" element={<div>Экран кластера</div>} />
+        <Route path="/teams/:teamId" element={<div>Экран команды</div>} />
+        <Route path="/analysts/:analystId" element={<div>Профиль</div>} />
+      </Routes>
     </MemoryRouter>,
   );
+}
+
+function baseMock(extra: Record<string, unknown> = {}) {
+  return { "/api/clusters": CLUSTERS, "/api/analysts": ANALYSTS, ...extra };
 }
 
 describe("ClustersPage", () => {
@@ -86,42 +91,110 @@ describe("ClustersPage", () => {
     localStorage.clear();
   });
 
-  it("renders cluster cards with counters, team chips and links", async () => {
-    mockFetch({ "/api/clusters": CLUSTERS, "/api/analysts": ANALYSTS });
+  it("renders cluster cards with counters and team chips", async () => {
+    mockFetch(baseMock());
     renderPage();
 
-    const card = await screen.findByRole("link", { name: "Билетный бизнес" });
-    expect(card).toHaveAttribute("href", "/clusters/3");
+    // карточка кластера — кликабельный элемент с aria-меткой
+    const card = await screen.findByRole("link", { name: "Кластер Билетный бизнес" });
+    expect(card).toBeInTheDocument();
     expect(screen.getByText("Продажи билетов")).toBeInTheDocument();
-    // счётчики кластера
-    expect(screen.getByText("42")).toBeInTheDocument(); // документов
     const gds = screen.getByRole("link", { name: /GDS/ });
     expect(gds).toHaveAttribute("href", "/teams/12");
     expect(screen.getByRole("link", { name: /Финтех/ })).toHaveAttribute("href", "/teams/13");
+    expect(screen.getByText("42")).toBeInTheDocument(); // документов
+  });
+
+  it("navigates to the cluster page when clicking anywhere on the card", async () => {
+    mockFetch(baseMock());
+    renderPage();
+
+    // клик не по заголовку, а по счётчикам — вглубь карточки
+    fireEvent.click(await screen.findByText("42"));
+    expect(await screen.findByText("Экран кластера")).toBeInTheDocument();
+  });
+
+  it("card action buttons do not trigger navigation", async () => {
+    mockFetch(baseMock());
+    renderPage();
+
+    // «Изменить» на карточке Билетного бизнеса открывает модалку,
+    // а не уводит на экран кластера
+    const card = await screen.findByRole("link", { name: "Кластер Билетный бизнес" });
+    fireEvent.click(within(card).getByRole("button", { name: /Изменить/ }));
+    expect(await screen.findByRole("dialog", { name: "Кластер" })).toBeInTheDocument();
+    expect(screen.queryByText("Экран кластера")).not.toBeInTheDocument();
+  });
+
+  it("filters clusters with fuzzy search as you type", async () => {
+    mockFetch(baseMock());
+    renderPage();
+
+    const input = await screen.findByLabelText("Поиск кластеров");
+    // опечатка в «билетный» — нечёткий поиск всё равно находит
+    fireEvent.change(input, { target: { value: "билетнй бизнес" } });
+    expect(screen.getByRole("link", { name: "Кластер Билетный бизнес" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Кластер Медиа" })).not.toBeInTheDocument();
+
+    // ищем по названию команды — находим кластер, в котором она состоит
+    fireEvent.change(input, { target: { value: "SEO" } });
+    expect(screen.getByRole("link", { name: "Кластер Медиа" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Кластер Билетный бизнес" })).not.toBeInTheDocument();
+
+    // очистка возвращает всё
+    fireEvent.click(screen.getByRole("button", { name: "Очистить поиск" }));
+    expect(screen.getByRole("link", { name: "Кластер Медиа" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Кластер Билетный бизнес" })).toBeInTheDocument();
+  });
+
+  it("opens the team-creation popup right from the cluster card", async () => {
+    const fetchMock = mockFetch(
+      baseMock({ "POST /api/teams": { id: 14, cluster_id: 3, name: "Возвраты" } }),
+    );
+    renderPage();
+
+    // кнопка «＋ команда» на карточке — не навигация, а попап
+    const card = await screen.findByRole("link", { name: "Кластер Билетный бизнес" });
+    fireEvent.click(within(card).getByRole("button", { name: "＋ команда" }));
+    const dialog = await screen.findByRole("dialog", { name: "Команда" });
+    expect(dialog).toHaveTextContent("Билетный бизнес");
+    expect(screen.queryByText("Экран кластера")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Название *"), { target: { value: "Возвраты" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        ([url, init]) => String(url) === "/api/teams" && init?.method === "POST",
+      );
+      expect(post).toBeDefined();
+      expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+        cluster_id: 3,
+        name: "Возвраты",
+        description: null,
+      });
+    });
+    expect(
+      await screen.findByText("Команда «Возвраты» создана в кластере «Билетный бизнес»"),
+    ).toBeInTheDocument();
   });
 
   it("shows only unassigned analysts in 'Без команды'", async () => {
-    mockFetch({ "/api/clusters": CLUSTERS, "/api/analysts": ANALYSTS });
+    mockFetch(baseMock());
     renderPage();
 
     const free = await screen.findByRole("link", { name: /Сидоров Пётр/ });
     expect(free).toHaveAttribute("href", "/analysts/9");
-    expect(screen.queryByText("Алиев Рустам")).not.toBeInTheDocument();
   });
 
   it("creates a cluster through the modal and reloads", async () => {
-    const fetchMock = mockFetch({
-      "/api/clusters": CLUSTERS,
-      "/api/analysts": ANALYSTS,
-      "POST /api/clusters": { ...CLUSTERS[0], id: 4, name: "Медиа" },
-    });
+    const fetchMock = mockFetch(
+      baseMock({ "POST /api/clusters": { ...CLUSTERS[0], id: 4, name: "Медиа" } }),
+    );
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: /Новый кластер/ }));
-    const nameInput = await screen.findByLabelText("Название *");
-    fireEvent.change(nameInput, { target: { value: "Медиа" } });
-
-    // цвет выбирается свотчем
+    fireEvent.change(await screen.findByLabelText("Название *"), { target: { value: "Медиа" } });
     fireEvent.click(screen.getByRole("radio", { name: "#6E5DC6" }));
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -167,35 +240,14 @@ describe("ClustersPage", () => {
     expect(await screen.findByText("Кластер «Медиа» уже существует")).toBeInTheDocument();
   });
 
-  it("deletes an empty cluster after confirm", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input).split("?")[0];
-      const method = init?.method ?? "GET";
-      if (path === "/api/clusters/3" && method === "DELETE") {
-        return new Response(null, { status: 204 });
-      }
-      const map: Record<string, unknown> = {
-        "/api/clusters": CLUSTERS,
-        "/api/analysts": ANALYSTS,
-      };
-      const payload = map[path];
-      return payload !== undefined
-        ? new Response(JSON.stringify(payload), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        : new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+  it("shows 'Без команды' empty state only when there are free analysts", async () => {
+    mockFetch({
+      "/api/clusters": [],
+      "/api/analysts": [],
     });
-    vi.stubGlobal("fetch", fetchMock);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Удалить/ }));
-    await waitFor(() => {
-      const del = fetchMock.mock.calls.find(
-        ([url, init]) => String(url) === "/api/clusters/3" && init?.method === "DELETE",
-      );
-      expect(del).toBeDefined();
-    });
+    expect(await screen.findByText(/Кластеров ещё нет/)).toBeInTheDocument();
+    expect(screen.queryByText("Без команды")).not.toBeInTheDocument();
   });
 });

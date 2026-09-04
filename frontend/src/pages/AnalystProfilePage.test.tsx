@@ -199,22 +199,54 @@ describe("AnalystProfilePage", () => {
     });
     renderPage();
 
-    // существующий домен загружен, добавляем второй и сохраняем
+    // существующий домен загружен, добавляем второй — сохраняется сам
     expect(await screen.findByText("вывод на витрину")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Новый домен"), { target: { value: "загрузка данных" } });
     fireEvent.click(screen.getByRole("button", { name: "＋ добавить домен" }));
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить домены" }));
 
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(
-        ([url, init]) =>
-          String(url) === "/api/analysts/5/domains" && init?.method === "PUT",
-      );
-      expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
-        domains: ["вывод на витрину", "загрузка данных"],
-      });
-    });
+    await waitFor(
+      () => {
+        const call = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            String(url) === "/api/analysts/5/domains" && init?.method === "PUT",
+        );
+        expect(call).toBeDefined();
+        expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+          domains: ["вывод на витрину", "загрузка данных"],
+        });
+      },
+      { timeout: 3000 },
+    );
     expect(await screen.findByText("Домены сохранены")).toBeInTheDocument();
+  });
+
+  it("adds a domain by pressing Enter and auto-saves it", async () => {
+    const fetchMock = mockFetch({
+      "/api/analysts/5": IN_TEAM,
+      "/api/analysts/5/note": NOTE,
+      "/api/analysts/5/domains": ["вывод на витрину", "букинг"],
+    });
+    renderPage();
+
+    expect(await screen.findByText("вывод на витрину")).toBeInTheDocument();
+    const input = screen.getByLabelText("Новый домен");
+    fireEvent.change(input, { target: { value: "букинг" } });
+    // Enter вместо кнопки «＋ добавить домен»
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByText("букинг")).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        const call = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            String(url) === "/api/analysts/5/domains" && init?.method === "PUT",
+        );
+        expect(call).toBeDefined();
+        expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+          domains: ["вывод на витрину", "букинг"],
+        });
+      },
+      { timeout: 3000 },
+    );
   });
 });
