@@ -3,10 +3,11 @@ import { api, ApiError, type Analyst } from "./api";
 import { initials } from "./orgUi";
 import { DomainsInput } from "./DomainsInput";
 
-/** Модалка «Добавить аналитика в команду»: поиск по ФИО/email среди всех
- *  аналитиков (уже состоящие в команде помечены), домены нового участника.
- *  Пустой список доменов отправляется как null — «оставить как есть», чтобы
- *  перевод аналитика не стирал его домены. */
+/** Модалка «Добавить аналитиков в команду»: поиск по ФИО/email среди всех
+ *  аналитиков с чекбоксами — можно выбрать нескольких сразу. Уже состоящие
+ *  в команде помечены и заблокированы. Домены (если введены) применяются
+ *  всем выбранным; пустой список отправляется как null — «оставить как
+ *  есть», чтобы перевод не стирал существующие теги. */
 export function AddAnalystModal({
   teamName,
   memberIds,
@@ -17,12 +18,12 @@ export function AddAnalystModal({
   teamName: string;
   memberIds: Set<number>;
   saving: boolean;
-  onSave: (analystId: number, domains: string[] | null) => void;
+  onSave: (analystIds: number[], domains: string[] | null) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
-  const [selected, setSelected] = useState<Analyst | null>(null);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [domains, setDomains] = useState<string[]>([]);
   const [error, setError] = useState("");
 
@@ -46,12 +47,21 @@ export function AddAnalystModal({
   const needle = query.trim().toLowerCase();
   const found = analysts
     .filter((a) => !needle || a.full_name.toLowerCase().includes(needle) || a.email.toLowerCase().includes(needle))
-    .slice(0, 8);
+    .slice(0, 12);
 
-  const pick = (analyst: Analyst, inTeam: boolean) => {
+  const toggle = (analyst: Analyst, inTeam: boolean) => {
     if (inTeam) return;
-    setSelected(analyst);
-    setDomains([]); // домены не переносятся от предыдущего выбора
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(analyst.id)) next.delete(analyst.id);
+      else next.add(analyst.id);
+      return next;
+    });
+  };
+
+  const submit = () => {
+    if (picked.size === 0) return;
+    onSave([...picked], domains.length ? domains : null);
   };
 
   return (
@@ -61,9 +71,9 @@ export function AddAnalystModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-panel" role="dialog" aria-label="Добавить аналитика">
+      <div className="modal-panel" role="dialog" aria-label="Добавить аналитиков">
         <div className="modal-head">
-          <h2>Добавить аналитика в команду «{teamName}»</h2>
+          <h2>Добавить аналитиков в команду «{teamName}»</h2>
           <button className="modal-close" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
@@ -71,7 +81,7 @@ export function AddAnalystModal({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (selected) onSave(selected.id, domains.length ? domains : null);
+            submit();
           }}
         >
           <div className="modal-body">
@@ -85,7 +95,7 @@ export function AddAnalystModal({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  // Enter в поиске — не «отправить форму», а просто очистить ввод
+                  // Enter в поиске — не «отправить форму»
                   if (e.key === "Enter") e.preventDefault();
                 }}
                 autoFocus
@@ -96,15 +106,20 @@ export function AddAnalystModal({
               {found.length === 0 && <div className="nav-empty">никого не найдено</div>}
               {found.map((analyst) => {
                 const inTeam = memberIds.has(analyst.id);
-                const isPicked = selected?.id === analyst.id;
+                const isPicked = picked.has(analyst.id);
                 return (
-                  <button
+                  <label
                     key={analyst.id}
-                    type="button"
-                    className={`found-row${isPicked ? " picked" : ""}`}
-                    onClick={() => pick(analyst, inTeam)}
-                    disabled={inTeam}
+                    className={`found-row${isPicked ? " picked" : ""}${inTeam ? " disabled" : ""}`}
                   >
+                    <input
+                      type="checkbox"
+                      className="found-check"
+                      checked={isPicked}
+                      disabled={inTeam}
+                      onChange={() => toggle(analyst, inTeam)}
+                      aria-label={`Выбрать ${analyst.full_name}`}
+                    />
                     <span className="p-avatar small" aria-hidden="true">
                       {initials(analyst.full_name)}
                     </span>
@@ -116,16 +131,19 @@ export function AddAnalystModal({
                       </span>
                     </span>
                     {inTeam && <span className="found-state">в команде</span>}
-                  </button>
+                  </label>
                 );
               })}
             </div>
 
-            {selected && (
+            {picked.size > 0 && (
               <span className="field">
-                <label>Домены участника (свободные теги)</label>
+                <label>Домены участников (свободные теги)</label>
                 <DomainsInput domains={domains} onChange={setDomains} />
-                <div className="hint">Пусто — домены аналитика останутся прежними.</div>
+                <div className="hint">
+                  Применятся всем выбранным ({picked.size}). Пусто — домены аналитиков
+                  останутся прежними.
+                </div>
               </span>
             )}
             <div className="hint">
@@ -137,8 +155,8 @@ export function AddAnalystModal({
             <button className="btn subtle" type="button" onClick={onClose}>
               Отмена
             </button>
-            <button className="btn primary" type="submit" disabled={saving || !selected}>
-              {saving ? "Добавление…" : "Добавить"}
+            <button className="btn primary" type="submit" disabled={saving || picked.size === 0}>
+              {saving ? "Добавление…" : `Добавить${picked.size ? ` (${picked.size})` : ""}`}
             </button>
           </div>
         </form>

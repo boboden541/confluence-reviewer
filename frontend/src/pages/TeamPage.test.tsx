@@ -135,17 +135,17 @@ describe("TeamPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Добавить аналитика/ }));
 
-    // участник команды в списке помечен и заблокирован
+    // участник команды в списке помечен чекбоксом и заблокирован
     expect(await screen.findByText(/уже в этой команде/)).toBeInTheDocument();
-    const memberRow = screen.getByRole("button", { name: /Алиев Рустам/ });
-    expect(memberRow).toBeDisabled();
+    const memberCheck = screen.getByRole("checkbox", { name: "Выбрать Алиев Рустам" });
+    expect(memberCheck).toBeDisabled();
 
-    // поиск и выбор свободного аналитика
+    // поиск и выбор свободного аналитика чекбоксом
     fireEvent.change(screen.getByLabelText("Поиск по ФИО или email"), { target: { value: "Сидоров" } });
-    fireEvent.click(await screen.findByRole("button", { name: /Сидоров Пётр/ }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Выбрать Сидоров Пётр" }));
     fireEvent.change(screen.getByLabelText("Новый домен"), { target: { value: "витрина" } });
     fireEvent.click(screen.getByRole("button", { name: "＋ добавить домен" }));
-    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить (1)" }));
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(
@@ -153,7 +153,7 @@ describe("TeamPage", () => {
       );
       expect(post).toBeDefined();
       expect(JSON.parse(String(post?.[1]?.body))).toEqual({
-        analyst_id: 9,
+        analyst_ids: [9],
         domains: ["витрина"],
       });
     });
@@ -202,8 +202,8 @@ describe("TeamPage", () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: /Добавить аналитика/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Сидоров Пётр/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Выбрать Сидоров Пётр" }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить (1)" }));
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(
@@ -212,7 +212,7 @@ describe("TeamPage", () => {
       expect(post).toBeDefined();
       // null = «домены не трогать»: перевод не стирает теги аналитика
       expect(JSON.parse(String(post?.[1]?.body))).toEqual({
-        analyst_id: 9,
+        analyst_ids: [9],
         domains: null,
       });
     });

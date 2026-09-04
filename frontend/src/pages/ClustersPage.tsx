@@ -1,23 +1,32 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, ApiError, notifyOrgChanged, type Analyst, type Cluster, type ClusterInput } from "../api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import Fuse from "fuse.js";
+import { api, ApiError, notifyOrgChanged, type Analyst, type Cluster, type ClusterInput, type TeamInput } from "../api";
 import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
+import { TeamModal } from "../TeamModal";
 
 /** Главная страница: карта кластеров (цветные плитки с командами и
- *  счётчиками) и секция «Без команды» — аналитики вне структуры. */
+ *  счётчиками) и секция «Без команды» — аналитики вне структуры.
+ *  Карточка кластера кликабельна целиком; поиск — нечёткий (fuse.js),
+ *  фильтрует по названию, описанию и названиям команд. */
 
 const EMPTY_FORM: ClusterInput = { name: "", description: "", color: null };
 
 export default function ClustersPage() {
+  const navigate = useNavigate();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [freeAnalysts, setFreeAnalysts] = useState<Analyst[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
   // модалка кластера: editing=null → скрыта; id=null → создание
   const [editing, setEditing] = useState<{ id: number | null; form: ClusterInput } | null>(null);
   const [saving, setSaving] = useState(false);
+  // попап создания команды прямо с карточки кластера
+  const [teamModalFor, setTeamModalFor] = useState<Cluster | null>(null);
+  const [teamForm, setTeamForm] = useState<TeamInput>({ name: "", description: "" });
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +47,20 @@ export default function ClustersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // нечёткий поиск: опечатки и неполные слова допустимы; ищем и по командам
+  const fuse = useMemo(
+    () =>
+      new Fuse(clusters, {
+        keys: ["name", "description", "teams.name"],
+        threshold: 0.38,
+        ignoreLocation: true,
+      }),
+    [clusters],
+  );
+  const visibleClusters = query.trim()
+    ? fuse.search(query.trim()).map((r) => r.item)
+    : clusters;
 
   const openCreate = () => setEditing({ id: null, form: { ...EMPTY_FORM } });
   const openEdit = (cluster: Cluster) =>
@@ -98,6 +121,32 @@ export default function ClustersPage() {
     }
   };
 
+  // создание команды прямо с карты кластеров
+  const createTeam = async (form: TeamInput) => {
+    if (!teamModalFor || !form.name.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api("/api/teams", {
+        method: "POST",
+        body: JSON.stringify({
+          cluster_id: teamModalFor.id,
+          name: form.name.trim(),
+          description: form.description?.trim() || null,
+        }),
+      });
+      setInfo(`Команда «${form.name.trim()}» создана в кластере «${teamModalFor.name}»`);
+      setTeamModalFor(null);
+      setTeamForm({ name: "", description: null });
+      notifyOrgChanged();
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось создать команду");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <section className="page">
       <nav className="breadcrumbs">
@@ -128,22 +177,53 @@ export default function ClustersPage() {
       {info && <div className="alert ok">{info}</div>}
       {loading && <p className="muted">Загрузка…</p>}
 
+      {clusters.length > 0 && (
+        <div className="filter-row">
+          <input
+            className="text-input filter-input"
+            placeholder="Поиск кластеров и команд — нечёткий, опечатки допустимы"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Поиск кластеров"
+          />
+          {query && (
+            <button className="btn subtle" onClick={() => setQuery("")} aria-label="Очистить поиск">
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="cluster-grid">
-        {clusters.map((cluster) => {
+        {visibleClusters.map((cluster) => {
           const color = clusterColor(cluster.color, cluster.id);
           return (
-            <div key={cluster.id} className="cluster-card" style={{ borderTopColor: color }}>
+            <div
+              key={cluster.id}
+              className="cluster-card clickable"
+              style={{ borderTopColor: color }}
+              role="link"
+              tabIndex={0}
+              aria-label={`Кластер ${cluster.name}`}
+              onClick={() => navigate(`/clusters/${cluster.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigate(`/clusters/${cluster.id}`);
+                }
+              }}
+            >
               <div className="cluster-card-head">
                 <span className="cluster-glyph" style={{ background: color }} aria-hidden="true">
                   {initials(cluster.name)}
                 </span>
                 <div className="cluster-card-title">
-                  <Link to={`/clusters/${cluster.id}`}>{cluster.name}</Link>
+                  <span className="cluster-card-name">{cluster.name}</span>
                   {cluster.description && (
                     <div className="cluster-card-desc">{cluster.description}</div>
                   )}
                 </div>
-                <div className="cluster-card-actions">
+                <div className="cluster-card-actions" onClick={(e) => e.stopPropagation()}>
                   <button className="btn small subtle" onClick={() => openEdit(cluster)}>
                     <span aria-hidden="true">✎</span> Изменить
                   </button>
@@ -163,7 +243,7 @@ export default function ClustersPage() {
                   <b>{cluster.documents_count}</b> документов
                 </span>
               </div>
-              <div className="cluster-card-map">
+              <div className="cluster-card-map" onClick={(e) => e.stopPropagation()}>
                 {cluster.teams.map((team) => (
                   <Link
                     key={team.id}
@@ -175,9 +255,15 @@ export default function ClustersPage() {
                     <em>{team.analysts_count}</em>
                   </Link>
                 ))}
-                <Link to={`/clusters/${cluster.id}`} className="cluster-team-add">
+                <button
+                  className="cluster-team-add"
+                  onClick={() => {
+                    setTeamForm({ name: "", description: "" });
+                    setTeamModalFor(cluster);
+                  }}
+                >
                   ＋ команда
-                </Link>
+                </button>
               </div>
             </div>
           );
@@ -185,6 +271,11 @@ export default function ClustersPage() {
         {!loading && clusters.length === 0 && (
           <div className="panel table-empty">
             Кластеров ещё нет — создайте первый и заведите в нём команды.
+          </div>
+        )}
+        {!loading && clusters.length > 0 && visibleClusters.length === 0 && (
+          <div className="panel table-empty">
+            По запросу «{query}» кластеров не найдено.
           </div>
         )}
       </div>
@@ -224,6 +315,18 @@ export default function ClustersPage() {
             void saveClusterWith(form);
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {teamModalFor && (
+        <TeamModal
+          title={`Новая команда в кластере «${teamModalFor.name}»`}
+          initial={teamForm}
+          saving={saving}
+          onSave={(form) => {
+            setTeamForm(form);
+            void createTeam(form);
+          }}
+          onClose={() => setTeamModalFor(null)}
         />
       )}
     </section>

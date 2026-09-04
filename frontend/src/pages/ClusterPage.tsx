@@ -1,28 +1,48 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, notifyOrgChanged, type Cluster, type ClusterInput, type TeamInput } from "../api";
-import { clusterColor, clusterColorBg } from "../orgUi";
+import Fuse from "fuse.js";
+import {
+  api,
+  ApiError,
+  notifyOrgChanged,
+  type Analyst,
+  type Cluster,
+  type ClusterInput,
+  type TeamInput,
+} from "../api";
+import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
+import { AddAnalystModal } from "../AddAnalystModal";
 
-/** Экран кластера: шапка с описанием и счётчиками, команды «колоннами».
- *  Здесь же управление: редактирование/удаление кластера, создание,
- *  редактирование и удаление команд. */
+/** Экран кластера: шапка с описанием и счётчиками, команды «колоннами»
+ *  с составом (мини-карточки участников) и нечётким поиском по командам.
+ *  Управление: редактирование/удаление кластера, создание/редактирование/
+ *  удаление команд, пополнение команды прямо из карточки. */
 export default function ClusterPage() {
   const { clusterId } = useParams();
   const navigate = useNavigate();
   const id = Number(clusterId);
   const [cluster, setCluster] = useState<Cluster | null>(null);
+  const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [query, setQuery] = useState("");
   const [editingCluster, setEditingCluster] = useState<ClusterInput | null>(null);
   // teamModal: null — скрыта; id=null — создание новой команды
   const [teamModal, setTeamModal] = useState<{ id: number | null; form: TeamInput } | null>(null);
+  // пополнение команды прямо из карточки
+  const [addingFor, setAddingFor] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setCluster(await api<Cluster>(`/api/clusters/${id}`));
+      const [clusterData, analystList] = await Promise.all([
+        api<Cluster>(`/api/clusters/${id}`),
+        api<Analyst[]>("/api/analysts"),
+      ]);
+      setCluster(clusterData);
+      setAnalysts(analystList);
       setError("");
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить кластер");
@@ -33,6 +53,32 @@ export default function ClusterPage() {
     setCluster(null);
     void load();
   }, [load]);
+
+  const membersByTeam = useMemo(() => {
+    const map = new Map<number, Analyst[]>();
+    analysts.forEach((a) => {
+      if (a.team_id == null) return;
+      const list = map.get(a.team_id);
+      if (list) list.push(a);
+      else map.set(a.team_id, [a]);
+    });
+    return map;
+  }, [analysts]);
+
+  // нечёткий поиск по командам: название, описание, ФИО участников
+  const visibleTeams = useMemo(() => {
+    if (!cluster) return [];
+    const needle = query.trim();
+    if (!needle) return cluster.teams;
+    const fuse = new Fuse(
+      cluster.teams.map((team) => ({
+        team,
+        members: (membersByTeam.get(team.id) ?? []).map((m) => m.full_name).join(" "),
+      })),
+      { keys: ["team.name", "team.description", "members"], threshold: 0.38, ignoreLocation: true },
+    );
+    return fuse.search(needle).map((r) => r.item.team);
+  }, [cluster, query, membersByTeam]);
 
   const saveCluster = async (form: ClusterInput) => {
     setSaving(true);
@@ -105,11 +151,31 @@ export default function ClusterPage() {
     }
   };
 
+  const addMembers = async (teamId: number, analystIds: number[], domains: string[] | null) => {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/api/teams/${teamId}/analysts`, {
+        method: "POST",
+        body: JSON.stringify({ analyst_ids: analystIds, domains }),
+      });
+      setInfo(analystIds.length > 1 ? `Добавлено аналитиков: ${analystIds.length}` : "Аналитик добавлен в команду");
+      setAddingFor(null);
+      notifyOrgChanged();
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось добавить аналитиков");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!cluster) {
     return error ? <div className="alert error">{error}</div> : <p className="muted">Загрузка…</p>;
   }
 
   const color = clusterColor(cluster.color, cluster.id);
+  const addingTeam = addingFor != null ? cluster.teams.find((t) => t.id === addingFor) ?? null : null;
 
   return (
     <section className="page">
@@ -158,32 +224,79 @@ export default function ClusterPage() {
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
+      {cluster.teams.length > 0 && (
+        <div className="filter-row">
+          <input
+            className="text-input filter-input"
+            placeholder="Поиск команд — по названию, описанию и участникам (нечётко)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Поиск команд"
+          />
+          {query && (
+            <button className="btn subtle" onClick={() => setQuery("")} aria-label="Очистить поиск">
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="zone-label">Команды кластера</div>
       <div className="org-grid">
-        {cluster.teams.map((team) => (
-          <div key={team.id} className="team-card team-card-static">
-            <Link to={`/teams/${team.id}`} className="team-card-link">
-              <span className="team-card-head" style={{ background: clusterColorBg(cluster.color, cluster.id) }}>
-                <span className="team-card-name">{team.name}</span>
-                <span className="team-card-count">{team.analysts_count}</span>
+        {visibleTeams.map((team) => {
+          const members = membersByTeam.get(team.id) ?? [];
+          return (
+            <div key={team.id} className="team-card team-card-static">
+              <Link to={`/teams/${team.id}`} className="team-card-link">
+                <span className="team-card-head" style={{ background: clusterColorBg(cluster.color, cluster.id) }}>
+                  <span className="team-card-name">{team.name}</span>
+                  <span className="team-card-count">{team.analysts_count}</span>
+                </span>
+                {team.description && <span className="team-card-desc">{team.description}</span>}
+              </Link>
+              <span className="team-members">
+                {members.slice(0, 4).map((member) => (
+                  <Link key={member.id} to={`/analysts/${member.id}`} className="member-chip">
+                    <span className="t-avatar" style={{ background: color }} aria-hidden="true">
+                      {initials(member.full_name)}
+                    </span>
+                    {member.full_name}
+                  </Link>
+                ))}
+                {members.length > 4 && (
+                  <Link to={`/teams/${team.id}`} className="member-chip more">
+                    +{members.length - 4}
+                  </Link>
+                )}
+                {members.length === 0 && <span className="muted member-empty">пока никого</span>}
               </span>
-              {team.description && <span className="team-card-desc">{team.description}</span>}
-            </Link>
-            <span className="team-card-actions">
-              <button
-                className="btn small subtle"
-                onClick={() => setTeamModal({ id: team.id, form: { name: team.name, description: team.description ?? "" } })}
-              >
-                <span aria-hidden="true">✎</span> Изменить
-              </button>
-              <button className="btn small subtle danger" onClick={() => deleteTeam(team.id, team.name)}>
-                <span aria-hidden="true">🗑</span> Удалить
-              </button>
-            </span>
-          </div>
-        ))}
+              <span className="team-card-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="btn small subtle"
+                  onClick={() => {
+                    setAddingFor(team.id);
+                  }}
+                >
+                  <span aria-hidden="true">＋</span> Участник
+                </button>
+                <button
+                  className="btn small subtle"
+                  onClick={() => setTeamModal({ id: team.id, form: { name: team.name, description: team.description ?? "" } })}
+                >
+                  <span aria-hidden="true">✎</span> Изменить
+                </button>
+                <button className="btn small subtle danger" onClick={() => deleteTeam(team.id, team.name)}>
+                  <span aria-hidden="true">🗑</span> Удалить
+                </button>
+              </span>
+            </div>
+          );
+        })}
         {cluster.teams.length === 0 && (
           <div className="panel table-empty">В кластере ещё нет команд — добавьте первую.</div>
+        )}
+        {cluster.teams.length > 0 && visibleTeams.length === 0 && (
+          <div className="panel table-empty">По запросу «{query}» команд не найдено.</div>
         )}
       </div>
 
@@ -209,6 +322,15 @@ export default function ClusterPage() {
             void saveTeam(form);
           }}
           onClose={() => setTeamModal(null)}
+        />
+      )}
+      {addingTeam && (
+        <AddAnalystModal
+          teamName={addingTeam.name}
+          memberIds={new Set((membersByTeam.get(addingTeam.id) ?? []).map((a) => a.id))}
+          saving={saving}
+          onSave={(analystIds, domains) => void addMembers(addingTeam.id, analystIds, domains)}
+          onClose={() => setAddingFor(null)}
         />
       )}
     </section>
