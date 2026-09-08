@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError, type Analyst, type RatingsSummary } from "../api";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 /** «3.7» — одна цифра после разделителя, как в оценках */
 function formatScore(value: number): string {
@@ -77,13 +78,19 @@ export default function AnalystStatsPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <Link to="/analysts">Аналитики</Link>
-        <span className="sep">/</span>
-        <Link to={`/analysts/${id}`}>{analyst.full_name}</Link>
-        <span className="sep">/</span>
-        <span className="crumb-current">Статистика оценок</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Кластеры", to: "/clusters" },
+          ...(analyst.cluster_name
+            ? [{ label: analyst.cluster_name, to: `/clusters/${analyst.cluster_id}` }]
+            : [{ label: "Без команды" }]),
+          ...(analyst.team_name
+            ? [{ label: analyst.team_name, to: `/teams/${analyst.team_id}` }]
+            : []),
+          { label: analyst.full_name, to: `/analysts/${id}` },
+          { label: "Статистика оценок" },
+        ]}
+      />
 
       <div className="page-head">
         <div>

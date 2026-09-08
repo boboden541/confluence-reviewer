@@ -98,8 +98,14 @@ def wait_no_subscribers(timeout_s: float = 3.0) -> None:
 
 
 def test_format_event_frame():
-    frame = format_event({"type": "validation", "status": "done"})
-    assert frame == 'event: validation\ndata: {"type": "validation", "status": "done"}\n\n'
+    frame = format_event(
+        {"type": "validation", "status": "done", "at": "2026-09-08T12:00:00"}
+    )
+    # событие несёт момент публикации (журнал ленты) — он уходит в кадр как есть
+    assert frame == (
+        'event: validation\ndata: {"type": "validation", "status": "done", '
+        '"at": "2026-09-08T12:00:00"}\n\n'
+    )
 
 
 def test_subscribe_snapshot_and_publish():
@@ -110,7 +116,9 @@ def test_subscribe_snapshot_and_publish():
         assert queue.get_nowait()["type"] == "bulk"
 
         tasks._publish_event("validation", {"document_id": 5, "status": "done"})
-        assert queue.get_nowait() == {"type": "validation", "document_id": 5, "status": "done"}
+        event = queue.get_nowait()
+        event.pop("at")  # момент публикации добавлен журналом ленты
+        assert event == {"type": "validation", "document_id": 5, "status": "done"}
 
         tasks.unsubscribe_events(queue)
         tasks._publish_event("sync", {"running": False})

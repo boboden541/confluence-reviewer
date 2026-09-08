@@ -128,13 +128,23 @@ def global_search(db, q: str, limit: int = 8) -> list[SearchHit]:
 
 
 def get_document_card(db, document_id: int) -> DocumentOut:
-    """Объект документа для страницы отчёта (с автором-аналитиком)."""
+    """Объект документа для страницы отчёта (с автором и местом в структуре)."""
     doc = get_document(db, document_id)
     analyst = repository.analysts.get(db, doc.analyst_id)
     out = DocumentOut.model_validate(doc)
     # автор — из карточки аналитика; «?» если карточку удалили, а документы остались
     out.analyst_name = analyst.full_name if analyst else "?"
     out.analyst_email = analyst.email if analyst else None
+    # структура для крошек: команда и её кластер
+    if analyst is not None and analyst.team_id is not None:
+        team = repository.org.get_team(db, analyst.team_id)
+        if team is not None:
+            out.team_id = team.id
+            out.team_name = team.name
+            out.cluster_id = team.cluster_id
+            cluster = repository.org.get_cluster(db, team.cluster_id)
+            if cluster is not None:
+                out.cluster_name = cluster.name
     return out
 
 

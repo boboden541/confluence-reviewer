@@ -57,6 +57,11 @@ class DocumentOut(DocumentListItem):
     # автор документа: сразу видно, чью страницу открыли (не из ORM — заполняет роутер)
     analyst_name: str = ""
     analyst_email: str | None = None
+    # место в структуре — для хлебных крошек «Главная / Кластеры / … / Отчёт»
+    team_id: int | None = None
+    team_name: str | None = None
+    cluster_id: int | None = None
+    cluster_name: str | None = None
 
 
 class NoteUpdate(BaseModel):

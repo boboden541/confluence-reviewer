@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiError, type Analyst, type AnalystNote } from "../api";
 import { DomainsInput } from "../DomainsInput";
 import Markdown from "../Markdown";
+import { pushRecent } from "../recent";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -51,6 +53,11 @@ export default function AnalystProfilePage() {
     setInfo("");
     void load();
   }, [load]);
+
+  // визит профиля попадает в «Недавние» на главной
+  useEffect(() => {
+    if (analyst) pushRecent("analyst", analyst.id, analyst.full_name);
+  }, [analyst?.id, analyst?.full_name]);
 
   // домены сохраняются автоматически: добавили по Enter или убрали чип —
   // короткая пауза и PUT; кнопки «Сохранить» больше не требуется
@@ -130,25 +137,18 @@ export default function AnalystProfilePage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        {/* причастность к структуре: кликабельный путь кластер → команда */}
-        {analyst.cluster_id != null && analyst.team_id != null ? (
-          <>
-            <Link to="/">Кластеры</Link>
-            <span className="sep">/</span>
-            <Link to={`/clusters/${analyst.cluster_id}`}>{analyst.cluster_name}</Link>
-            <span className="sep">/</span>
-            <Link to={`/teams/${analyst.team_id}`}>{analyst.team_name}</Link>
-            <span className="sep">/</span>
-          </>
-        ) : (
-          <>
-            <Link to="/analysts">Аналитики</Link>
-            <span className="sep">/</span>
-          </>
-        )}
-        <span className="crumb-current">{analyst.full_name}</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Кластеры", to: "/clusters" },
+          ...(analyst.cluster_name
+            ? [{ label: analyst.cluster_name, to: `/clusters/${analyst.cluster_id}` }]
+            : [{ label: "Без команды" }]),
+          ...(analyst.team_name
+            ? [{ label: analyst.team_name, to: `/teams/${analyst.team_id}` }]
+            : []),
+          { label: analyst.full_name },
+        ]}
+      />
 
       <div className="page-head profile-head">
         <span className="profile-avatar" aria-hidden="true">

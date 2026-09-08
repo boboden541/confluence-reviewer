@@ -7,8 +7,14 @@
 
 import { authHeaders, UNAUTHORIZED_EVENT, type BulkValidationStatus, type SyncStatus } from "./api";
 
+/** Момент публикации; у снимков подключения (синхронный статус при открытии
+ *  стрима) at нет — страницы отличают по нему настоящее событие от снимка. */
+interface Published {
+  at?: string;
+}
+
 /** Сменился статус проверки документа (running → done | error | not_found). */
-export interface ValidationEvent {
+export interface ValidationEvent extends Published {
   type: "validation";
   document_id: number;
   status: "running" | "done" | "error" | "not_found";
@@ -17,10 +23,10 @@ export interface ValidationEvent {
 }
 
 /** Состояние массовой проверки (прогресс и завершение прогона). */
-export type BulkEvent = BulkValidationStatus & { type: "bulk" };
+export type BulkEvent = BulkValidationStatus & Published & { type: "bulk" };
 
 /** Запуск/завершение синхронизации (включая плановую по расписанию). */
-export type SyncEvent = SyncStatus & { type: "sync" };
+export type SyncEvent = SyncStatus & Published & { type: "sync" };
 
 interface Events {
   validation: ValidationEvent;

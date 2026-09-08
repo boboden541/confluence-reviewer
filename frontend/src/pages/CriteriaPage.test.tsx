@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import CriteriaPage from "./CriteriaPage";
 
 /** Мок fetch с ключами "METHOD /path" — мутации отличаем от чтения. */
@@ -62,7 +63,7 @@ afterEach(() => {
 describe("CriteriaPage: справочник ИИ-критериев", () => {
   it("показывает активные и архивные критерии с кодами", async () => {
     mockFetch({ "GET /api/ai-criteria": ITEMS });
-    render(<CriteriaPage />);
+    render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
 
     expect(await screen.findByText("Полнота описания")).toBeInTheDocument();
     expect(screen.getByText("polnota_opisaniya")).toBeInTheDocument();
@@ -78,7 +79,7 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
       "GET /api/ai-criteria": ITEMS,
       "POST /api/ai-criteria": ITEMS[0],
     });
-    render(<CriteriaPage />);
+    render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
     await screen.findByText("Полнота описания");
 
     fireEvent.change(screen.getByRole("textbox", { name: "Название критерия" }), {
@@ -105,7 +106,7 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
       "GET /api/ai-criteria": ITEMS,
       "PUT /api/ai-criteria/1": ITEMS[0],
     });
-    render(<CriteriaPage />);
+    render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /Изменить/ }));
 
     // предупреждение видно до сохранения: прошлые оценки увидят новое название
@@ -132,7 +133,7 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
       "DELETE /api/ai-criteria/1": ITEMS[0],
       "POST /api/ai-criteria/2/restore": ITEMS[1],
     });
-    render(<CriteriaPage />);
+    render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
     await screen.findByText("Полнота описания");
 
     fireEvent.click(screen.getByRole("button", { name: /В архив/ }));
