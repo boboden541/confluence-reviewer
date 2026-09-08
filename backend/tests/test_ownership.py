@@ -120,7 +120,8 @@ def test_lead_cannot_touch_god_template(auth_client, monkeypatch):
 def test_registry_lists_others_and_copy_belongs_to_lead(auth_client, monkeypatch):
     lead = _lead_session(auth_client, monkeypatch)
     god = _god(auth_client)
-    god_template_id = auth_client.get("/api/templates", headers=god).json()[0]["id"]
+    god_cards = auth_client.get("/api/templates", headers=god).json()
+    god_template_id = god_cards[0]["id"]
 
     registry = auth_client.get("/api/templates/registry", headers=lead).json()
     assert [r["id"] for r in registry] == [god_template_id]
@@ -128,7 +129,8 @@ def test_registry_lists_others_and_copy_belongs_to_lead(auth_client, monkeypatch
 
     copied = auth_client.post(f"/api/templates/{god_template_id}/copy", headers=lead)
     assert copied.status_code == 201
-    assert "(копия)" in copied.json()["name"]
+    # имя наследуется как есть (без «(копия)»)
+    assert copied.json()["name"] == god_cards[0]["name"]
 
     # копия в моих шаблонах; оригинал по-прежнему в реестре
     assert len(auth_client.get("/api/templates", headers=lead).json()) == 1
@@ -178,7 +180,9 @@ def test_criteria_are_personal_with_registry_copy(auth_client, monkeypatch):
     assert copied.status_code == 201
     mine = auth_client.get("/api/ai-criteria", headers=lead).json()
     assert len(mine) == 1
-    assert "(копия)" in mine[0]["name"]
+    # имя как у оригинала; код — свободный слуг (суффикс «_2», т.к. база занята God)
+    assert mine[0]["name"] == registry[0]["name"]
+    assert mine[0]["code"] != ""
 
 
 # ── guard личного доступа к ИИ ───────────────────────────────────────

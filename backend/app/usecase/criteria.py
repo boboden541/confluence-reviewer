@@ -182,13 +182,13 @@ def assemble_prompt(criteria: list[AiCriterion]) -> str:
 def copy_criterion(
     db: Session, criterion: AiCriterion, *, owner_user_id: int | None
 ) -> AiCriterion:
-    """Копия критерия из общего реестра себе: имя «{name} (копия)»,
-    код — новый свободный."""
-    base = f"{criterion.name} (копия)"
-    candidate, counter = base, 2
+    """Копия критерия из общего реестра себе: имя как у оригинала; если у
+    владельца уже есть критерий с таким именем — «{name} (2)», « (3)»…
+    Код — свободный слуг того же имени (совпадёт с оригиналом → «_2»)."""
     existing = {c.name for c in list_criteria(db, owner_user_id=owner_user_id)}
+    candidate, counter = criterion.name, 2
     while candidate in existing:
-        candidate = f"{base} {counter}"
+        candidate = f"{criterion.name} ({counter})"
         counter += 1
     copy = AiCriterion(
         code=_unique_code(db, slugify_code(candidate)),

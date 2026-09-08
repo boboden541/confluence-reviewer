@@ -395,15 +395,14 @@ def copy_template(
     db: Session, template: Template, *, owner_user_id: int | None
 ) -> Template:
     """Копия шаблона из общего реестра себе: контейнер + активная версия
-    целиком (секции, маркер, описания). Имя — с суффиксом «(копия)»."""
+    целиком (секции, маркер, описания). Имя как у оригинала; при коллизии
+    у владельца — «{name} (2)», « (3)»…"""
     source_version = get_active_version(db, template)
     if source_version is None:
         raise TemplateHasNoActiveVersion("У шаблона нет активной версии")
-    base = source_version.name
-    candidate = base + " (копия)"
-    counter = 2
+    candidate, counter = source_version.name, 2
     while find_name_duplicate(db, candidate, owner_user_id=owner_user_id) is not None:
-        candidate = f"{base} (копия {counter})"
+        candidate = f"{source_version.name} ({counter})"
         counter += 1
     new_template = create_template(
         db,
