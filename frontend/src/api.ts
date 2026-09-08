@@ -1,6 +1,7 @@
-// API-клиент: basic-авторизация (НФТ-CR-7), единая обработка ошибок.
+// API-клиент: Bearer-сессии (God — логин+пароль, лиды — токен Confluence),
+// единая обработка ошибок.
 
-export const AUTH_STORAGE_KEY = "cr-auth";
+export const AUTH_STORAGE_KEY = "cr-session";
 export const UNAUTHORIZED_EVENT = "cr:unauthorized";
 
 export class ApiError extends Error {
@@ -12,27 +13,26 @@ export class ApiError extends Error {
   }
 }
 
-// btoa принимает только Latin-1; кодируем UTF-8 вручную, чтобы кириллические
-// логин/пароль корректно доходили до backend (он декодирует base64 → utf-8).
-function toBase64(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
+/** Токен сессии: выдаёт /api/auth/login (God) или /api/auth/token-login (лид). */
+export function saveSession(token: string): void {
+  localStorage.setItem(AUTH_STORAGE_KEY, token);
 }
 
-export function saveCredentials(username: string, password: string): void {
-  localStorage.setItem(AUTH_STORAGE_KEY, toBase64(`${username}:${password}`));
-}
-
-// Проверка учётки до сохранения: false — неверный логин или пароль.
+/** Вход God: логин и пароль из окружения сервиса. false — неверные креды. */
 export async function login(username: string, password: string): Promise<boolean> {
-  const resp = await fetch("/api/analysts", {
-    headers: { Authorization: `Basic ${toBase64(`${username}:${password}`)}` },
-  });
-  return resp.status !== 401;
+  try {
+    const resp = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (resp.status !== 200) return false;
+    const data = (await resp.json()) as { token: string };
+    saveSession(data.token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearCredentials(): void {
@@ -46,8 +46,8 @@ export function hasCredentials(): boolean {
 // наружу — для SSE-стрима событий (events.ts): EventSource не умеет
 // Authorization-заголовок, стрим читаем обычным fetch
 export function authHeaders(): Record<string, string> {
-  const creds = localStorage.getItem(AUTH_STORAGE_KEY);
-  return creds ? { Authorization: `Basic ${creds}` } : {};
+  const token = localStorage.getItem(AUTH_STORAGE_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // Мутации орг-структуры дёргают это событие: сайдбар (он живёт вне роутов и

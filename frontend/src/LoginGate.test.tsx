@@ -4,19 +4,26 @@ import { MemoryRouter } from "react-router-dom";
 import { LoginGate } from "./App";
 import { AUTH_STORAGE_KEY } from "./api";
 
-// Декодирует base64-строку как UTF-8 (обратная операция к TextEncoder + btoa).
-function decodeBase64Utf8(value: string): string {
-  const binary = atob(value);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
+const ME = {
+  id: 1,
+  full_name: "Р. Руководитель",
+  email: "god@service.local",
+  role_id: 1,
+  role_name: "God",
+  is_god: true,
+  permissions: ["checks", "moderation"],
+  ai_configured: true,
+  pending_requests: 0,
+};
 
-function renderGate() {
-  return render(
+function renderGate(onAuthenticated = vi.fn()) {
+  const onAuth = onAuthenticated;
+  render(
     <MemoryRouter>
-      <LoginGate />
+      <LoginGate onAuthenticated={onAuth} />
     </MemoryRouter>,
   );
+  return onAuth;
 }
 
 function fillAndSubmit(username: string, password: string) {
@@ -29,8 +36,19 @@ function fillAndSubmit(username: string, password: string) {
   fireEvent.click(screen.getByRole("button", { name: "Войти" }));
 }
 
-function stubFetch(status: number) {
-  return vi.fn(async () => new Response("[]", { status }));
+function stubFetch(responses: Record<string, { status: number; body: unknown }>) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input).split("?")[0];
+    const method = init?.method ?? "GET";
+    const hit = responses[`${method} ${path}`] ?? responses[path];
+    if (hit) {
+      return new Response(JSON.stringify(hit.body), {
+        status: hit.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+  });
 }
 
 describe("LoginGate", () => {
@@ -40,49 +58,83 @@ describe("LoginGate", () => {
     localStorage.clear();
   });
 
-  it("shows error and stores nothing on wrong credentials", async () => {
-    const fetchMock = stubFetch(401);
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderGate();
+  it("God: ошибка при неверном логине/пароле, сессия не сохраняется", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetch({ "POST /api/auth/login": { status: 401, body: { detail: "x" } } }),
+    );
+    const onAuth = renderGate();
     fillAndSubmit("boss", "wrong");
 
     expect(await screen.findByText("Неверный логин или пароль")).toBeInTheDocument();
     expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+    expect(onAuth).not.toHaveBeenCalled();
   });
 
-  it("stores credentials after successful check (UTF-8, кириллица)", async () => {
-    const fetchMock = stubFetch(200);
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderGate();
-    fillAndSubmit("босс", "пароль-123");
-
-    await screen.findByText("Войти");
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    expect(stored).not.toBeNull();
-    expect(decodeBase64Utf8(stored!)).toBe("босс:пароль-123");
-    // Заголовок запроса проверки содержит те же UTF-8 base64-креды
-    const [, init] = fetchMock.mock.calls[0] as unknown as [
-      RequestInfo | URL,
-      RequestInit,
-    ];
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      `Basic ${stored}`,
-    );
-  });
-
-  it("shows outage message when the service is unreachable", async () => {
+  it("God: успешный вход сохраняет токен сессии и отдаёт me", async () => {
+    const onAuth = vi.fn();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
-        throw new TypeError("network down");
+      stubFetch({
+        "POST /api/auth/login": { status: 200, body: { token: "sess-1", user: ME } },
+        "GET /api/auth/me": { status: 200, body: ME },
       }),
     );
+    const onAuthSpy = renderGate(onAuth);
+    fillAndSubmit("boss", "пароль-123");
 
+    await vi.waitFor(() => expect(onAuthSpy).toHaveBeenCalled());
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBe("sess-1");
+  });
+
+  it("Lead: токен с ожидающей заявкой показывает экран ожидания", async () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetch({
+        "POST /api/auth/token-login": {
+          status: 202,
+          body: { status: "pending", full_name: "Мария Смирнова" },
+        },
+      }),
+    );
     renderGate();
-    fillAndSubmit("boss", "pass");
 
-    expect(await screen.findByText("Сервис недоступен, попробуйте ещё раз")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Токен Confluence" }));
+    fireEvent.change(screen.getByPlaceholderText("Персональный токен Confluence"), {
+      target: { value: "pat-12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Продолжить" }));
+
+    expect(await screen.findByText("Заявка отправлена")).toBeInTheDocument();
+    expect(screen.getByText(/Мария Смирнова/)).toBeInTheDocument();
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+  });
+
+  it("Lead: отклонённая заявка предлагает повторную подачу", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      if (path === "/api/auth/token-login") {
+        return new Response(JSON.stringify({ detail: "отклонена" }), { status: 403 });
+      }
+      if (path === "/api/auth/reapply") {
+        return new Response(JSON.stringify({ status: "pending" }), { status: 202 });
+      }
+      return new Response(JSON.stringify({ detail: "не найдено" }), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderGate();
+
+    fireEvent.click(screen.getByRole("button", { name: "Токен Confluence" }));
+    fireEvent.change(screen.getByPlaceholderText("Персональный токен Confluence"), {
+      target: { value: "pat-12345678" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Продолжить" }));
+
+    expect(await screen.findByText("Заявка отклонена")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Подать заявку повторно" }));
+    expect(await screen.findByText("Заявка отправлена")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([u]) => String(u) === "/api/auth/reapply"),
+    ).toBe(true);
   });
 });

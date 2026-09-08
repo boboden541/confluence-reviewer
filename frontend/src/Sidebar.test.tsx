@@ -122,7 +122,7 @@ function baseMocks(extra: Record<string, unknown> = {}) {
 function renderSidebar(path = "/") {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Sidebar open={false} onClose={() => {}} />
+      <Sidebar open={false} onClose={() => {}} onLogout={() => {}} />
     </MemoryRouter>,
   );
 }

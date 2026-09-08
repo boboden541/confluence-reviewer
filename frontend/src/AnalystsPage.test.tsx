@@ -47,7 +47,7 @@ const ANALYSTS = [
 
 describe("AnalystsPage", () => {
   beforeEach(() => {
-    localStorage.setItem(AUTH_STORAGE_KEY, btoa("u:p"));
+    localStorage.setItem(AUTH_STORAGE_KEY, "sess-token");
   });
 
   afterEach(() => {
@@ -71,7 +71,7 @@ describe("AnalystsPage", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
   });
 
-  it("sends stored basic credentials with the request", async () => {
+  it("sends the stored session token with the request", async () => {
     const fetchMock = mockFetch({ "/api/analysts": [] });
 
     render(
@@ -82,9 +82,7 @@ describe("AnalystsPage", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      `Basic ${btoa("u:p")}`,
-    );
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sess-token");
   });
 
   it("shows empty state when there are no analysts", async () => {

@@ -3789,3 +3789,103 @@ label.found-row.disabled {
 .space-link:hover {
   background: var(--row-hover, #f8f9fa);
 }
+
+/* ── авторизация: вкладки входа, пользователь в сайдбаре ───── */
+.login-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border-subtle, #ebecf0);
+  margin-bottom: 16px;
+}
+.login-tabs button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-subtlest, #626f86);
+  padding: 9px 6px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+.login-tabs button.active {
+  color: var(--blue, #0c66e4);
+  font-weight: 600;
+  border-bottom-color: var(--blue, #0c66e4);
+}
+.login-hint {
+  font-size: 11.5px;
+  color: var(--text-subtlest, #626f86);
+  line-height: 1.45;
+  margin: -6px 0 12px;
+}
+.user-box {
+  margin-top: auto;
+  border-top: 1px solid var(--border-subtle, #ebecf0);
+  padding: 10px 8px 2px;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.user-box .u-avatar {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--nav-bg, #071d49);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.user-box-info {
+  min-width: 0;
+  line-height: 1.25;
+}
+.user-box .u-name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.u-role {
+  font-size: 10px;
+}
+.role-pill {
+  display: inline-block;
+  font-size: 9px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.role-pill.role-god {
+  background: #fff7d6;
+  color: #7a5d00;
+}
+.role-pill.role-lead {
+  background: #e9f2ff;
+  color: #0c66e4;
+}
+.u-logout {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-subtlest, #626f86);
+  font-size: 15px;
+  padding: 4px;
+  border-radius: 4px;
+}
+.u-logout:hover {
+  background: #ffebe6;
+  color: #ae2e24;
+}
+.nav-count-accent {
+  background: #ffebe6;
+  color: #ae2e24;
+  font-weight: 700;
+}
