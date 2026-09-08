@@ -24,6 +24,12 @@ from app.schemas.analysts import (
     AnalystOut,
     AnalystUpdate,
 )
+from app.schemas.dashboard import (
+    DashboardItem,
+    DashboardOut,
+    DashboardSection,
+    FeedItem,
+)
 from app.schemas.documents import (
     DocumentListItem,
     DocumentOut,
@@ -80,6 +86,10 @@ __all__ = [
     "AiCriterionUpdate",
     "AnalystBrief",
     "AnalystCreate",
+    "DashboardItem",
+    "DashboardOut",
+    "DashboardSection",
+    "FeedItem",
     "AnalystDomainsUpdate",
     "AnalystNoteOut",
     "AnalystNoteUpdate",

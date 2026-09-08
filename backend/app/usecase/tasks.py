@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from typing import Any
 
 from app import repository
@@ -57,6 +58,10 @@ def validation_status() -> dict[int, dict[str, Any]]:
 # (uvicorn в один воркер), поэтому put_nowait из корутин безопасен.
 _event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
 
+# Журнал последних событий для ленты на главной: события живут и после
+# рассылки (пришёл позже — видишь, что пропустил), ограничены по глубине.
+_event_journal: deque[dict[str, Any]] = deque(maxlen=50)
+
 
 def subscribe_events() -> asyncio.Queue[dict[str, Any]]:
     """Очередь событий для нового SSE-подписчика (+снимок текущих состояний).
@@ -75,11 +80,24 @@ def unsubscribe_events(queue: asyncio.Queue[dict[str, Any]]) -> None:
     _event_subscribers.discard(queue)
 
 
+def recent_events(limit: int = 30) -> list[dict[str, Any]]:
+    """Последние события (свежие сверху) — для ленты на главной."""
+    events = list(_event_journal)
+    events.reverse()
+    return events[:limit]
+
+
 def _publish_event(event_type: str, payload: dict[str, Any]) -> None:
-    """Разослать событие подписчикам. Звать только из корутин event loop."""
+    """Записать событие в журнал и разослать подписчикам.
+
+    Звать только из корутин event loop. Журнал пополняется всегда — даже
+    когда подписчиков нет: лента главной показывает события, случившиеся
+    до открытия страницы.
+    """
+    event = {"type": event_type, "at": now_utc().isoformat(), **payload}
+    _event_journal.append(event)
     if not _event_subscribers:
         return
-    event = {"type": event_type, **payload}
     for queue in list(_event_subscribers):
         queue.put_nowait(event)
 

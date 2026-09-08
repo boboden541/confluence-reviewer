@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from app.database import SessionLocal
-from app.models import Analyst, ConfluenceDocument, ValidationStatus
+from app.models import Analyst, Cluster, ConfluenceDocument, Team, ValidationStatus
 from app.utils import now_utc
 
 
@@ -242,6 +242,26 @@ def test_get_document_detail_contains_author(client):
     body = client.get(f"/api/documents/{doc_ids[0]}").json()
     assert body["analyst_name"] == "Тест"
     assert body["analyst_email"] == "t@mts.ru"
+
+
+def test_get_document_detail_contains_structure(client):
+    """Место документа в структуре — для крошек «Главная / Кластеры / …»."""
+    analyst_id, doc_ids = seed_analyst_with_docs(1)
+    with SessionLocal() as db:
+        cluster = Cluster(name="Кластер крошек")
+        db.add(cluster)
+        db.flush()
+        team = Team(cluster_id=cluster.id, name="Команда крошек")
+        db.add(team)
+        db.flush()
+        db.get(Analyst, analyst_id).team_id = team.id
+        db.commit()
+
+    body = client.get(f"/api/documents/{doc_ids[0]}").json()
+    assert body["team_id"] == team.id
+    assert body["team_name"] == "Команда крошек"
+    assert body["cluster_id"] == cluster.id
+    assert body["cluster_name"] == "Кластер крошек"
 
 
 def _global_search_seed() -> tuple[int, int]:
