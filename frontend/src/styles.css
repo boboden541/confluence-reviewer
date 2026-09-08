@@ -3988,3 +3988,69 @@ label.found-row.disabled {
   gap: 8px;
   align-items: center;
 }
+
+
+/* ── «Мои шаблоны» / «Мои критерии»: сетка карточек по макету ── */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.tpl-grid .tpl-card {
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card, 0 1px 1px rgba(9, 30, 66, 0.08));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tpl-grid .tpl-card .tpl-name {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tpl-grid .tpl-card .tpl-sub {
+  font-size: 12px;
+  color: var(--text-subtlest, #626f86);
+  margin-top: 3px;
+}
+.tpl-grid .tpl-card .tpl-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.tpl-grid .chip {
+  font-size: 11px;
+  padding: 1px 9px;
+  border-radius: 10px;
+  background: var(--blue-subtle-bg, #e9f2ff);
+  color: #0055cc;
+  font-weight: 500;
+}
+.crit-code {
+  font-size: 11px;
+  color: var(--text-subtlest, #626f86);
+  background: var(--bg, #f1f2f4);
+  padding: 1px 7px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.crit-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.registry-btn {
+  background: var(--surface, #fff);
+  color: var(--blue, #0c66e4);
+  border: 2px solid var(--blue, #0c66e4);
+}
+.registry-btn:hover {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}

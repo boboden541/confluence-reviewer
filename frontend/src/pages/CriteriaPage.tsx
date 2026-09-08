@@ -23,7 +23,7 @@ export default function CriteriaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-  const [creating, setCreating] = useState<CritForm>(EMPTY_FORM);
+  const [creating, setCreating] = useState<CritForm | null>(null);
   const [adding, setAdding] = useState(false);
   // правка конкретного критерия: id + поля формы (инлайн)
   const [editing, setEditing] = useState<CritForm & { id: number } | null>(null);
@@ -114,6 +114,7 @@ export default function CriteriaPage() {
     }
   };
 
+
   const active = items.filter((c) => !c.is_archived);
   const archived = items.filter((c) => c.is_archived);
 
@@ -127,6 +128,29 @@ export default function CriteriaPage() {
 
   return (
     <section className="page">
+      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Критерии ИИ-проверок" }]} />
+
+      <div className="page-head" style={{ alignItems: "center" }}>
+        <h1 className="page-title" style={{ marginRight: "auto" }}>
+          <span className="title-icon">✅</span>Мои критерии ИИ
+        </h1>
+        <div className="head-actions">
+          <button className="btn registry-btn" onClick={() => setRegistryOpen(true)}>
+            🌐 Из общего реестра
+          </button>
+          <button className="btn primary" onClick={() => setCreating(EMPTY_FORM)}>
+            ＋ Новый критерий
+          </button>
+        </div>
+      </div>
+      <div className="page-meta" style={{ marginBottom: 14 }}>
+        Из активных критериев собирается промт ИИ-проверки; по ним же руководитель
+        ставит оценки. Удалить нельзя — только в архив.
+      </div>
+
+      {error && <div className="alert error">{error}</div>}
+      {info && <div className="alert ok">{info}</div>}
+
       {registryOpen && (
         <RegistryModal
           title="🌐 Общий реестр критериев"
@@ -138,154 +162,138 @@ export default function CriteriaPage() {
           onClose={() => setRegistryOpen(false)}
         />
       )}
-      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Критерии ИИ-проверок" }]} />
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">
-            <span className="title-icon">✅</span>Критерии ИИ-проверок
-          </h1>
-          <button className="btn small" style={{ marginLeft: 10 }} onClick={() => setRegistryOpen(true)}>
-            🌐 Из общего реестра
-          </button>
-          <div className="page-meta">
-            {active.length} активных · из них собирается промт проверки наполнения
+
+      {/* модалка создания/правки */}
+      {(creating !== null || editing !== null) && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && (setCreating(null), setEditing(null))}>
+          <div className="modal-panel" role="dialog" aria-label={editing ? "Правка критерия" : "Новый критерий"}>
+            <div className="modal-head">
+              <h2>{editing ? "Правка критерия" : "Новый критерий"}</h2>
+              <button className="modal-close" onClick={() => { setCreating(null); setEditing(null); }} aria-label="Закрыть">✕</button>
+            </div>
+            <div className="modal-body">
+              {(() => {
+                const form = editing ?? creating;
+                if (!form) return null;
+                return (
+                  <>
+                  <span className="field">
+                    <label htmlFor="crit-name">Название</label>
+                    <input
+                      id="crit-name"
+                      className="text-input"
+                      value={form.name}
+                      onChange={(e) =>
+                        editing
+                          ? setEditing({ ...editing, name: e.target.value })
+                          : setCreating({ name: e.target.value, prompt: e.target.value })
+                      }
+                      placeholder="Например: Трассировка требований"
+                    />
+                  </span>
+                  <span className="field">
+                    <label htmlFor="crit-prompt">Промт-инструкция</label>
+                    <textarea
+                      id="crit-prompt"
+                      className="text-input"
+                      rows={4}
+                      value={form.prompt}
+                      onChange={(e) =>
+                        editing
+                          ? setEditing({ ...editing, prompt: e.target.value })
+                          : setCreating({ name: creating?.name ?? "", prompt: e.target.value })
+                      }
+                      placeholder="Что именно ИИ должен проверять в документе"
+                    />
+                  </span>
+                  {editing && (
+                    <div className="alert warn">
+                      ⚠️ Переименование увидят и прошлые оценки в статистике — снапшота
+                      названий нет. Код критерия не меняется.
+                    </div>
+                  )}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="modal-foot">
+              <button className="btn subtle" type="button" onClick={() => { setCreating(null); setEditing(null); }}>
+                Отмена
+              </button>
+              {editing ? (
+                <button
+                  className="btn primary"
+                  onClick={saveEdit}
+                  disabled={busyId === editing.id || !editing.name.trim() || editing.prompt.trim().length < 10}
+                >
+                  {busyId === editing.id ? "Сохранение…" : "Сохранить"}
+                </button>
+              ) : (
+                <button
+                  className="btn primary"
+                  onClick={add}
+                  disabled={adding || !creating || !creating.name.trim() || creating.prompt.trim().length < 10}
+                >
+                  {adding ? "Добавление…" : "Добавить критерий"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {error && <div className="alert error">{error}</div>}
-      {info && <div className="alert ok">{info}</div>}
-
-      <div className="panel">
-        <h2>Новый критерий</h2>
-        <p className="muted">
-          Название увидит руководитель в блоке оценок; промт — инструкция для ИИ,
-          станет блоком в собранном промте проверки.
-        </p>
-        <div className="crit-form">
-          <input
-            value={creating.name}
-            onChange={(e) => setCreating((f) => ({ ...f, name: e.target.value }))}
-            placeholder="Название, например: Трассировка требований"
-            aria-label="Название критерия"
-          />
-          <textarea
-            value={creating.prompt}
-            onChange={(e) => setCreating((f) => ({ ...f, prompt: e.target.value }))}
-            placeholder="Промт-инструкция: что именно ИИ должен проверять в документе"
-            aria-label="Промт критерия"
-            rows={3}
-          />
-          <div className="crit-form-foot">
-            <button
-              className="btn primary"
-              onClick={add}
-              disabled={adding || !creating.name.trim() || creating.prompt.trim().length < 10}
-            >
-              {adding ? "Добавление…" : "+ Добавить критерий"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h2>Активные критерии</h2>
-        {active.length === 0 && (
-          <p className="muted">
-            Активных критериев нет — проверка наполнения не запустится, пока не
-            добавите или не восстановите хотя бы один.
-          </p>
-        )}
+      {/* активные критерии: сетка карточек */}
+      <div className="tpl-grid">
         {active.map((crit) => (
-          <div key={crit.id} className="crit-item">
-            {editing?.id === crit.id ? (
-              <div className="crit-edit">
-                <input
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  aria-label={`Название критерия «${crit.name}»`}
-                />
-                <textarea
-                  value={editing.prompt}
-                  onChange={(e) => setEditing({ ...editing, prompt: e.target.value })}
-                  aria-label={`Промт критерия «${crit.name}»`}
-                  rows={3}
-                />
-                <div className="alert warn">
-                  ⚠️ Переименование увидят и прошлые оценки в статистике руководителя —
-                  снапшота названий на момент оценки нет. Код критерия не меняется.
-                </div>
-                <div className="crit-form-foot">
-                  <button
-                    className="btn primary"
-                    onClick={saveEdit}
-                    disabled={busyId === crit.id || !editing.name.trim() || editing.prompt.trim().length < 10}
-                  >
-                    Сохранить
-                  </button>
-                  <button
-                    className="btn subtle"
-                    onClick={() => setEditing(null)}
-                    disabled={busyId === crit.id}
-                  >
-                    Отмена
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="crit-head">
-                  <span className="crit-name">{crit.name}</span>
-                  <code className="crit-code">{crit.code}</code>
-                </div>
-                <div className="crit-prompt">{crit.prompt}</div>
-                <div className="crit-actions">
-                  <button
-                    className="btn ghost small"
-                    onClick={() => setEditing({ id: crit.id, name: crit.name, prompt: crit.prompt })}
-                  >
-                    ✏️ Изменить
-                  </button>
-                  <button
-                    className="btn ghost small danger"
-                    onClick={() => archive(crit)}
-                    disabled={busyId === crit.id}
-                  >
-                    📦 В архив
-                  </button>
-                </div>
-              </>
-            )}
+          <div key={crit.id} className="tpl-card">
+            <div className="tpl-name">{crit.name}</div>
+            <code className="crit-code">{crit.code}</code>
+            <div className="tpl-sub crit-preview" title={crit.prompt}>
+              {crit.prompt}
+            </div>
+            <div className="tpl-actions">
+              <button
+                className="btn btn-default small"
+                onClick={() => setEditing({ id: crit.id, name: crit.name, prompt: crit.prompt })}
+              >
+                Править
+              </button>
+              <button className="btn btn-danger small" disabled={busyId === crit.id} onClick={() => archive(crit)}>
+                В архив
+              </button>
+            </div>
           </div>
         ))}
+        {active.length === 0 && (
+          <div className="tpl-card" style={{ border: "2px dashed var(--border-subtle)", boxShadow: "none", display: "grid", placeItems: "center", minHeight: 90, color: "var(--text-subtlest)", cursor: "default" }}>
+            Активных критериев нет — ИИ-проверка не запустится
+          </div>
+        )}
       </div>
 
+      {/* архив отдельной секцией */}
       {archived.length > 0 && (
-        <div className="panel">
-          <h2>Архив ({archived.length})</h2>
-          <p className="muted">
-            Не попадают в новые проверки; сохраняются в статистике оценок. Восстановимы.
-          </p>
-          {archived.map((crit) => (
-            <div key={crit.id} className="crit-item archived">
-              <div className="crit-head">
-                <span className="crit-name">{crit.name}</span>
+        <>
+          <div className="zone-label" style={{ marginTop: 26 }}>
+            Архив ({archived.length})
+          </div>
+          <div className="tpl-grid">
+            {archived.map((crit) => (
+              <div key={crit.id} className="tpl-card" style={{ opacity: 0.75 }}>
+                <div className="tpl-name">{crit.name}</div>
                 <code className="crit-code">{crit.code}</code>
+                <div className="tpl-sub crit-preview">{crit.prompt}</div>
+                <div className="tpl-actions">
+                  <button className="btn btn-default small" disabled={busyId === crit.id} onClick={() => restore(crit)}>
+                    ↺ Восстановить
+                  </button>
+                </div>
               </div>
-              <div className="crit-prompt">{crit.prompt}</div>
-              <div className="crit-actions">
-                <button
-                  className="btn ghost small"
-                  onClick={() => restore(crit)}
-                  disabled={busyId === crit.id}
-                >
-                  ↩️ Восстановить
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </section>
   );
 }
+

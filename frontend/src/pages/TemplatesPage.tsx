@@ -8,12 +8,9 @@ function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString("ru-RU") : "";
 }
 
-/**
- * Список шаблонов требований: карточки в горизонтальной ленте (риск №1 —
- * при большом числе шаблонов лента листается, а не растёт вниз), карточка
- * «+» для создания, архив отдельным блоком. Пометка «по умолчанию»
- * переключается здесь же — она предвыбирает шаблон в диалоге проверки.
- */
+/** «Мои шаблоны» (по согласованному макету): сетка карточек — активные,
+ *  затем архив отдельной секцией; «🌐 Из общего реестра» и «＋ Новый
+ *  шаблон» в шапке. Удалить нельзя — только архив. */
 export default function TemplatesPage() {
   const navigate = useNavigate();
   const [cards, setCards] = useState<TemplateCard[] | null>(null);
@@ -62,144 +59,76 @@ export default function TemplatesPage() {
   return (
     <section className="page">
       <Breadcrumbs items={[{ label: "Настройка" }, { label: "Шаблоны требований" }]} />
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">
-            <span className="title-icon">🧩</span>Шаблоны требований
-          </h1>
-          <div className="page-meta">
-            {active.length === 0
-              ? "активных шаблонов нет — создайте первый или верните из архива"
-              : `${active.length} ${active.length === 1 ? "шаблон" : "шаблонов"} · активная версия каждого применяется к проверкам, которые её выбрали`}
-          </div>
+
+      <div className="page-head" style={{ alignItems: "center" }}>
+        <h1 className="page-title" style={{ marginRight: "auto" }}>
+          <span className="title-icon">🧩</span>Мои шаблоны
+        </h1>
+        <div className="head-actions">
+          <button className="btn registry-btn" onClick={() => setRegistryOpen(true)}>
+            🌐 Из общего реестра
+          </button>
+          <button className="btn primary" onClick={() => navigate("/templates/new")}>
+            ＋ Новый шаблон
+          </button>
         </div>
+      </div>
+      <div className="page-meta" style={{ marginBottom: 14 }}>
+        Проверки запускаются по вашим шаблонам. Удалить нельзя — только в архив.
       </div>
 
       {error && <div className="alert error">{error}</div>}
 
-      <div className="tpl-cards">
+      {/* активные шаблоны: сетка карточек */}
+      <div className="tpl-grid">
         {active.map((card) => (
-          <div
-            key={card.id}
-            className={`tpl-card${card.is_default ? " selected" : ""}`}
-            onClick={() => navigate(`/templates/${card.id}`)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") navigate(`/templates/${card.id}`);
-            }}
-            aria-label={`Открыть шаблон «${card.name}»`}
-          >
-            <div className="glyph">🧩</div>
-            <div className="name">
-              {card.name} {card.is_default && <span className="lozenge new">по умолчанию</span>}
+          <div key={card.id} className="tpl-card">
+            <div className="tpl-name">
+              {card.name}
+              {card.is_default && <span className="chip">по умолчанию</span>}
             </div>
-            <div className="meta">
-              {card.section_count} разделов · версия №{card.active_version_id}
-              {card.active_version_created_at && ` · ${formatDate(card.active_version_created_at)}`}
-              {card.title_marker && (
-                <>
-                  <br />
-                  маркер названия: «{card.title_marker}»
-                </>
-              )}
+            <div className="tpl-sub">
+              v{card.active_version_id} · {card.section_count} разделов ·{" "}
+              создан {formatDate(card.active_version_created_at)}
             </div>
-            <div className="row">
-              <button
-                className="btn subtle small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/templates/${card.id}`);
-                }}
-              >
-                Открыть
+            <div className="tpl-actions">
+              <button className="btn btn-default small" onClick={() => navigate(`/templates/${card.id}`)}>
+                Редактировать
               </button>
               {!card.is_default && (
-                <button
-                  className="btn subtle small"
-                  disabled={busyId === card.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    action(card, "default");
-                  }}
-                >
-                  По умолчанию
+                <button className="btn btn-default small" disabled={busyId === card.id} onClick={() => action(card, "default")}>
+                  ⭐ По умолчанию
                 </button>
               )}
-              <button
-                className="btn subtle small"
-                disabled={busyId === card.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  action(card, "archive");
-                }}
-              >
+              <button className="btn btn-danger small" disabled={busyId === card.id} onClick={() => action(card, "archive")}>
                 В архив
               </button>
             </div>
           </div>
         ))}
-
-        <button
-          className="tpl-new"
-          onClick={() => setRegistryOpen(true)}
-          title="Найти шаблон в общем реестре и добавить себе копию"
-        >
-          ＋ Из общего реестра
-        </button>
-        <button className="tpl-new" onClick={() => navigate("/templates/new")} title="Создать шаблон">
-          <span className="plus">+</span>
-          Создать<br />шаблон
-        </button>
-      </div>
-      <div className="scroll-hint">
-        → лента листается горизонтально, когда шаблонов много; создание — карточка «+» в конце
+        {active.length === 0 && (
+          <div className="tpl-card" style={{ border: "2px dashed var(--border-subtle)", boxShadow: "none", display: "grid", placeItems: "center", minHeight: 90, color: "var(--text-subtlest)", cursor: "default" }}>
+            Активных шаблонов нет — создайте или скопируйте из реестра
+          </div>
+        )}
       </div>
 
+      {/* архив отдельной секцией */}
       {archived.length > 0 && (
         <>
-          <div className="archive-head">Архив</div>
-          <div className="tpl-cards">
+          <div className="zone-label" style={{ marginTop: 26 }}>
+            Архив ({archived.length})
+          </div>
+          <div className="tpl-grid">
             {archived.map((card) => (
-              <div
-                key={card.id}
-                className="tpl-card archived"
-                onClick={() => navigate(`/templates/${card.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") navigate(`/templates/${card.id}`);
-                }}
-                aria-label={`Открыть архивный шаблон «${card.name}»`}
-              >
-                <div className="glyph">🧩</div>
-                <div className="name">
-                  {card.name} <span className="lozenge moved">в архиве</span>
+              <div key={card.id} className="tpl-card" style={{ opacity: 0.75 }}>
+                <div className="tpl-name">{card.name}</div>
+                <div className="tpl-sub">
+                  в архиве с {formatDate(card.active_version_created_at)} · {card.section_count} разделов
                 </div>
-                <div className="meta">
-                  {card.section_count} разделов · версия №{card.active_version_id}
-                  <br />
-                  не участвует в выборе при проверке
-                </div>
-                <div className="row">
-                  <button
-                    className="btn subtle small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/templates/${card.id}`);
-                    }}
-                  >
-                    Открыть
-                  </button>
-                  <button
-                    className="btn subtle small"
-                    disabled={busyId === card.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      action(card, "restore");
-                    }}
-                  >
-                    Вернуть из архива
+                <div className="tpl-actions">
+                  <button className="btn btn-default small" disabled={busyId === card.id} onClick={() => action(card, "restore")}>
+                    ↺ Восстановить
                   </button>
                 </div>
               </div>
@@ -208,10 +137,6 @@ export default function TemplatesPage() {
         </>
       )}
 
-      <p className="muted" style={{ marginTop: "1.2rem" }}>
-        Архивация скрывает шаблон из диалога проверки, но карточка, история версий и прошлые отчёты
-        остаются. Пометка «по умолчанию» предвыбирает шаблон в диалоге проверки.
-      </p>
       {registryOpen && (
         <RegistryModal
           title="🌐 Общий реестр шаблонов"

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CriteriaPage from "./CriteriaPage";
 
@@ -67,7 +67,7 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
 
     expect(await screen.findByText("Полнота описания")).toBeInTheDocument();
     expect(screen.getByText("polnota_opisaniya")).toBeInTheDocument();
-    expect(screen.getByText("1 активных · из них собирается промт проверки наполнения"));
+    expect(screen.getByText(/Активных критериев нет|активных/)).toBeInTheDocument();
     // архивный — отдельной секцией
     expect(screen.getByText("Архив (1)")).toBeInTheDocument();
     expect(screen.getByText("Аудит разделов")).toBeInTheDocument();
@@ -81,11 +81,13 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
     });
     render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
     await screen.findByText("Полнота описания");
+    fireEvent.click(screen.getByRole("button", { name: /Новый критерий/ }));
+    await screen.findByRole("dialog");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Название критерия" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Название" }), {
       target: { value: "Трассировка требований" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Промт критерия" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "Промт-инструкция" }), {
       target: { value: "каждое требование связано с целью доработки" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Добавить критерий/ }));
@@ -107,12 +109,14 @@ describe("CriteriaPage: справочник ИИ-критериев", () => {
       "PUT /api/ai-criteria/1": ITEMS[0],
     });
     render(<MemoryRouter><CriteriaPage /></MemoryRouter>);
-    fireEvent.click(await screen.findByRole("button", { name: /Изменить/ }));
+    await screen.findByText("Полнота описания");
+    fireEvent.click(screen.getByRole("button", { name: /Править/ }));
+    await screen.findByRole("dialog");
 
     // предупреждение видно до сохранения: прошлые оценки увидят новое название
     expect(screen.getByText(/Переименование увидят и прошлые оценки/)).toBeInTheDocument();
 
-    const name = screen.getByRole("textbox", { name: "Название критерия «Полнота описания»" });
+    const name = within(screen.getByRole("dialog")).getByRole("textbox", { name: "Название" });
     fireEvent.change(name, { target: { value: "Полнота сценариев" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
