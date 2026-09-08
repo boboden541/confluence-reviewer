@@ -177,7 +177,7 @@ describe("AnalystProfilePage", () => {
     expect(cluster).toHaveAttribute("href", "/clusters/3");
     const team = screen.getByText("GDS");
     expect(team).toHaveAttribute("href", "/teams/12");
-    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/");
+    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/clusters");
   });
 
   it("keeps plain breadcrumbs for an analyst without a team", async () => {
@@ -187,8 +187,10 @@ describe("AnalystProfilePage", () => {
     });
     renderPage();
 
-    expect(await screen.findByText("Аналитики")).toHaveAttribute("href", "/analysts");
-    expect(screen.queryByText("Кластеры")).not.toBeInTheDocument();
+    // аналитик вне структуры живёт в крошках под «Без команды» (не ссылка)
+    expect(await screen.findByText("Без команды")).toBeInTheDocument();
+    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/clusters");
+    expect(screen.queryByText(/teams\//)).not.toBeInTheDocument();
   });
 
   it("saves edited domains via PUT", async () => {

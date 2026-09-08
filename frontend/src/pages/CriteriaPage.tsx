@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type AiCriterion } from "../api";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 /**
  * Справочник ИИ-критериев (раздел настроек): название + промт-инструкция.
@@ -124,11 +125,7 @@ export default function CriteriaPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span>Критерии ИИ-проверок</span>
-      </nav>
+      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Критерии ИИ-проверок" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">

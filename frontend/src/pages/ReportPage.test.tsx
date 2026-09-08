@@ -110,7 +110,8 @@ function renderPage(initialEntries: string[] = ["/documents/42"]) {
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/documents/:documentId" element={<ReportPage />} />
-        {/* реестр аналитиков живёт на /analysts: крошка «Аналитики» ведёт туда */}
+        {/* карта кластеров: первый сегмент крошек любой страницы */}
+        <Route path="/clusters" element={<div>Карта кластеров</div>} />
         <Route path="/analysts" element={<div>Список аналитиков</div>} />
         <Route
           path="/analysts/:analystId/documents"
@@ -141,8 +142,9 @@ describe("ReportPage", () => {
 
     renderPage();
 
-    // название видно и в крошках, и в заголовке страницы
-    expect(await screen.findAllByText("[СТ] GDS-15 Загрузка кино")).toHaveLength(2);
+    // название видно в заголовке; в крошках — с типом «Отчёт: …»
+    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+    expect(screen.getByText("Отчёт: [СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
     // зоны «Проверки» и «Заметки» ориентируют в длинном содержимом
     expect(screen.getByText("Проверки")).toBeInTheDocument();
     expect(screen.getByText("Заметки руководителя")).toBeInTheDocument();
@@ -279,7 +281,7 @@ describe("ReportPage", () => {
     expect(screen.getByText("t@mts.ru")).toBeInTheDocument();
   });
 
-  it("breadcrumb leads to the analysts list", async () => {
+  it("breadcrumb leads to the clusters map", async () => {
     mockFetch({
       "/api/documents/42": DOCUMENT,
       "/api/documents/42/report": REPORT,
@@ -288,8 +290,8 @@ describe("ReportPage", () => {
 
     renderPage(["/documents/42"]);
 
-    fireEvent.click(await screen.findByRole("link", { name: "Аналитики" }));
-    expect(await screen.findByText("Список аналитиков")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("link", { name: "Кластеры" }));
+    expect(await screen.findByText("Карта кластеров")).toBeInTheDocument();
   });
 
   it("breadcrumb leads to the analyst's document list", async () => {

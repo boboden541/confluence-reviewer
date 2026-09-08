@@ -4,6 +4,7 @@ import { api, ApiError, notifyOrgChanged, type Team, type TeamInput } from "../a
 import { clusterColor, initials } from "../orgUi";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 /** Экран команды: шапка с описанием, агрегированные домены участников и
  *  карточки аналитиков. Здесь же управление: редактирование/удаление
@@ -103,13 +104,13 @@ export default function TeamPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <Link to="/">Кластеры</Link>
-        <span className="sep">/</span>
-        <Link to={`/clusters/${team.cluster_id}`}>{team.cluster_name}</Link>
-        <span className="sep">/</span>
-        <span className="crumb-current">{team.name}</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Кластеры", to: "/clusters" },
+          { label: team.cluster_name, to: `/clusters/${team.cluster_id}` },
+          { label: `Команда ${team.name}` },
+        ]}
+      />
 
       <div className="page-head">
         <div>

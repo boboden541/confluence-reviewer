@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, type TemplateCard } from "../api";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString("ru-RU") : "";
@@ -58,11 +59,7 @@ export default function TemplatesPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span>Шаблоны требований</span>
-      </nav>
+      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Шаблоны требований" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">

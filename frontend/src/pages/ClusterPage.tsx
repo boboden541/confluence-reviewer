@@ -14,6 +14,7 @@ import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 /** Экран кластера: шапка с описанием и счётчиками, команды «колоннами»
  *  с составом (мини-карточки участников) и нечётким поиском по командам.
@@ -179,11 +180,12 @@ export default function ClusterPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <Link to="/">Кластеры</Link>
-        <span className="sep">/</span>
-        <span className="crumb-current">{cluster.name}</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Кластеры", to: "/clusters" },
+          { label: cluster.name },
+        ]}
+      />
 
       <div className="page-head cluster-head" style={{ borderTopColor: color }}>
         <span className="cluster-glyph big" style={{ background: color }} aria-hidden="true">

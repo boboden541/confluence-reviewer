@@ -5,6 +5,7 @@ import { api, ApiError, notifyOrgChanged, type Analyst, type Cluster, type Clust
 import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 /** Главная страница: карта кластеров (цветные плитки с командами и
  *  счётчиками) и секция «Без команды» — аналитики вне структуры.
@@ -149,11 +150,7 @@ export default function ClustersPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span className="crumb-current">Кластеры</span>
-      </nav>
+      <Breadcrumbs items={[{ label: "Кластеры" }]} />
 
       <div className="page-head">
         <div>

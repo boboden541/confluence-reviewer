@@ -200,7 +200,8 @@ describe("DocumentsPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Никулин Владислав")).toBeInTheDocument();
+    // имя встречается и в крошках, и в шапке экрана
+    expect((await screen.findAllByText("Никулин Владислав")).length).toBeGreaterThanOrEqual(1);
     expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
     expect(screen.getByText("не пройдено")).toBeInTheDocument();
     expect(screen.getByText("не проверено")).toBeInTheDocument();
@@ -877,9 +878,9 @@ describe("DocumentsPage", () => {
 
     fireEvent.click(await screen.findByText("[СТ] GDS-15 Загрузка кино"));
     const dialog = await screen.findByRole("dialog");
-    // крошка с названием документа ведёт на полную страницу
+    // крошка «Отчёт: …» ведёт на полную страницу
     fireEvent.click(
-      within(dialog).getByRole("link", { name: "[СТ] GDS-15 Загрузка кино" }),
+      within(dialog).getByRole("link", { name: "Отчёт: [СТ] GDS-15 Загрузка кино" }),
     );
 
     expect(await screen.findByText("Полная страница документа")).toBeInTheDocument();

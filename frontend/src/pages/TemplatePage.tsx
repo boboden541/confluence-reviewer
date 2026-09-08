@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   api,
   ApiError,
@@ -9,6 +9,7 @@ import {
   type TemplateVersionInfo,
 } from "../api";
 import { blockRange, outlineNumbers, planDrop, type DropZone } from "../templateDnd";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 // Примеры для живой демонстрации маркера названия
 const TITLE_EXAMPLES = ["[СТ] GDS-15 Загрузка кино", "GDS-15 Загрузка кино"];
@@ -280,13 +281,13 @@ export default function TemplatePage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <Link to="/templates">Шаблоны требований</Link>
-        <span className="sep">/</span>
-        <span>{isNew ? "Новый шаблон" : name || "Шаблон"}</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Настройка" },
+          { label: "Шаблоны требований", to: "/templates" },
+          { label: isNew ? "Новый шаблон" : name || "Шаблон" },
+        ]}
+      />
       <div className="page-head">
         <div>
           <h1 className="page-title">

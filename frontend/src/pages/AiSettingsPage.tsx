@@ -6,6 +6,7 @@ import {
   type AiProtocol,
   type AiTestResult,
 } from "../api";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 // Пресеты провайдеров: только prefill полей — значения можно править руками
 const PRESETS: {
@@ -176,13 +177,7 @@ export default function AiSettingsPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span>Настройка</span>
-        <span className="sep">/</span>
-        <span>Подключение ИИ</span>
-      </nav>
+      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Подключение ИИ" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">

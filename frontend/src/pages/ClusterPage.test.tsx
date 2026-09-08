@@ -93,7 +93,7 @@ describe("ClusterPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Билетный бизнес" })).toBeInTheDocument();
     expect(screen.getByText("Продажи билетов: витрина, данные, платежи")).toBeInTheDocument();
-    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/");
+    expect(screen.getByText("Кластеры")).toHaveAttribute("href", "/clusters");
     const gds = screen.getByRole("link", { name: /GDS/ });
     expect(gds).toHaveAttribute("href", "/teams/12");
     expect(screen.getByText("Бронирование и данные")).toBeInTheDocument();

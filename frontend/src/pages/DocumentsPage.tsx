@@ -19,6 +19,7 @@ import StatusBadge from "../StatusBadge";
 import DocumentReport from "../DocumentReport";
 import ValidationDialog from "../ValidationDialog";
 import { on } from "../events";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
@@ -429,11 +430,23 @@ export default function DocumentsPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span>Аналитики</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Кластеры", to: "/clusters" },
+          ...(analyst?.cluster_name
+            ? [{ label: analyst.cluster_name, to: `/clusters/${analyst.cluster_id}` }]
+            : analyst
+              ? [{ label: "Без команды" }]
+              : []),
+          ...(analyst?.team_name
+            ? [{ label: analyst.team_name, to: `/teams/${analyst.team_id}` }]
+            : []),
+          ...(analyst
+            ? [{ label: analyst.full_name, to: `/analysts/${analyst.id}` }]
+            : []),
+          { label: "вид: документы" },
+        ]}
+      />
       <div className="page-head">
         <div>
           <h1 className="page-title">

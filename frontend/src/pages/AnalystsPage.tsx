@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type Analyst } from "../api";
 import { on } from "../events";
+import { Breadcrumbs } from "../Breadcrumbs";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -163,11 +164,7 @@ export default function AnalystsPage() {
 
   return (
     <section className="page">
-      <nav className="breadcrumbs">
-        <span>Ревью требований</span>
-        <span className="sep">/</span>
-        <span>Аналитики</span>
-      </nav>
+      <Breadcrumbs items={[{ label: "Аналитики" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">

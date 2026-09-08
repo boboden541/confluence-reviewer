@@ -13,6 +13,7 @@ import {
 } from "./api";
 import { on } from "./events";
 import { pushRecent } from "./recent";
+import { Breadcrumbs } from "./Breadcrumbs";
 
 interface Note {
   document_id: number;
@@ -216,25 +217,29 @@ export default function DocumentReport({
   const analystInitial = analystName.trim().charAt(0).toUpperCase() || "?";
 
   const crumbs = (
-    <nav className="breadcrumbs">
-      <Link to="/analysts">Аналитики</Link>
-      <span className="sep">/</span>
-      <Link to={`/analysts/${doc.analyst_id}/documents`}>{analystName}</Link>
-      <span className="sep">/</span>
-      <span className="crumb-current" title={doc.title}>
-        {embedded ? (
-          <Link
-            className="crumb-link"
-            to={`/documents/${documentId}`}
-            title="Открыть на отдельной странице"
-          >
-            {doc.title}
-          </Link>
-        ) : (
-          doc.title
-        )}
-      </span>
-    </nav>
+    <Breadcrumbs
+      items={[
+        { label: "Кластеры", to: "/clusters" },
+        ...(doc.cluster_name
+          ? [{ label: doc.cluster_name, to: `/clusters/${doc.cluster_id}` }]
+          : []),
+        ...(doc.team_name ? [{ label: doc.team_name, to: `/teams/${doc.team_id}` }] : []),
+        { label: analystName, to: `/analysts/${doc.analyst_id}/documents` },
+        {
+          label: embedded ? (
+            <Link
+              className="crumb-link"
+              to={`/documents/${documentId}`}
+              title="Открыть на отдельной странице"
+            >
+              {`Отчёт: ${doc.title}`}
+            </Link>
+          ) : (
+            `Отчёт: ${doc.title}`
+          ),
+        },
+      ]}
+    />
   );
 
   return (
