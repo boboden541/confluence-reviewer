@@ -10,23 +10,81 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app import repository
-from app.models import Analyst, ConfluenceDocument, ValidationReport
+from app.models import (
+    Analyst,
+    ConfluenceDocument,
+    Team,
+    ValidationReport,
+    ValidationStatus,
+)
 from app.schemas import DashboardItem, DashboardSection, DashboardOut
 from app.usecase.ai_settings import get_ai_connection
 
 SECTION_LIMIT = 8
 
 
-def get_dashboard(db: Session) -> DashboardOut:
+def get_dashboard(db: Session, user=None) -> DashboardOut:
     return DashboardOut(
         sections=[
             _failed_section(db),
             _stale_section(db),
             _ratings_section(db),
             _no_team_section(db),
-            _references_section(db),
-        ]
+            _references_section(db, user),
+        ],
+        my_analysts=_my_analysts(db, user),
     )
+
+
+def _my_analysts(db: Session, user) -> list:
+    """Аналитики, которых курирует пользователь как лид: имя, команда,
+    число документов и сколько из них сейчас в проблемных статусах."""
+    from sqlalchemy import func, select
+
+    from app.schemas import MyAnalystItem
+
+    if user is None:
+        return []
+    analysts = list(
+        db.scalars(
+            select(Analyst)
+            .where(Analyst.lead_user_id == user.id)
+            .order_by(Analyst.full_name)
+        ).all()
+    )
+    items = []
+    for analyst in analysts:
+        docs_count = db.scalar(
+            select(func.count())
+            .select_from(ConfluenceDocument)
+            .where(ConfluenceDocument.analyst_id == analyst.id)
+        ) or 0
+        problem = db.scalar(
+            select(func.count())
+            .select_from(ConfluenceDocument)
+            .where(
+                ConfluenceDocument.analyst_id == analyst.id,
+                ConfluenceDocument.validation_status.in_(
+                    (ValidationStatus.FAILED, ValidationStatus.ERROR)
+                ),
+            )
+        ) or 0
+        team_name = None
+        if analyst.team_id is not None:
+            team = repository.org.get_team(db, analyst.team_id)
+            team_name = team.name if team else None
+        items.append(
+            MyAnalystItem(
+                key=f"analyst-{analyst.id}",
+                analyst_id=analyst.id,
+                name=analyst.full_name,
+                team_name=team_name,
+                documents_count=docs_count,
+                validation_status=None,
+            )
+        )
+        items[-1].__dict__["_problem"] = problem  # не в схеме: служебное
+    return items
 
 
 def _failed_section(db: Session) -> DashboardSection:
@@ -111,7 +169,7 @@ def _no_team_section(db: Session) -> DashboardSection:
     )
 
 
-def _references_section(db: Session) -> DashboardSection:
+def _references_section(db: Session, user=None) -> DashboardSection:
     """Справочники в опасности: без них проверка работает неправильно."""
     items: list[DashboardItem] = []
 
@@ -152,8 +210,8 @@ def _references_section(db: Session) -> DashboardSection:
                 section="criteria",
             )
         )
-    connection = get_ai_connection(db)
-    if not (connection.base_url and connection.api_key):
+    connection = get_ai_connection(db, user)
+    if connection is None or not (connection.base_url and connection.api_key):
         items.append(
             DashboardItem(
                 key="no-ai-connection",

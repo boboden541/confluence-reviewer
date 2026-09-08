@@ -15,7 +15,10 @@ from app.config import get_settings
 from app.usecase import tasks
 from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationError, AIValidationResult
-from app.usecase.validation import DocumentNotFound
+from app.usecase.validation import (
+    _UNSET,
+    DocumentNotFound,
+)
 from app.usecase.validation import run_validation as _run_validation
 from app.utils import now_utc
 
@@ -308,7 +311,7 @@ def test_bulk_validation_endpoint_runs_all(client, monkeypatch):
     reports = iter([SimpleNamespace(id=101), SimpleNamespace(id=102)])
     seen_triggers: list[TriggerType] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=_UNSET, owner_user=None):
         seen_triggers.append(trigger)
         return next(reports)
 
@@ -330,7 +333,7 @@ def test_bulk_validation_endpoint_runs_all(client, monkeypatch):
 def test_bulk_validation_conflict_and_document_error(client, monkeypatch):
     analyst_id, doc_ids = seed_analyst_with_documents(2)
 
-    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, **_kwargs):
         await asyncio.sleep(0.3)
         if document_id == doc_ids[0]:
             raise RuntimeError("ИИ недоступен")

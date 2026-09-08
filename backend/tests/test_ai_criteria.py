@@ -21,7 +21,10 @@ from app.usecase.criteria import (
     select_criteria,
     slugify_code,
 )
-from app.usecase.validation import run_validation as _run_validation
+from app.usecase.validation import (
+    _UNSET,
+    run_validation as _run_validation,
+)
 from app.utils import now_utc
 
 
@@ -407,7 +410,7 @@ def test_batch_passes_criterion_ids(client, monkeypatch):
     doc_id = seed_document()
     seen: list[list[int] | None] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=_UNSET, owner_user=None):
         seen.append(criterion_ids)
         return SimpleNamespace(id=document_id)
 

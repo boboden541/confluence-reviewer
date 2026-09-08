@@ -30,6 +30,15 @@ def auth_client():
     with TestClient(create_app(settings)) as client:
         yield client
     Base.metadata.drop_all(bind=engine)
+    from app.usecase import tasks as _tasks
+
+    _tasks._validation_state.clear()
+    _tasks._bulk_state.update(
+        {"running": False, "analyst_id": None, "total": 0, "done": 0,
+         "started_at": None, "finished_at": None, "error": None}
+    )
+    _tasks._sync_state.update({"running": False, "error": None})
+
 
 
 @pytest.fixture()
@@ -172,8 +181,7 @@ def test_reject_then_reapply_then_approve(auth_client, monkeypatch):
 
 
 def _approved_lead_session(auth_client, monkeypatch) -> dict:
-    test_approve_creates_user_and_token_then_logs_in.__wrapped__  # noqa: B018
-    # создаём пользователя напрямую через флоу approve
+    """Флоу: токен → заявка → одобрение роли Lead → сессия лида."""
     _patch_whoami(
         monkeypatch,
         {"username": "m.smirnova", "fullName": "Мария Смирнова", "email": "maria@company.ru"},
@@ -194,6 +202,58 @@ def _approved_lead_session(auth_client, monkeypatch) -> dict:
     )
     session = auth_client.post("/api/auth/token-login", json={"token": MARIA_TOKEN})
     return {"Authorization": f"Bearer {session.json()['token']}"}
+
+
+def test_lead_cannot_delete_cluster_but_can_create(auth_client, monkeypatch):
+    lead = _approved_lead_session(auth_client, monkeypatch)
+    created = auth_client.post(
+        "/api/clusters",
+        json={"name": "Медиа", "description": None, "color": None},
+        headers=lead,
+    )
+    assert created.status_code == 201
+    cluster_id = created.json()["id"]
+    denied = auth_client.delete(f"/api/clusters/{cluster_id}", headers=lead)
+    assert denied.status_code == 403
+    assert "Недостаточно прав" in denied.json()["detail"]
+
+
+def test_lead_cannot_moderate_or_manage_roles(auth_client, monkeypatch):
+    lead = _approved_lead_session(auth_client, monkeypatch)
+    assert auth_client.get("/api/auth/requests", headers=lead).status_code == 403
+    resp = auth_client.post(
+        "/api/roles",
+        json={"name": "Хакер", "permissions": []},
+        headers=lead,
+    )
+    assert resp.status_code == 403
+    # просмотр ролей и каталога прав — доступен (read-only экран)
+    assert auth_client.get("/api/roles", headers=lead).status_code == 200
+    assert auth_client.get("/api/roles/permissions", headers=lead).status_code == 200
+
+
+def test_lead_can_assign_lead_to_analyst(auth_client, monkeypatch):
+    lead = _approved_lead_session(auth_client, monkeypatch)
+    analyst = auth_client.post(
+        "/api/analysts",
+        json={"full_name": "Алиев Рустам", "email": "aliev@company.ru"},
+        headers=lead,
+    )
+    assert analyst.status_code == 201
+    leads = auth_client.get("/api/users?role=Lead", headers=lead).json()
+    assert len(leads) == 1
+    maria = leads[0]
+    assert maria["role_name"] == "Lead"
+    assigned = auth_client.put(
+        f"/api/analysts/{analyst.json()['id']}/lead",
+        json={"user_id": maria["id"]},
+        headers=lead,
+    )
+    assert assigned.status_code == 200
+    card = auth_client.get(f"/api/analysts/{analyst.json()['id']}", headers=lead).json()
+    assert card["lead_user_id"] == maria["id"]
+    assert card["lead_name"] == "Мария Смирнова"
+
 
 
 # ── управление ролями (God) ──────────────────────────────────────────

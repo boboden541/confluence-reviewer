@@ -22,6 +22,7 @@ from app.main import create_app
 from app.models import Analyst, ConfluenceDocument
 from app.api.events import format_event
 from app.usecase import tasks
+from app.usecase.validation import _UNSET
 from app.utils import now_utc
 
 import pytest
@@ -149,7 +150,8 @@ def test_validation_lifecycle_streamed(live_server, monkeypatch):
     doc_id = seed_document()
 
     async def fake_exec(document_id, trigger, force, template_version_id=None,
-                        ai_prompt=None, checks=None, criterion_ids=None):
+                        ai_prompt=None, checks=None, criterion_ids=None,
+                        ai_connection=_UNSET, owner_user=None):
         return SimpleNamespace(id=77)
 
     monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
@@ -172,7 +174,7 @@ def test_bulk_events_for_valid_docs(live_server, monkeypatch):
     seen: list[int] = []
 
     async def fake_exec(document_id, trigger, force, template_version_id=None,
-                        ai_prompt=None, checks=None, criterion_ids=None):
+                        ai_prompt=None, checks=None, criterion_ids=None, **_kwargs):
         seen.append(document_id)
         return SimpleNamespace(id=document_id)
 

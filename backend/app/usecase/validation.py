@@ -27,7 +27,7 @@ from app.models import (
     ValidationReport,
     ValidationStatus,
 )
-from app.clients.ai_validator import AIValidationError, AIValidator
+from app.clients.ai_validator import AIConnection, AIValidationError, AIValidator
 from app.usecase.ai_settings import get_ai_connection
 from app.usecase.criteria import assemble_prompt, select_criteria, seed_criteria_if_missing
 from app.usecase.exceptions import DocumentNotFound
@@ -81,6 +81,9 @@ def _save_error(db, doc: ConfluenceDocument, trigger: TriggerType, message: str)
     return report
 
 
+_UNSET = object()  # «параметр не передан» — считаем эффективное подключение сами
+
+
 def run_validation(
     db: Session,
     document_id: int,
@@ -91,6 +94,8 @@ def run_validation(
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
     criterion_ids: list[int] | None = None,
+    ai_connection=_UNSET,
+    owner_user=None,
 ) -> ValidationReport:
     """Прогнать выбранные проверки документа и сохранить отчёт.
 
@@ -142,9 +147,17 @@ def run_validation(
         prompt_hash = hashlib.sha256(effective_prompt.encode("utf-8")).hexdigest()
 
     existing = repository.reports.get_latest(db, doc.id)
-    # эффективное подключение ИИ: env + настройки из UI (по-полё);
-    # нужно только для ИИ-проверки (её результат и кэш по модели)
-    connection = get_ai_connection(db) if run_ai else None
+    # эффективное подключение ИИ: переданное (личное запустившего) или
+    # дефолтное; нужно только для ИИ-проверки (её результат и кэш по модели)
+    if ai_connection is _UNSET:
+        if not run_ai:
+            connection = None
+        elif owner_user is not None:
+            connection = get_ai_connection(db, owner_user)
+        else:
+            connection = get_ai_connection(db)
+    else:
+        connection = ai_connection
     if (
         not force
         and existing is not None

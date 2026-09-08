@@ -309,3 +309,15 @@ def seed_auth(db: Session, settings: Any) -> None:
     ).all():
         criterion.owner_user_id = god_user.id
     db.commit()
+
+
+def default_owner_id(db: Session) -> int | None:
+    """Владелец по умолчанию для автосидов контента (God), если он создан."""
+    from sqlalchemy import select
+
+    from app.models import Role as RoleModel
+
+    god_role = db.scalar(select(RoleModel).where(RoleModel.name == GOD_ROLE_NAME))
+    if god_role is None:
+        return None
+    return db.scalar(select(User.id).where(User.role_id == god_role.id).limit(1))

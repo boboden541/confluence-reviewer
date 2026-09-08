@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.clients.confluence import ConfluenceError
 from app.clients.semantic_search import SemanticSearchError
-from app.dependencies import get_db
+from app.dependencies import get_db, require_user
+from app.dependencies.auth import resolve_actor
 from app.schemas import (
     CriterionOptionOut,
     DocumentOut,
@@ -51,10 +52,23 @@ from app.usecase.validation import (
     latest_report,
     normalize_checks,
 )
-from app.models import TriggerType
+from app.models import TriggerType, User
 from app.utils import normalize_period_end, to_naive_utc
 
 router = APIRouter(prefix="/api", tags=["documents"])
+
+_UNSET = object()  # валидация сама считает подключение, когда не передано
+
+
+def _ai_connection_dep(
+    db: Session = Depends(get_db), user: User | None = Depends(require_user)
+):
+    """Эффективное подключение ИИ текущего пользователя (None — не настроено)."""
+    from app.usecase.ai_settings import get_ai_connection
+
+    return get_ai_connection(db, resolve_actor(db, user))
+
+
 
 
 def _get_document_or_404(db: Session, document_id: int):
@@ -152,17 +166,20 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/validation-config", response_model=ValidationConfigOut)
-def get_validation_config(db: Session = Depends(get_db)):
+def get_validation_config(
+    db: Session = Depends(get_db), user: User | None = Depends(require_user)
+):
     """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
 
     Шаблоны — неархивные с активными версиями («по умолчанию» первым); id
     элемента = номер активной версии, он уходит в проверку как template_id.
     Критерии отдаются только активные: галочки диалога и блоки собранного промта.
     """
-    seed_if_missing(db)
-    seed_criteria_if_missing(db)
+    actor = resolve_actor(db, user)
+    seed_if_missing(db, owner_user_id=actor.id)
+    seed_criteria_if_missing(db, owner_user_id=actor.id)
     templates = []
-    for template in list_templates(db):
+    for template in list_templates(db, owner_user_id=actor.id):
         if template.archived_at is not None:
             continue
         version = get_active_version(db, template)
@@ -179,7 +196,7 @@ def get_validation_config(db: Session = Depends(get_db)):
         )
     criteria = [
         CriterionOptionOut(id=c.id, code=c.code, name=c.name, prompt=c.prompt)
-        for c in select_criteria(db)
+        for c in select_criteria(db, owner_user_id=actor.id)
     ]
     return ValidationConfigOut(
         templates=templates,
@@ -197,8 +214,10 @@ def get_validation_config(db: Session = Depends(get_db)):
 async def validate_document(
     document_id: int,
     db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
     force: bool = Query(default=False, description="Перевалидировать безусловно"),
     options: ValidationOptions | None = None,
+    ai_connection=Depends(_ai_connection_dep),
 ):
     """ФТ-CR-16: ручной запуск валидации (в фоне).
 
@@ -248,7 +267,13 @@ def _check_template_exists(template_id: int | None, db: Session) -> None:
 
 
 @router.post("/documents/validate-batch", status_code=status.HTTP_202_ACCEPTED)
-async def validate_documents_batch(payload: ValidationBatchRequest, db: Session = Depends(get_db)):
+async def validate_documents_batch(
+    payload: ValidationBatchRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+    ai_connection=Depends(_ai_connection_dep),
+):
+    actor = resolve_actor(db, user)
     """Проверка выбранных документов (в фоне, последовательно).
 
     Не-force: актуальные документы пропускаются идемпотентностью;
@@ -268,6 +293,12 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         )
     # порядок = порядок выбора, дубликаты не проверяем дважды
     doc_ids = list(dict.fromkeys(payload.document_ids))
+    if AI_CHECK in normalize_checks(payload.checks) and ai_connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Настройте личный доступ к ИИ (раздел «Мой доступ к ИИ»), "
+            "чтобы запускать ИИ-проверку",
+        )
     started, message = tasks.start_bulk_validation(
         doc_ids,
         force=payload.force,
@@ -275,6 +306,9 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         ai_prompt=payload.ai_prompt,
         checks=payload.checks,
         criterion_ids=payload.criterion_ids,
+        ai_connection=ai_connection if ai_connection is not None else _UNSET,
+        owner_user=actor,
+        actor_user=actor,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)

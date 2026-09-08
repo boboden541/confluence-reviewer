@@ -12,8 +12,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.dependencies import get_db
-from app.models import AIConnectionSettings
+from app.dependencies import get_db, require_user
+from app.dependencies.auth import resolve_actor, require_permission
+from app.models import AIConnectionSettings, User
 from app.schemas import (
     AIConnectionOut,
     AIConnectionTestRequest,
@@ -24,7 +25,8 @@ from app.schemas import (
 from app.clients.ai_validator import AIValidationError, AIValidator, normalize_base_url
 from app.usecase.ai_settings import (
     get_ai_connection,
-    get_row,
+    get_default_row,
+    get_row_for_user,
     mask_api_key,
     save_settings,
 )
@@ -50,29 +52,61 @@ def _to_out(row: AIConnectionSettings | None) -> AIConnectionOut:
 
 
 @router.get("", response_model=AIConnectionOut)
-def get_settings_row(db: Session = Depends(get_db)):
-    """Сохранённые настройки + дефолты env. Строки нет — поля пустые (= env)."""
-    return _to_out(get_row(db))
+def get_settings_row(
+    db: Session = Depends(get_db), user: User | None = Depends(require_user)
+):
+    """Мои сохранённые настройки (персональные). Строки нет — поля пустые."""
+    actor = resolve_actor(db, user)
+    return _to_out(get_row_for_user(db, actor))
 
 
 @router.put("", response_model=AIConnectionOut)
-def save_settings_row(payload: AIConnectionUpdate, db: Session = Depends(get_db)):
-    """Сохранить настройки (одна строка id=1). Пустое поле = значение из env.
+def save_settings_row(
+    payload: AIConnectionUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
+    """Сохранить мой личный доступ к ИИ (одна строка на пользователя).
 
     api_key=None не трогает сохранённый токен, "" — очищает его.
-    Применяется к следующим запускам проверки (без перезапуска сервиса).
+    Применяется к моим следующим запускам проверки (без перезапуска).
     """
-    return _to_out(save_settings(db, payload))
+    actor = resolve_actor(db, user)
+    return _to_out(save_settings(db, payload, user_id=actor.id))
+
+
+@router.get("/default", response_model=AIConnectionOut)
+def get_default_settings(
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("ai.default")),
+):
+    """Настройка «по умолчанию» (только God): применяется к тем, кто не
+    настроил своё; сейчас её роль играет .env."""
+    return _to_out(get_default_row(db))
+
+
+@router.put("/default", response_model=AIConnectionOut)
+def save_default_settings(
+    payload: AIConnectionUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("ai.default")),
+):
+    """Сохранить настройку «по умолчанию» (только God)."""
+    return _to_out(save_settings(db, payload, user_id=None))
 
 
 @router.post("/test", response_model=AIConnectionTestResult)
-def test_connection(payload: AIConnectionTestRequest, db: Session = Depends(get_db)):
+def test_connection(
+    payload: AIConnectionTestRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
     """Минимальный живой запрос с текущими значениями формы (до сохранения).
 
     Эффективные значения: форма → сохранённое → env. Сбой подключения —
     ок, а не исключение: пользователь видит сообщение в форме настроек.
     """
-    saved = get_ai_connection(db)
+    saved = get_ai_connection(db, user)
     conn = replace(
         saved,
         protocol=payload.protocol,

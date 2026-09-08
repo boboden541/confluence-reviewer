@@ -11,8 +11,11 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_permission, require_user
+from app.dependencies.auth import resolve_actor
 from app.schemas import (
+    AnalystLeadUpdate,
+    AnalystLeadUpdate,
     AnalystCreate,
     AnalystDomainsUpdate,
     AnalystNoteOut,
@@ -21,6 +24,7 @@ from app.schemas import (
     AnalystUpdate,
     RatingsSummaryOut,
 )
+from app.usecase import auth as auth_uc
 from app.usecase import analysts as analysts_uc
 from app.usecase import tasks
 from app.usecase.exceptions import AnalystEmailTaken, AnalystNotFound
@@ -77,10 +81,34 @@ def update_analyst(analyst_id: int, payload: AnalystUpdate, db: Session = Depend
 
 
 @router.delete("/{analyst_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_analyst(analyst_id: int, db: Session = Depends(get_db)):
+def delete_analyst(
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("delete")),
+):
     """Удалить аналитика вместе с его документами, отчётами и заметками."""
     _get_analyst_or_404(analyst_id, db)
     analysts_uc.delete_analyst(db, analyst_id)
+
+
+@router.put("/{analyst_id}/lead", response_model=AnalystOut)
+def set_analyst_lead(
+    analyst_id: int,
+    payload: AnalystLeadUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("lead.assign")),
+):
+    """Назначить аналитику лида (пользователя с ролью lead); user_id null — снять."""
+    if payload.user_id is not None:
+        lead_user = auth_uc.get_user(db, payload.user_id)
+        if lead_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден"
+            )
+    try:
+        return analysts_uc.set_lead(db, analyst_id, payload.user_id)
+    except AnalystNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Аналитик не найден") from exc
 
 
 @router.get("/{analyst_id}/note", response_model=AnalystNoteOut)

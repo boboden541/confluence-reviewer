@@ -10,7 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_permission
+from app.models import User
 from app.schemas import (
     ClusterCreate,
     ClusterOut,
@@ -71,7 +72,11 @@ def update_cluster(cluster_id: int, payload: ClusterUpdate, db: Session = Depend
 
 
 @clusters_router.delete("/{cluster_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cluster(cluster_id: int, db: Session = Depends(get_db)):
+def delete_cluster(
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("delete")),
+):
     """Удалить кластер. Пока в нём есть команды — 409."""
     try:
         org_uc.delete_cluster(db, cluster_id)
@@ -115,7 +120,11 @@ def update_team(team_id: int, payload: TeamUpdate, db: Session = Depends(get_db)
 
 
 @teams_router.delete("/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_team(team_id: int, db: Session = Depends(get_db)):
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("delete")),
+):
     """Удалить команду: аналитики остаются («без команды») со своими доменами,
     документами и оценками."""
     try:
