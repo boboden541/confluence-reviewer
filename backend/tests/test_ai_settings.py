@@ -85,12 +85,17 @@ def test_put_null_keeps_existing_token(client):
         "/api/ai-settings",
         json={"protocol": "anthropic", "base_url": "", "model": "", "api_key": None},
     ).json()
-    assert body["api_key_masked"] == "sk-…lue"  # ключ не тронут
+    # api_key=None не трогает сохранённый токен личной строки
+    assert body["api_key_masked"] == "sk-…lue"
+    # пустые base_url/model личной строки наследуются из настройки «по умолчанию»
     with SessionLocal() as db:
-        assert db.get(AIConnectionSettings, 1).api_key == "sk-first-secret-value"
+        rows = db.query(AIConnectionSettings).filter(AIConnectionSettings.user_id.is_(None)).all()
+        assert rows == []  # личный PUT не writes в дефолтную строку
 
 
-def test_put_empty_string_clears_token(client):
+def test_put_empty_api_key_keeps_personal_token(client):
+    """Личная строка: пустой api_key не стирает сохранённый токен
+    (иначе guard блокировал бы проверки после случайной очистки)."""
     client.put(
         "/api/ai-settings",
         json={"protocol": "anthropic", "base_url": "", "model": "",
@@ -100,9 +105,7 @@ def test_put_empty_string_clears_token(client):
         "/api/ai-settings",
         json={"protocol": "anthropic", "base_url": "", "model": "", "api_key": ""},
     ).json()
-    assert body["api_key_masked"] == ""
-    with SessionLocal() as db:
-        assert db.get(AIConnectionSettings, 1).api_key == ""
+    assert body["api_key_masked"] == "sk-…lue"
 
 
 def test_put_normalizes_base_url(client):
@@ -111,6 +114,26 @@ def test_put_normalizes_base_url(client):
         json={"protocol": "openai", "base_url": "  https://x.test/v1/  ", "model": "m"},
     ).json()
     assert body["base_url"] == "https://x.test/v1"
+
+
+def test_put_default_targets_default_row_not_personal(client):
+    """PUT /api/ai-settings/default (god) пишет строку user_id IS NULL и не
+    трогает личные настройки пользователей."""
+    client.put(
+        "/api/ai-settings",
+        json={"protocol": "openai", "base_url": "https://x.test/v1", "model": "m1",
+              "api_key": "sk-first-secret-value"},
+    )
+    body = client.put(
+        "/api/ai-settings/default",
+        json={"protocol": "anthropic", "base_url": "https://default.test/v1",
+              "model": "default-model", "api_key": "default-secret"},
+    ).json()
+    assert body["base_url"] == "https://default.test/v1"
+    # личная строка не задета
+    mine = client.get("/api/ai-settings").json()
+    assert mine["base_url"] == "https://x.test/v1"
+    assert mine["api_key_masked"] == "sk-…lue"
 
 
 def test_put_invalid_protocol_422(client):

@@ -23,11 +23,6 @@ from app.schemas import AIConnectionUpdate
 from app.utils import now_utc
 
 
-def get_row(db: Session) -> AIConnectionSettings | None:
-    """Сохранённая строка настроек (id=1) или None — поля пустые (= env)."""
-    return repository.ai_settings.get_row(db)
-
-
 def save_settings(
     db: Session, payload: AIConnectionUpdate, user_id: int | None = None
 ) -> AIConnectionSettings:
@@ -44,11 +39,33 @@ def save_settings(
         row = AIConnectionSettings(user_id=user_id)
         db.add(row)
     row.protocol = payload.protocol
-    row.base_url = normalize_base_url(payload.base_url)
-    row.model = payload.model
-    if payload.api_key is not None:
-        row.api_key = payload.api_key.strip()
-    row.updated_at = now_utc()
+
+    if user_id is None:
+        # «по умолчанию» (God): легаси-семантика — пусто = значение из env;
+        # пустой api_key = очистить сохранённый токен
+        row.base_url = normalize_base_url(payload.base_url)
+        row.model = payload.model
+        if payload.api_key is not None:
+            row.api_key = payload.api_key.strip()
+    else:
+        # личная строка сохраняется ПОЛНОЙ: пустые поля наследуются из
+        # настройки по умолчанию / env — иначе guard навсегда держал бы
+        # проверки заблокированными из-за визуально заполненного поля
+        default = get_default_row(db)
+        env = connection_from_settings(get_settings())
+
+        def _resolve(value: str, fallback_row, env_value: str) -> str:
+            value = value.strip()
+            if value:
+                return normalize_base_url(value) if value.startswith("http") else value
+            return (getattr(fallback_row, env_value, "") if fallback_row else "") or env_value
+
+        row.base_url = _resolve(payload.base_url, default, "base_url") or env.base_url
+        row.model = _resolve(payload.model, default, "model") or env.model
+        if payload.api_key is not None and payload.api_key.strip():
+            row.api_key = payload.api_key.strip()
+        elif not row.api_key:
+            row.api_key = (default.api_key if default else "") or env.api_key
     db.commit()
     db.refresh(row)
     return row
