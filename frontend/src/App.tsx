@@ -21,6 +21,7 @@ import ClusterPage from "./pages/ClusterPage";
 import TeamPage from "./pages/TeamPage";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
+import HomePage from "./pages/HomePage";
 import AnalystStatsPage from "./pages/AnalystStatsPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import CriteriaPage from "./pages/CriteriaPage";
@@ -310,6 +311,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   const onHome = location.pathname === "/";
+  const onClustersMap = location.pathname === "/clusters";
   const onAllAnalysts = location.pathname.startsWith("/analysts");
   const onTemplate = location.pathname.startsWith("/template");
   const onAiConnection = location.pathname.startsWith("/ai-connection");
@@ -430,9 +432,21 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       style={{ "--sidebar-w": `${width}px` } as React.CSSProperties}
     >
       <div className="space-head">
-        <span className="space-icon">РТ</span>
-        <span className="space-name">Ревью требований</span>
+        <Link to="/" className="space-link" aria-label="На главную" onClick={onClose}>
+          <span className="space-icon">РТ</span>
+          <span className="space-name">Ревью требований</span>
+        </Link>
       </div>
+
+      <div className="nav-label">Обзор</div>
+      <Link
+        to="/"
+        className={`nav-item${onHome ? " active" : ""}`}
+        aria-current={onHome ? "page" : undefined}
+        onClick={onClose}
+      >
+        <span className="ic">🏠</span> <span>Главная</span>
+      </Link>
 
       <div className="nav-label">Структура</div>
       {/* группа: стрелка раскрывает дерево структуры, клик по названию —
@@ -448,9 +462,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           {structureOpen ? "▾" : "▸"}
         </button>
         <Link
-          to="/"
-          className={`nav-item${onHome ? " active" : ""}`}
-          aria-current={onHome ? "page" : undefined}
+          to="/clusters"
+          className={`nav-item${onClustersMap ? " active" : ""}`}
+          aria-current={onClustersMap ? "page" : undefined}
           onClick={onClose}
         >
           <span className="ic">🗂</span> <span>Кластеры</span>
@@ -731,7 +745,8 @@ export default function App() {
         />
         <main className="content">
           <Routes>
-            <Route path="/" element={<ClustersPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/clusters" element={<ClustersPage />} />
             <Route path="/analysts" element={<AnalystsPage />} />
             <Route path="/clusters/:clusterId" element={<ClusterPage />} />
             <Route path="/teams/:teamId" element={<TeamPage />} />

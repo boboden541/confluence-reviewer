@@ -12,6 +12,7 @@ import {
   type ValidationReport,
 } from "./api";
 import { on } from "./events";
+import { pushRecent } from "./recent";
 
 interface Note {
   document_id: number;
@@ -97,6 +98,11 @@ export default function DocumentReport({
     setPinned(false);
     load();
   }, [load]);
+
+  // визит документа попадает в «Недавние» на главной
+  useEffect(() => {
+    if (doc?.title) pushRecent("document", doc.id, doc.title);
+  }, [doc?.id, doc?.title]);
 
   // блок шапки ушёл выше границы прокрутки — показываем компактный ряд.
   // scroll-listener, а не IntersectionObserver: корневые отступы IO в Chrome

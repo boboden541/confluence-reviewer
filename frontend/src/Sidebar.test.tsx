@@ -148,7 +148,12 @@ describe("Sidebar", () => {
     const fetchMock = mockFetch(baseMocks());
     renderSidebar();
 
-    const home = await screen.findByRole("link", { name: "🗂 Кластеры" });
+    // логотип пространства ведёт на главную, «Кластеры» — на карту
+    const logo = screen.getByRole("link", { name: "На главную" });
+    expect(logo).toHaveAttribute("href", "/");
+    const clusters = await screen.findByRole("link", { name: "🗂 Кластеры" });
+    expect(clusters).toHaveAttribute("href", "/clusters");
+    const home = screen.getByRole("link", { name: "🏠 Главная" });
     expect(home).toHaveAttribute("href", "/");
     const all = screen.getByRole("link", { name: "👥 Все аналитики" });
     expect(all).toHaveAttribute("href", "/analysts");

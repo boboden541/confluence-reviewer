@@ -220,6 +220,43 @@ export interface DocumentDetail extends DocumentListItem {
   /** Автор документа — видно на странице отчёта, чей документ открыт */
   analyst_name?: string;
   analyst_email?: string | null;
+  /** Место в структуре — для хлебных крошек «Главная / Кластеры / …» */
+  team_id?: number | null;
+  team_name?: string | null;
+  cluster_id?: number | null;
+  cluster_name?: string | null;
+}
+
+// --- главная страница: очередь внимания и лента ---
+
+export interface DashboardItem {
+  key: string;
+  title: string;
+  subtitle: string;
+  at: string | null;
+  document_id: number | null;
+  analyst_id: number | null;
+  template_id: number | null;
+  /** Раздел настройки для секции references: templates|criteria|ai */
+  section: string | null;
+}
+
+export interface DashboardSection {
+  type: "failed" | "stale" | "ratings" | "no_team" | "references";
+  title: string;
+  total: number;
+  items: DashboardItem[];
+}
+
+export interface DashboardOut {
+  sections: DashboardSection[];
+}
+
+/** Событие ленты: payload — исходное событие фоновой задачи без type/at */
+export interface FeedEvent {
+  type: "sync" | "validation" | "bulk";
+  at: string;
+  payload: Record<string, unknown>;
 }
 
 export interface ValidationReport {

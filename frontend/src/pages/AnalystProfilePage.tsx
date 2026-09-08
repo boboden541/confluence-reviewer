@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiError, type Analyst, type AnalystNote } from "../api";
 import { DomainsInput } from "../DomainsInput";
 import Markdown from "../Markdown";
+import { pushRecent } from "../recent";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -51,6 +52,11 @@ export default function AnalystProfilePage() {
     setInfo("");
     void load();
   }, [load]);
+
+  // визит профиля попадает в «Недавние» на главной
+  useEffect(() => {
+    if (analyst) pushRecent("analyst", analyst.id, analyst.full_name);
+  }, [analyst?.id, analyst?.full_name]);
 
   // домены сохраняются автоматически: добавили по Enter или убрали чип —
   // короткая пауза и PUT; кнопки «Сохранить» больше не требуется
