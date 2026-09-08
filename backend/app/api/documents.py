@@ -363,25 +363,34 @@ async def post_comment(
 
 
 @router.get("/documents/{document_id}/ratings", response_model=RatingsOut)
-def get_ratings(document_id: int, db: Session = Depends(get_db)):
-    """Блок оценивания: все активные критерии справочника с оценками руководителя.
+def get_ratings(
+    document_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
+    """Блок оценивания: мои активные критерии с моими оценками этого документа.
 
     Виден до первого ИИ-прогона; пустой criteria — в справочнике
     нет активных критериев.
     """
     _get_document_or_404(db, document_id)
-    return ratings.get_ratings_view(db, document_id)
+    return ratings.get_ratings_view(db, document_id, owner_user=user)
 
 
 @router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
-def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
+def update_ratings(
+    document_id: int,
+    payload: RatingsUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
     """Выставить/изменить оценки (1..10); score=None — снять («—»).
 
-    Архивный или несуществующий критерий — 404 (молча вычеркнуть нельзя).
+    Оценивать можно только свои критерии; архивный или чужой — 404.
     """
     _get_document_or_404(db, document_id)
     try:
-        return ratings.apply_ratings(db, document_id, payload.ratings)
+        return ratings.apply_ratings(db, document_id, payload.ratings, owner_user=user)
     except CriterionNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
