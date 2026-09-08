@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, ApiError, type Analyst, type AnalystNote } from "../api";
+import { api, ApiError, type Analyst, type AnalystNote, type UserBrief } from "../api";
 import { DomainsInput } from "../DomainsInput";
 import Markdown from "../Markdown";
 import { pushRecent } from "../recent";
 import { Breadcrumbs } from "../Breadcrumbs";
+import { useCan } from "../userContext";
+
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -27,6 +29,9 @@ export default function AnalystProfilePage() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [leadPick, setLeadPick] = useState(false);
+  const [leads, setLeads] = useState<UserBrief[]>([]);
+  const canAssignLead = useCan()("lead.assign");
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +63,32 @@ export default function AnalystProfilePage() {
   useEffect(() => {
     if (analyst) pushRecent("analyst", analyst.id, analyst.full_name);
   }, [analyst?.id, analyst?.full_name]);
+
+  // модалка назначения лида: пользователи с ролью lead
+  useEffect(() => {
+    if (!leadPick) return;
+    api<UserBrief[]>("/api/users?role=Lead")
+      .then(setLeads)
+      .catch(() => setLeads([]));
+  }, [leadPick]);
+
+  const assignLead = async (leadUserId: number | null) => {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/analysts/${id}/lead`, {
+        method: "PUT",
+        body: JSON.stringify({ user_id: leadUserId }),
+      });
+      setLeadPick(false);
+      setInfo(leadUserId == null ? "Лид снят" : "Лид назначен");
+      await load();
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : "Не удалось назначить лида");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // домены сохраняются автоматически: добавили по Enter или убрали чип —
   // короткая пауза и PUT; кнопки «Сохранить» больше не требуется
@@ -178,6 +209,32 @@ export default function AnalystProfilePage() {
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}
 
+      <div
+        className="lead-block"
+        style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          background: "var(--bg, #F1F2F4)", borderRadius: 8, padding: "10px 14px", marginBottom: 14,
+        }}
+      >
+        <span
+          style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text-subtlest, #626F86)" }}
+        >
+          Лид
+        </span>
+        {analyst.lead_user_id != null ? (
+          <b style={{ fontSize: 13.5 }}>{analyst.lead_name ?? "?"}</b>
+        ) : (
+          <span style={{ fontSize: 13, color: "var(--text-subtlest, #626F86)", fontStyle: "italic" }}>
+            лид не назначен
+          </span>
+        )}
+        {canAssignLead && (
+          <button className="btn small" style={{ marginLeft: "auto" }} onClick={() => setLeadPick(true)}>
+            Сменить лида
+          </button>
+        )}
+      </div>
+
       <div className="zone-label">Домены (бизнес-функционал)</div>
 
       <div className="notes-zone">
@@ -230,6 +287,43 @@ export default function AnalystProfilePage() {
           {note !== noteOriginal && <span className="muted">Есть несохранённые изменения</span>}
         </div>
       </div>
+      {leadPick && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setLeadPick(false)}>
+          <div className="modal-panel" role="dialog" aria-label="Назначить лида">
+            <div className="modal-head">
+              <h2>Назначить лида</h2>
+              <button className="modal-close" onClick={() => setLeadPick(false)} aria-label="Закрыть">✕</button>
+            </div>
+            <div className="modal-body">
+              {leads.length === 0 && <p className="muted">Пользователей с ролью lead пока нет</p>}
+              {leads.map((lead) => (
+                <div key={lead.id} className="found-row" style={{ cursor: "default" }}>
+                  <span className="found-info">
+                    <span className="found-name">{lead.full_name}</span>
+                    <span className="found-sub">
+                      {lead.email} · ведёт {lead.analysts_count} аналитиков
+                    </span>
+                  </span>
+                  <button
+                    className="btn small primary"
+                    disabled={busy || lead.id === analyst.lead_user_id}
+                    onClick={() => void assignLead(lead.id)}
+                  >
+                    {lead.id === analyst.lead_user_id ? "Текущий лид" : "Назначить"}
+                  </button>
+                </div>
+              ))}
+              {analyst.lead_user_id != null && (
+                <div style={{ padding: "8px 10px" }}>
+                  <button className="btn small ghost danger" disabled={busy} onClick={() => void assignLead(null)}>
+                    Снять лида
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

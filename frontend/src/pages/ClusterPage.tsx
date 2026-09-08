@@ -11,6 +11,7 @@ import {
   type TeamInput,
 } from "../api";
 import { clusterColor, clusterColorBg, initials } from "../orgUi";
+import { useCan } from "../userContext";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
@@ -24,6 +25,7 @@ import { Breadcrumbs } from "../Breadcrumbs";
 export default function ClusterPage() {
   const { clusterId } = useParams();
   const navigate = useNavigate();
+  const canDelete = useCan()("delete");
   const id = Number(clusterId);
   const [cluster, setCluster] = useState<Cluster | null>(null);
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
@@ -220,9 +222,11 @@ export default function ClusterPage() {
           })}>
             <span aria-hidden="true">✎</span> Редактировать
           </button>
-          <button className="btn subtle danger" onClick={deleteCluster}>
-            Удалить
-          </button>
+          {canDelete && (
+            <button className="btn subtle danger" onClick={deleteCluster}>
+              Удалить
+            </button>
+          )}
           <button className="btn primary" onClick={() => setTeamModal({ id: null, form: { name: "", description: "" } })}>
             <span aria-hidden="true">＋</span> Добавить команду
           </button>
@@ -293,9 +297,9 @@ export default function ClusterPage() {
                 >
                   <span aria-hidden="true">✎</span> Изменить
                 </button>
-                <button className="btn small subtle danger" onClick={() => deleteTeam(team.id, team.name)}>
+                {canDelete && (<button className="btn small subtle danger" onClick={() => deleteTeam(team.id, team.name)}>
                   <span aria-hidden="true">🗑</span> Удалить
-                </button>
+                </button>)}
               </span>
             </div>
           );

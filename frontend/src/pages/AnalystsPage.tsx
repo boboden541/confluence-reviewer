@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type Analyst } from "../api";
+import { useCan } from "../userContext";
 import { on } from "../events";
 import { Breadcrumbs } from "../Breadcrumbs";
 
@@ -10,6 +11,7 @@ function formatDate(value: string | null): string {
 }
 
 export default function AnalystsPage() {
+  const canDelete = useCan()("delete");
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -335,6 +337,7 @@ export default function AnalystsPage() {
                 >
                   <span aria-hidden="true">✎</span> Изменить
                 </button>
+                {canDelete && (
                 <button
                   className="btn small subtle danger"
                   onClick={() => deleteAnalyst(analyst)}
@@ -342,6 +345,7 @@ export default function AnalystsPage() {
                 >
                   <span aria-hidden="true">🗑</span> Удалить
                 </button>
+                )}
               </td>
             </tr>
           ))}

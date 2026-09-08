@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import { api, ApiError, notifyOrgChanged, type Analyst, type Cluster, type ClusterInput, type TeamInput } from "../api";
 import { clusterColor, clusterColorBg, initials } from "../orgUi";
+import { useCan } from "../userContext";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
 import { Breadcrumbs } from "../Breadcrumbs";
@@ -16,6 +17,7 @@ const EMPTY_FORM: ClusterInput = { name: "", description: "", color: null };
 
 export default function ClustersPage() {
   const navigate = useNavigate();
+  const canDelete = useCan()("delete");
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [freeAnalysts, setFreeAnalysts] = useState<Analyst[]>([]);
   const [error, setError] = useState("");
@@ -224,9 +226,9 @@ export default function ClustersPage() {
                   <button className="btn small subtle" onClick={() => openEdit(cluster)}>
                     <span aria-hidden="true">✎</span> Изменить
                   </button>
-                  <button className="btn small subtle danger" onClick={() => deleteCluster(cluster)}>
+                  {canDelete && (<button className="btn small subtle danger" onClick={() => deleteCluster(cluster)}>
                     <span aria-hidden="true">🗑</span> Удалить
-                  </button>
+                  </button>)}
                 </div>
               </div>
               <div className="cluster-card-stats">

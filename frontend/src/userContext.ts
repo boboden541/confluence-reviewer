@@ -14,3 +14,5 @@ export function useCan(): (permission: string) => boolean {
   const me = useMe();
   return (permission: string) => (me === null ? false : me.permissions.includes(permission));
 }
+
+export { useMe as useUser };

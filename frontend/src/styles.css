@@ -3889,3 +3889,102 @@ label.found-row.disabled {
   color: #ae2e24;
   font-weight: 700;
 }
+
+/* ── заявки и роли ─────────────────────────────────────────── */
+.request-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle, #ebecf0);
+}
+.request-row:last-child {
+  border-bottom: 0;
+}
+.request-main {
+  flex: 1;
+  min-width: 0;
+}
+.request-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.request-sub {
+  font-size: 12px;
+  color: var(--text-subtlest, #626f86);
+  margin-top: 1px;
+}
+.request-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-subtle, #44546f);
+  font-size: 13.5px;
+}
+.badge {
+  display: inline-block;
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.badge-warn {
+  background: #fff7d6;
+  color: #7a5d00;
+}
+.badge-ok {
+  background: #dcfff1;
+  color: #216e4e;
+}
+.badge-danger {
+  background: #ffebe6;
+  color: #ae2e24;
+}
+.roles-table-wrap {
+  overflow-x: auto;
+}
+.perms {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.perms th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--row-hover, #f8f9fa);
+  font-size: 12px;
+  color: var(--text-subtle, #44546f);
+  border-bottom: 1px solid var(--border-subtle, #ebecf0);
+}
+.perms td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-subtle, #ebecf0);
+}
+.perms tr:last-child td {
+  border-bottom: 0;
+}
+.perms .yes {
+  color: #216e4e;
+  font-weight: 600;
+}
+.perms .no {
+  color: #ae2e24;
+  font-weight: 600;
+}
+.lock-note {
+  font-size: 10.5px;
+  color: var(--text-subtlest, #626f86);
+}
+.role-controls {
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.role-create {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}

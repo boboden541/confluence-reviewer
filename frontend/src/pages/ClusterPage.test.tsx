@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ClusterPage from "./ClusterPage";
+import { UserContext } from "../userContext";
+
+const ME_GOD = { id: 1, full_name: "Тест Год", email: "t@t", role_id: 1, role_name: "God", is_god: true, permissions: ["delete", "lead.assign"], ai_configured: true, pending_requests: 0 };
 import type { Analyst, Cluster } from "../api";
 
 function mockFetch(responses: Record<string, unknown>) {
@@ -52,6 +55,8 @@ const ALIEV: Analyst = {
   cluster_id: 3,
   cluster_name: "Билетный бизнес",
   domains: ["вывод на витрину"],
+  lead_user_id: null,
+  lead_name: null,
 };
 
 const SIDOROV: Analyst = {
@@ -63,19 +68,23 @@ const SIDOROV: Analyst = {
   team_id: 13,
   team_name: "Финтех",
   domains: [],
+  lead_user_id: null,
+  lead_name: null,
 };
 
 const ANALYSTS = [ALIEV, SIDOROV];
 
 function renderPage(clusterId = "3") {
   return render(
+    <UserContext.Provider value={ME_GOD}>
     <MemoryRouter initialEntries={[`/clusters/${clusterId}`]}>
       <Routes>
         <Route path="/clusters/:clusterId" element={<ClusterPage />} />
         <Route path="/teams/:teamId" element={<div>Экран команды</div>} />
         <Route path="/analysts/:analystId" element={<div>Профиль</div>} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </UserContext.Provider>
   );
 }
 

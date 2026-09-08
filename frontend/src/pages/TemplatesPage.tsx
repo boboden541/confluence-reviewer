@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, type TemplateCard } from "../api";
+import { RegistryModal } from "../RegistryModal";
 import { Breadcrumbs } from "../Breadcrumbs";
 
 function formatDate(value: string | null): string {
@@ -16,6 +17,7 @@ function formatDate(value: string | null): string {
 export default function TemplatesPage() {
   const navigate = useNavigate();
   const [cards, setCards] = useState<TemplateCard[] | null>(null);
+  const [registryOpen, setRegistryOpen] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
 
@@ -138,6 +140,13 @@ export default function TemplatesPage() {
           </div>
         ))}
 
+        <button
+          className="tpl-new"
+          onClick={() => setRegistryOpen(true)}
+          title="Найти шаблон в общем реестре и добавить себе копию"
+        >
+          ＋ Из общего реестра
+        </button>
         <button className="tpl-new" onClick={() => navigate("/templates/new")} title="Создать шаблон">
           <span className="plus">+</span>
           Создать<br />шаблон
@@ -203,6 +212,17 @@ export default function TemplatesPage() {
         Архивация скрывает шаблон из диалога проверки, но карточка, история версий и прошлые отчёты
         остаются. Пометка «по умолчанию» предвыбирает шаблон в диалоге проверки.
       </p>
+      {registryOpen && (
+        <RegistryModal
+          title="🌐 Общий реестр шаблонов"
+          endpoint="/api/templates/registry"
+          onCopy={async (entry) => {
+            await api(`/api/templates/${entry.id}/copy`, { method: "POST" });
+            await load();
+          }}
+          onClose={() => setRegistryOpen(false)}
+        />
+      )}
     </section>
   );
 }

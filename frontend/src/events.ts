@@ -32,6 +32,9 @@ interface Events {
   validation: ValidationEvent;
   bulk: BulkEvent;
   sync: SyncEvent;
+  /** Опубликован комментарий на страницу Confluence */
+  comment: { type: "comment"; document_id: number; actor_id?: number; actor_name?: string; at?: string };
+
   /** Стрим (пере)подключился — хороший момент освежить данные на странице. */
   connected: { type: "connected" };
 }

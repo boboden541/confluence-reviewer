@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type AiCriterion } from "../api";
+import { RegistryModal } from "../RegistryModal";
 import { Breadcrumbs } from "../Breadcrumbs";
 
 /**
@@ -17,6 +18,7 @@ interface CritForm {
 const EMPTY_FORM: CritForm = { name: "", prompt: "" };
 
 export default function CriteriaPage() {
+  const [registryOpen, setRegistryOpen] = useState(false);
   const [items, setItems] = useState<AiCriterion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -125,12 +127,26 @@ export default function CriteriaPage() {
 
   return (
     <section className="page">
+      {registryOpen && (
+        <RegistryModal
+          title="🌐 Общий реестр критериев"
+          endpoint="/api/ai-criteria/registry"
+          onCopy={async (entry) => {
+            await api(`/api/ai-criteria/${entry.id}/copy`, { method: "POST" });
+            await load();
+          }}
+          onClose={() => setRegistryOpen(false)}
+        />
+      )}
       <Breadcrumbs items={[{ label: "Настройка" }, { label: "Критерии ИИ-проверок" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">
             <span className="title-icon">✅</span>Критерии ИИ-проверок
           </h1>
+          <button className="btn small" style={{ marginLeft: 10 }} onClick={() => setRegistryOpen(true)}>
+            🌐 Из общего реестра
+          </button>
           <div className="page-meta">
             {active.length} активных · из них собирается промт проверки наполнения
           </div>
@@ -141,7 +157,7 @@ export default function CriteriaPage() {
       {info && <div className="alert ok">{info}</div>}
 
       <div className="panel">
-        <h2>Новый критерий</h2>
+        <h2>🌐 Из общего реестра критериев</h2>
         <p className="muted">
           Название увидит руководитель в блоке оценок; промт — инструкция для ИИ,
           станет блоком в собранном промте проверки.
@@ -269,6 +285,17 @@ export default function CriteriaPage() {
             </div>
           ))}
         </div>
+      )}
+      {registryOpen && (
+        <RegistryModal
+          title="🌐 Общий реестр критериев"
+          endpoint="/api/ai-criteria/registry"
+          onCopy={async (entry) => {
+            await api(`/api/ai-criteria/${entry.id}/copy`, { method: "POST" });
+            await load();
+          }}
+          onClose={() => setRegistryOpen(false)}
+        />
       )}
     </section>
   );

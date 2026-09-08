@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import TeamPage from "./TeamPage";
+import { UserContext } from "../userContext";
+
+const ME_GOD = { id: 1, full_name: "Тест Год", email: "t@t", role_id: 1, role_name: "God", is_god: true, permissions: ["delete", "lead.assign"], ai_configured: true, pending_requests: 0 };
 import type { Analyst, Team } from "../api";
 
 function mockFetch(responses: Record<string, unknown>) {
@@ -43,11 +46,13 @@ const TEAM: Team = {
 
 function renderPage(teamId = "12") {
   return render(
+    <UserContext.Provider value={ME_GOD}>
     <MemoryRouter initialEntries={[`/teams/${teamId}`]}>
       <Routes>
         <Route path="/teams/:teamId" element={<TeamPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </UserContext.Provider>,
   );
 }
 
@@ -105,6 +110,8 @@ describe("TeamPage", () => {
       cluster_id: null,
       cluster_name: null,
       domains: [],
+      lead_user_id: null,
+      lead_name: null,
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input).split("?")[0];
@@ -187,6 +194,8 @@ describe("TeamPage", () => {
             cluster_id: null,
             cluster_name: null,
             domains: ["букинг"],
+            lead_user_id: null,
+            lead_name: null,
           },
         ],
       };

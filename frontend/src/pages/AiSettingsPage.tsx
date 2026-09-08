@@ -67,6 +67,10 @@ const PROTOCOL_CARDS: { id: AiProtocol; name: string; desc: string }[] = [
 
 export default function AiSettingsPage() {
   const [cfg, setCfg] = useState<AiConnectionConfig | null>(null);
+  // личный доступ заполнен целиком — иначе ИИ-проверки заблокированы (guard на бэке)
+  const aiConfigured = Boolean(
+    cfg && (cfg.base_url || cfg.env.base_url) && (cfg.api_key_masked || cfg.env.api_key_set) && (cfg.model || cfg.env.model),
+  );
   const [protocol, setProtocol] = useState<AiProtocol>("anthropic");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
@@ -177,17 +181,23 @@ export default function AiSettingsPage() {
 
   return (
     <section className="page">
-      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Подключение ИИ" }]} />
+      <Breadcrumbs items={[{ label: "Настройка" }, { label: "Мой доступ к ИИ" }]} />
       <div className="page-head">
         <div>
           <h1 className="page-title">
-            <span className="title-icon">⚙️</span> Подключение ИИ
+            <span className="title-icon">⚡</span> Мой доступ к ИИ
           </h1>
           <div className="page-meta">
-            Применяется ко всем ИИ-проверкам документов
+            Персональные настройки: ваши проверки идут через ваш провайдер и токен
           </div>
         </div>
       </div>
+      {!aiConfigured && (
+        <div className="alert error">
+          🔒 Проверки заблокированы: заполните протокол, провайдера/модель и токен —
+          и сохраните.
+        </div>
+      )}
 
       {error && <div className="alert error">{error}</div>}
       {info && <div className="alert ok">{info}</div>}

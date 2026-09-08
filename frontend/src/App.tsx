@@ -19,6 +19,8 @@ import TeamPage from "./pages/TeamPage";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
 import HomePage from "./pages/HomePage";
+import RequestsPage from "./pages/RequestsPage";
+import RolesPage from "./pages/RolesPage";
 import AnalystStatsPage from "./pages/AnalystStatsPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import CriteriaPage from "./pages/CriteriaPage";
@@ -956,6 +958,8 @@ export default function App() {
             {/* старый путь одного шаблона — ведём на список */}
             <Route path="/template" element={<Navigate to="/templates" replace />} />
             <Route path="/criteria" element={<CriteriaPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/roles" element={<RolesPage />} />
             <Route path="/ai-connection" element={<AiSettingsPage />} />
           </Routes>
         </main>

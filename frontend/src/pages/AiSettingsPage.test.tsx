@@ -72,7 +72,7 @@ describe("AiSettingsPage", () => {
     mockFetch({ "/api/ai-settings": CONFIG });
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: /Подключение ИИ/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Мой доступ к ИИ/ })).toBeInTheDocument();
     // шаги ориентируют в форме
     expect(screen.getByText("Протокол API")).toBeInTheDocument();
     expect(screen.getByText("Провайдер и модель")).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe("AiSettingsPage", () => {
   it("preset select prefills base url and model", async () => {
     mockFetch({ "/api/ai-settings": CONFIG });
     renderPage();
-    await screen.findByRole("heading", { name: /Подключение ИИ/ });
+    await screen.findByRole("heading", { name: /Мой доступ к ИИ/ });
 
     fireEvent.change(screen.getByLabelText("Пресет провайдера"), {
       target: { value: "zai" },
@@ -203,7 +203,7 @@ describe("AiSettingsPage", () => {
   it("switching protocol filters the preset list", async () => {
     mockFetch({ "/api/ai-settings": CONFIG });
     renderPage();
-    await screen.findByRole("heading", { name: /Подключение ИИ/ });
+    await screen.findByRole("heading", { name: /Мой доступ к ИИ/ });
 
     fireEvent.click(screen.getByText("OpenAI-совместимый"));
 
