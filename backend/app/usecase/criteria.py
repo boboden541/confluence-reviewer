@@ -104,18 +104,33 @@ def _unique_code(db: Session, base: str) -> str:
     return code
 
 
-def seed_criteria_if_missing(db: Session) -> None:
-    """Пустой справочник наполняем стартовыми критериями (идемпотентно)."""
+def seed_criteria_if_missing(db: Session, owner_user_id: int | None = None) -> None:
+    """Пустой личный справочник наполняем стартовыми критериями (идемпотентно).
+    Без явного владельца — God (если уже создан seed_auth'ом)."""
     if repository.criteria.any_exists(db):
         return
+    if owner_user_id is None:
+        from app.usecase.auth import default_owner_id
+
+        owner_user_id = default_owner_id(db)
     for name, prompt in SEED_CRITERIA:
-        db.add(AiCriterion(code=_unique_code(db, slugify_code(name)), name=name, prompt=prompt))
+        db.add(
+            AiCriterion(
+                code=_unique_code(db, slugify_code(name)),
+                name=name,
+                prompt=prompt,
+                owner_user_id=owner_user_id,
+            )
+        )
     db.commit()
 
 
-def list_criteria(db: Session) -> list[AiCriterion]:
-    """Все критерии: активные, затем архивные (справочник в настройках)."""
-    return repository.criteria.list_all(db)
+def list_criteria(db: Session, owner_user_id: int | None = None) -> list[AiCriterion]:
+    """Критерии владельца: активные, затем архивные."""
+    all_criteria = repository.criteria.list_all(db)
+    if owner_user_id is not None:
+        all_criteria = [c for c in all_criteria if c.owner_user_id == owner_user_id]
+    return all_criteria
 
 
 def get_criterion(db: Session, criterion_id: int) -> AiCriterion:
@@ -127,15 +142,21 @@ def get_criterion(db: Session, criterion_id: int) -> AiCriterion:
 
 
 def select_criteria(
-    db: Session, criterion_ids: list[int] | None = None
+    db: Session,
+    criterion_ids: list[int] | None = None,
+    owner_user_id: int | None = None,
 ) -> list[AiCriterion]:
-    """Критерии прогона: выбранные (id, в порядке передачи) или все активные.
+    """Критерии прогона владельца: выбранные (id, в порядке передачи) или
+    все его активные.
 
     Выбранный id, отсутствующий в БД или в архиве, — ошибка запроса: молча
     вычеркивать нельзя, промт прогона незаметно изменился бы.
     """
     if criterion_ids is None:
-        return repository.criteria.list_active(db)
+        active = repository.criteria.list_active(db)
+        if owner_user_id is not None:
+            active = [c for c in active if c.owner_user_id == owner_user_id]
+        return active
     ordered = dict.fromkeys(criterion_ids)  # дубликаты схлопываем, порядок сохраняем
     criteria: list[AiCriterion] = []
     for criterion_id in ordered:
@@ -156,3 +177,26 @@ def assemble_prompt(criteria: list[AiCriterion]) -> str:
         f"{i}. «{c.name}» — {c.prompt}" for i, c in enumerate(criteria, start=1)
     ]
     return PROMPT_HEAD + "\n".join(blocks) + PROMPT_TAIL
+
+
+def copy_criterion(
+    db: Session, criterion: AiCriterion, *, owner_user_id: int | None
+) -> AiCriterion:
+    """Копия критерия из общего реестра себе: имя как у оригинала; если у
+    владельца уже есть критерий с таким именем — «{name} (2)», « (3)»…
+    Код — свободный слуг того же имени (совпадёт с оригиналом → «_2»)."""
+    existing = {c.name for c in list_criteria(db, owner_user_id=owner_user_id)}
+    candidate, counter = criterion.name, 2
+    while candidate in existing:
+        candidate = f"{criterion.name} ({counter})"
+        counter += 1
+    copy = AiCriterion(
+        code=_unique_code(db, slugify_code(candidate)),
+        name=candidate,
+        prompt=criterion.prompt,
+        owner_user_id=owner_user_id,
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return copy

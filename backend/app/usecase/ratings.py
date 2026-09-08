@@ -20,9 +20,12 @@ from app.usecase.criteria import select_criteria
 from app.usecase.exceptions import CriterionNotFound
 
 
-def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
-    """Все активные критерии справочника с оценками; порядок — справочника."""
-    criteria = select_criteria(db)
+def get_ratings_view(db: Session, document_id: int, owner_user=None) -> RatingsOut:
+    """Активные критерии пользователя (тот, кто смотрит документ — он и
+    оценивает) с его оценками; порядок — справочника. owner_user=None —
+    авторизация выключена, без фильтра."""
+    owner_user_id = owner_user.id if owner_user is not None else None
+    criteria = select_criteria(db, owner_user_id=owner_user_id)
     report = repository.reports.get_latest(db, document_id)
     ratings = {
         rating.criterion_id: rating
@@ -48,12 +51,16 @@ def get_ratings_view(db: Session, document_id: int) -> RatingsOut:
     return RatingsOut(document_id=document_id, criteria=items)
 
 
-def apply_ratings(db: Session, document_id: int, items: list[RatingItem]) -> RatingsOut:
-    """Upsert оценок: score=None удаляет запись (идемпотентно)."""
+def apply_ratings(
+    db: Session, document_id: int, items: list[RatingItem], owner_user=None
+) -> RatingsOut:
+    """Upsert оценок: score=None удаляет запись (идемпотентно). Оценивать
+    можно только свои критерии (чужой id — 404)."""
+    owner_user_id = owner_user.id if owner_user is not None else None
     # валидация набора — единый паттерн с прогоном (usecase.criteria):
     # несуществующий/архивный критерий — ошибка, молча вычеркивать нельзя
     try:
-        select_criteria(db, [item.criterion_id for item in items])
+        select_criteria(db, [item.criterion_id for item in items], owner_user_id=owner_user_id)
     except LookupError as exc:
         raise CriterionNotFound(str(exc)) from exc
 

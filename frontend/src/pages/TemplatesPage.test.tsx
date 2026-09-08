@@ -87,23 +87,23 @@ describe("TemplatesPage: список карточек", () => {
 
     expect(await screen.findByText("Шаблон системных требований")).toBeInTheDocument();
     expect(screen.getByText("Шаблон интеграционных доработок")).toBeInTheDocument();
+    // чип «по умолчанию» ровно у одной активной
     expect(screen.getAllByText("по умолчанию").length).toBe(1);
 
-    // мета активной карточки: разделы, версия, дата, маркер
-    expect(screen.getByText(/12 разделов · версия №3/)).toBeInTheDocument();
-    expect(screen.getByText(/маркер названия: «СТ»/)).toBeInTheDocument();
+    // мета карточки: версия, разделы, дата создания (макет: «v3 · 12 разделов · …»)
+    expect(screen.getByText(/v3 · 12 разделов ·/)).toBeInTheDocument();
 
     // у дефолтной нет кнопки «По умолчанию», у второй есть
-    expect(screen.getAllByRole("button", { name: "По умолчанию" }).length).toBe(1);
+    expect(screen.getAllByRole("button", { name: "⭐ По умолчанию" }).length).toBe(1);
 
-    // архивный блок
-    expect(screen.getByText("Архив")).toBeInTheDocument();
+    // архив отдельной секцией с восстановлением
+    expect(screen.getByText(/Архив \(1\)/)).toBeInTheDocument();
     expect(screen.getByText("Старый шаблон 2025")).toBeInTheDocument();
-    expect(screen.getByText("в архиве")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Вернуть из архива" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "↺ Восстановить" })).toBeInTheDocument();
 
-    // карточка создания
-    expect(screen.getByRole("button", { name: /Создать шаблон/ })).toBeInTheDocument();
+    // кнопки шапки по макету
+    expect(screen.getByRole("button", { name: "🌐 Из общего реестра" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "＋ Новый шаблон" })).toBeInTheDocument();
   });
 
   it("действия карточки шлют POST и перечитывают список", async () => {
@@ -111,7 +111,7 @@ describe("TemplatesPage: список карточек", () => {
     renderPage();
     await screen.findByText("Шаблон интеграционных доработок");
 
-    fireEvent.click(screen.getByRole("button", { name: "По умолчанию" }));
+    fireEvent.click(screen.getByRole("button", { name: "⭐ По умолчанию" }));
 
     await waitFor(() => {
       expect(
@@ -126,21 +126,22 @@ describe("TemplatesPage: список карточек", () => {
     });
   });
 
-  it("клик по карточке и по «+» ведёт на соответствующие экраны", async () => {
+  it("Редактировать ведёт на экран редактора", async () => {
     mockFetch({ "/api/templates": CARDS });
     renderPage();
     await screen.findByText("Шаблон интеграционных доработок");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Открыть" })[1]);
+    const edit = screen.getAllByRole("button", { name: "Редактировать" })[1];
+    fireEvent.click(edit);
     expect(await screen.findByText("экран редактора")).toBeInTheDocument();
   });
 
-  it("карточка «+» открывает экран создания", async () => {
+  it("кнопка «Новый шаблон» открывает экран создания", async () => {
     mockFetch({ "/api/templates": CARDS });
     renderPage();
     await screen.findByText("Шаблон системных требований");
 
-    fireEvent.click(screen.getByRole("button", { name: /Создать шаблон/ }));
+    fireEvent.click(screen.getByRole("button", { name: "＋ Новый шаблон" }));
     expect(await screen.findByText("экран создания")).toBeInTheDocument();
   });
 

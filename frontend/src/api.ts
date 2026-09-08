@@ -1,6 +1,9 @@
-// API-клиент: basic-авторизация (НФТ-CR-7), единая обработка ошибок.
+// API-клиент: Bearer-сессии (God — логин+пароль, лиды — токен Confluence),
+// единая обработка ошибок.
 
-export const AUTH_STORAGE_KEY = "cr-auth";
+export const AUTH_STORAGE_KEY = "cr-session";
+// миграция: старый basic-ключ больше не используется — удаляем
+if (typeof localStorage !== "undefined") localStorage.removeItem("cr-auth");
 export const UNAUTHORIZED_EVENT = "cr:unauthorized";
 
 export class ApiError extends Error {
@@ -12,27 +15,26 @@ export class ApiError extends Error {
   }
 }
 
-// btoa принимает только Latin-1; кодируем UTF-8 вручную, чтобы кириллические
-// логин/пароль корректно доходили до backend (он декодирует base64 → utf-8).
-function toBase64(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
+/** Токен сессии: выдаёт /api/auth/login (God) или /api/auth/token-login (лид). */
+export function saveSession(token: string): void {
+  localStorage.setItem(AUTH_STORAGE_KEY, token);
 }
 
-export function saveCredentials(username: string, password: string): void {
-  localStorage.setItem(AUTH_STORAGE_KEY, toBase64(`${username}:${password}`));
-}
-
-// Проверка учётки до сохранения: false — неверный логин или пароль.
+/** Вход God: логин и пароль из окружения сервиса. false — неверные креды. */
 export async function login(username: string, password: string): Promise<boolean> {
-  const resp = await fetch("/api/analysts", {
-    headers: { Authorization: `Basic ${toBase64(`${username}:${password}`)}` },
-  });
-  return resp.status !== 401;
+  try {
+    const resp = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (resp.status !== 200) return false;
+    const data = (await resp.json()) as { token: string };
+    saveSession(data.token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearCredentials(): void {
@@ -46,8 +48,8 @@ export function hasCredentials(): boolean {
 // наружу — для SSE-стрима событий (events.ts): EventSource не умеет
 // Authorization-заголовок, стрим читаем обычным fetch
 export function authHeaders(): Record<string, string> {
-  const creds = localStorage.getItem(AUTH_STORAGE_KEY);
-  return creds ? { Authorization: `Basic ${creds}` } : {};
+  const token = localStorage.getItem(AUTH_STORAGE_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // Мутации орг-структуры дёргают это событие: сайдбар (он живёт вне роутов и
@@ -122,6 +124,8 @@ export interface Analyst {
   cluster_id: number | null;
   cluster_name: string | null;
   domains: string[];
+  lead_user_id: number | null;
+  lead_name: string | null;
 }
 
 // --- организационная структура: кластеры и команды ---
@@ -248,13 +252,23 @@ export interface DashboardSection {
   items: DashboardItem[];
 }
 
+export interface MyAnalystItem {
+  key: string;
+  analyst_id: number;
+  name: string;
+  team_name: string | null;
+  documents_count: number;
+  validation_status: string | null;
+}
+
 export interface DashboardOut {
   sections: DashboardSection[];
+  my_analysts: MyAnalystItem[];
 }
 
 /** Событие ленты: payload — исходное событие фоновой задачи без type/at */
 export interface FeedEvent {
-  type: "sync" | "validation" | "bulk";
+  type: "sync" | "validation" | "bulk" | "comment";
   at: string;
   payload: Record<string, unknown>;
 }
@@ -502,3 +516,46 @@ export interface TemplateVersionInfo {
   is_active: boolean;
   section_count: number;
 }
+
+// --- авторизация: роли, заявки, пользователи ---
+
+export interface Role {
+  id: number;
+  name: string;
+  is_system: boolean;
+  permissions: string[];
+}
+
+export interface RegistrationRequest {
+  id: number;
+  confluence_login: string;
+  email: string;
+  full_name: string;
+  status: "pending" | "approved" | "rejected";
+  role_id: number | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface UserBrief {
+  id: number;
+  full_name: string;
+  email: string;
+  role_name: string;
+  analysts_count: number;
+}
+
+export const PERMISSION_LABELS: Record<string, string> = {
+  checks: "Запуск проверок и синхронизаций",
+  comments: "Комментарии, заметки, оценки",
+  "templates.own": "Свои шаблоны: создание/правка/архив",
+  "criteria.own": "Свои критерии ИИ: создание/правка/архив",
+  "clusters.edit": "Кластеры: создание/редактирование",
+  "teams.edit": "Команды: создание/редактирование/состав",
+  "analysts.edit": "Аналитики: создание/редактирование/привязка",
+  "lead.assign": "Назначать лида аналитику",
+  delete: "Удаление: кластеры, команды, аналитики",
+  "ai.default": "Настройка ИИ «по умолчанию»",
+  moderation: "Модерация заявок и смена ролей",
+  "roles.manage": "Создание ролей и настройка их прав",
+};

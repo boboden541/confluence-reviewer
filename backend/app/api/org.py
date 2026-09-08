@@ -10,7 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.dependencies import get_db, require_permission
+from app.models import User
 from app.schemas import (
     ClusterCreate,
     ClusterOut,
@@ -44,7 +45,11 @@ def list_clusters(db: Session = Depends(get_db)):
 
 
 @clusters_router.post("", response_model=ClusterOut, status_code=status.HTTP_201_CREATED)
-def create_cluster(payload: ClusterCreate, db: Session = Depends(get_db)):
+def create_cluster(
+    payload: ClusterCreate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("clusters.edit")),
+):
     """Новый кластер; название уникально."""
     try:
         return org_uc.create_cluster(db, payload)
@@ -61,7 +66,12 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
 
 
 @clusters_router.put("/{cluster_id}", response_model=ClusterOut)
-def update_cluster(cluster_id: int, payload: ClusterUpdate, db: Session = Depends(get_db)):
+def update_cluster(
+    cluster_id: int,
+    payload: ClusterUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("clusters.edit")),
+):
     try:
         return org_uc.update_cluster(db, cluster_id, payload)
     except ClusterNotFound as exc:
@@ -71,7 +81,11 @@ def update_cluster(cluster_id: int, payload: ClusterUpdate, db: Session = Depend
 
 
 @clusters_router.delete("/{cluster_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cluster(cluster_id: int, db: Session = Depends(get_db)):
+def delete_cluster(
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("delete")),
+):
     """Удалить кластер. Пока в нём есть команды — 409."""
     try:
         org_uc.delete_cluster(db, cluster_id)
@@ -85,7 +99,11 @@ def delete_cluster(cluster_id: int, db: Session = Depends(get_db)):
 
 
 @teams_router.post("", response_model=TeamOut, status_code=status.HTTP_201_CREATED)
-def create_team(payload: TeamCreate, db: Session = Depends(get_db)):
+def create_team(
+    payload: TeamCreate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("teams.edit")),
+):
     """Новая команда в кластере; название уникально внутри кластера."""
     try:
         return org_uc.create_team(db, payload)
@@ -105,7 +123,12 @@ def get_team(team_id: int, db: Session = Depends(get_db)):
 
 
 @teams_router.put("/{team_id}", response_model=TeamOut)
-def update_team(team_id: int, payload: TeamUpdate, db: Session = Depends(get_db)):
+def update_team(
+    team_id: int,
+    payload: TeamUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("teams.edit")),
+):
     try:
         return org_uc.update_team(db, team_id, payload)
     except TeamNotFound as exc:
@@ -115,7 +138,11 @@ def update_team(team_id: int, payload: TeamUpdate, db: Session = Depends(get_db)
 
 
 @teams_router.delete("/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_team(team_id: int, db: Session = Depends(get_db)):
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("delete")),
+):
     """Удалить команду: аналитики остаются («без команды») со своими доменами,
     документами и оценками."""
     try:
@@ -125,7 +152,12 @@ def delete_team(team_id: int, db: Session = Depends(get_db)):
 
 
 @teams_router.post("/{team_id}/analysts", response_model=TeamOut)
-def add_analyst(team_id: int, payload: TeamAnalystAdd, db: Session = Depends(get_db)):
+def add_analyst(
+    team_id: int,
+    payload: TeamAnalystAdd,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("teams.edit")),
+):
     """Привязать аналитиков к команде (одного или нескольких); домены
     обновляются, если переданы."""
     try:
@@ -137,7 +169,12 @@ def add_analyst(team_id: int, payload: TeamAnalystAdd, db: Session = Depends(get
 
 
 @teams_router.delete("/{team_id}/analysts/{analyst_id}", response_model=TeamOut)
-def remove_analyst(team_id: int, analyst_id: int, db: Session = Depends(get_db)):
+def remove_analyst(
+    team_id: int,
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("teams.edit")),
+):
     """Убрать аналитика из команды (идемпотентно)."""
     try:
         return org_uc.remove_analyst(db, team_id, analyst_id)

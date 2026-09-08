@@ -14,6 +14,7 @@ from app.schemas import (
     CriterionSummaryOut,
     RatingsSummaryOut,
 )
+from app.usecase import auth as auth_uc
 from app.usecase.exceptions import AnalystEmailTaken, AnalystNotFound
 from app.usecase.org import set_analyst_domains
 from app.utils import normalize_period_end
@@ -41,6 +42,10 @@ def _to_out(
     """
     item = AnalystOut.model_validate(analyst)
     item.documents_count = documents_count
+    item.lead_user_id = analyst.lead_user_id
+    if analyst.lead_user_id is not None:
+        lead_user = auth_uc.get_user(db, analyst.lead_user_id)
+        item.lead_name = lead_user.full_name if lead_user else None
     if analyst.team_id is not None:
         if contexts is None:
             contexts = repository.org.team_contexts(db)
@@ -184,3 +189,14 @@ def ratings_summary(db, analyst_id: int, date_from=None, date_to=None) -> Rating
         total_ratings=total,
         criteria=criteria,
     )
+
+
+def set_lead(db, analyst_id: int, lead_user_id: int | None) -> AnalystOut:
+    """Назначить/снять лида аналитика (право lead.assign — на api-слое)."""
+    analyst = repository.analysts.get(db, analyst_id)
+    if analyst is None:
+        raise AnalystNotFound(f"Аналитик {analyst_id} не найден")
+    analyst.lead_user_id = lead_user_id
+    db.commit()
+    count = repository.analysts.count_documents(db, analyst_id)
+    return _to_out(db, analyst, count)

@@ -17,6 +17,7 @@ from app.schemas.ai import (
     AiCriterionUpdate,
 )
 from app.schemas.analysts import (
+    AnalystLeadUpdate,
     AnalystCreate,
     AnalystDomainsUpdate,
     AnalystNoteOut,
@@ -26,6 +27,7 @@ from app.schemas.analysts import (
 )
 from app.schemas.dashboard import (
     DashboardItem,
+    MyAnalystItem,
     DashboardOut,
     DashboardSection,
     FeedItem,
@@ -86,10 +88,12 @@ __all__ = [
     "AiCriterionUpdate",
     "AnalystBrief",
     "AnalystCreate",
+    "AnalystLeadUpdate",
     "DashboardItem",
     "DashboardOut",
     "DashboardSection",
     "FeedItem",
+    "MyAnalystItem",
     "AnalystDomainsUpdate",
     "AnalystNoteOut",
     "AnalystNoteUpdate",

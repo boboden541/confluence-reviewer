@@ -17,6 +17,8 @@ import {
 import { clusterColor, clusterColorBg } from "../orgUi";
 import { listRecent, RecentEntry, RecentKind } from "../recent";
 import { on } from "../events";
+import type { Me } from "../auth";
+import { useUser } from "../userContext";
 
 /** Главная страница — пульт руководителя (согласованный макет home-mock):
  *  очередь внимания (что требует реакции), «сейчас» и живая лента (что
@@ -151,8 +153,10 @@ export default function HomePage() {
   const [bulk, setBulk] = useState<BulkValidationStatus | null>(null);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [recent, setRecent] = useState<RecentEntry[]>(() => listRecent());
+  const [myAnalysts, setMyAnalysts] = useState<DashboardOut["my_analysts"]>([]);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["failed"]));
   const [error, setError] = useState("");
+  const me = useUser();
 
   const load = useCallback(async () => {
     try {
@@ -162,6 +166,7 @@ export default function HomePage() {
         api<Analyst[]>("/api/analysts"),
       ]);
       setDashboard(dash);
+      setMyAnalysts(dash.my_analysts ?? []);
       setClusters(clusterList);
       setAnalysts(analystList);
       setError("");
@@ -176,7 +181,15 @@ export default function HomePage() {
     // служебные состояния и лента: разовый опрос + живые события поверх
     api<SyncStatus>("/api/sync/status").then(setSync).catch(() => setSync(null));
     api<BulkValidationStatus>("/api/sync/bulk-validation").then(setBulk).catch(() => setBulk(null));
-    api<FeedEvent[]>("/api/dashboard/feed").then(setFeed).catch(() => setFeed([]));
+    void (async () => {
+      // «Моя активность»: события, где актор — текущий пользователь
+      const meId = await api<Me>("/api/auth/me")
+        .then((m) => m.id)
+        .catch(() => null);
+      api<FeedEvent[]>(`/api/dashboard/feed${meId ? `?actor_id=${meId}` : ""}`)
+        .then(setFeed)
+        .catch(() => setFeed([]));
+    })();
     api<TemplateCard[]>("/api/templates").then(setTemplates).catch(() => setTemplates([]));
     api<AiCriterion[]>("/api/ai-criteria").then(setCriteria).catch(() => setCriteria([]));
     api<AiConnectionConfig>("/api/ai-settings")
@@ -251,7 +264,7 @@ export default function HomePage() {
       </nav>
 
       <div className="hello">
-        <h1>Ревью требований</h1>
+        <h1>{me ? `Добрый день, ${me.full_name.split(" ")[0]}!` : "Ревью требований"}</h1>
         <span className="hello-date">
           {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
         </span>
@@ -268,7 +281,11 @@ export default function HomePage() {
               🧪 Массовая проверка: {bulk.done} из {bulk.total}
             </span>
           )}
-          {aiConfigured ? (
+          {me && !me.ai_configured ? (
+            <Link className="chip-status chip-warn" to="/ai-connection" style={{ textDecoration: "none" }}>
+              ⚡ ИИ не настроен — проверки заблокированы
+            </Link>
+          ) : aiConfigured ? (
             <span className="chip-status chip-ok">⚡ ИИ: {aiModel || "настроено"}</span>
           ) : (
             <Link className="chip-status chip-warn" to="/ai-connection" style={{ textDecoration: "none" }}>
@@ -382,8 +399,37 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ПРАВАЯ КОЛОНКА: сейчас + лента + недавние */}
+        {/* ПРАВАЯ КОЛОНКА: заявки (god) + мои аналитики + сейчас + лента + недавние */}
         <div className="col">
+          {me?.is_god && (me.pending_requests ?? 0) > 0 && (
+            <Link
+              to="/requests"
+              className="panel"
+              style={{ padding: "12px 16px", textDecoration: "none", color: "var(--text)" }}
+            >
+              <strong>📥 Заявки на доступ</strong>{" "}
+              <span className="badge badge-warn">{me.pending_requests} новых</span>
+            </Link>
+          )}
+          {myAnalysts.length > 0 && (
+            <div className="panel">
+              <div className="panel-head">
+                <h2>👥 Мои аналитики</h2>
+                <span className="count">{myAnalysts.length}</span>
+              </div>
+              <div className="panel-body">
+                {myAnalysts.map((item) => (
+                  <Link key={item.key} to={`/analysts/${item.analyst_id}`} className="recent-item">
+                    <span className="doc-ico" aria-hidden="true">👤</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.name}
+                      {item.team_name ? ` · ${item.team_name}` : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="panel">
             <div className="panel-head"><h2>⏳ Сейчас происходит</h2></div>
             <div className="now-row">

@@ -4,6 +4,24 @@ import { MemoryRouter } from "react-router-dom";
 import AnalystsPage from "./pages/AnalystsPage";
 import { AUTH_STORAGE_KEY } from "./api";
 import { emitServerEvent } from "./events";
+import { UserContext } from "./userContext";
+
+const ME_GOD = {
+  id: 1,
+  full_name: "Тест Год",
+  email: "t@t",
+  role_id: 1,
+  role_name: "God",
+  is_god: true,
+  permissions: ["delete"],
+  ai_configured: true,
+  pending_requests: 0,
+};
+
+/** Все рендеры — с контекстом пользователя God (право delete). */
+function renderPage(ui: React.ReactElement) {
+  return render(<UserContext.Provider value={ME_GOD}>{ui}</UserContext.Provider>);
+}
 
 function mockFetch(responses: Record<string, unknown>) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
@@ -47,7 +65,7 @@ const ANALYSTS = [
 
 describe("AnalystsPage", () => {
   beforeEach(() => {
-    localStorage.setItem(AUTH_STORAGE_KEY, btoa("u:p"));
+    localStorage.setItem(AUTH_STORAGE_KEY, "sess-token");
   });
 
   afterEach(() => {
@@ -59,7 +77,7 @@ describe("AnalystsPage", () => {
   it("renders analysts from /api/analysts", async () => {
     mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -71,10 +89,10 @@ describe("AnalystsPage", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
   });
 
-  it("sends stored basic credentials with the request", async () => {
+  it("sends the stored session token with the request", async () => {
     const fetchMock = mockFetch({ "/api/analysts": [] });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -82,15 +100,13 @@ describe("AnalystsPage", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      `Basic ${btoa("u:p")}`,
-    );
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sess-token");
   });
 
   it("shows empty state when there are no analysts", async () => {
     mockFetch({ "/api/analysts": [] });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -126,7 +142,7 @@ describe("AnalystsPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -167,7 +183,7 @@ describe("AnalystsPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -188,7 +204,7 @@ describe("AnalystsPage", () => {
   it("edits an analyst from the row button", async () => {
     const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -229,7 +245,7 @@ describe("AnalystsPage", () => {
   it("cancels editing without a request", async () => {
     const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -247,7 +263,7 @@ describe("AnalystsPage", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -274,7 +290,7 @@ describe("AnalystsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -291,7 +307,7 @@ describe("AnalystsPage", () => {
   it("живые события sync: итог приходит сам, без перезагрузки страницы", async () => {
     const fetchMock = mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,
@@ -333,7 +349,7 @@ describe("AnalystsPage", () => {
   it("снимок «уже завершено» при подключении не показывает сводку", async () => {
     mockFetch({ "/api/analysts": ANALYSTS });
 
-    render(
+    renderPage(
       <MemoryRouter>
         <AnalystsPage />
       </MemoryRouter>,

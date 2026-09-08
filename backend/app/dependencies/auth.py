@@ -1,85 +1,109 @@
-"""Basic-авторизация доступа к сервису (НФТ-CR-7) как FastAPI-зависимость.
+"""Аутентификация по Bearer-сессиям и проверка прав.
 
-Включается AUTH_ENABLED=true; учётка — APP_USERNAME / APP_PASSWORD из окружения.
-install_auth кладёт эффективные параметры в app.state.auth (а не читает
-get_settings в самой зависимости — create_app может получить другие Settings),
-require_basic_auth вешается на приложение глобально и закрывает все маршруты,
-кроме /api/health (он нужен контейнерным healthcheck'ам и ничего не раскрывает).
-
-Защита от неверной конфигурации: если авторизация включена, но пароль пуст,
-все запросы (кроме health) отклоняются.
-
-Два места, куда глобальные dependencies FastAPI не дотягиваются, закрываются
-отдельно (см. install_auth):
-- /docs, /redoc, /openapi.json регистрируются через starlette add_route —
-  для них маршруты перерегистрируются как APIRoute с той же зависимостью;
-- неизвестные пути (404) — catch-all маршрут в конце таблицы маршрутов.
+Сессии выдаёт /api/auth/login (God: логин+пароль из env) и
+/api/auth/token-login (лид: персональный токен Confluence). При
+AUTH_ENABLED=false сервис работает без авторизации: user=None,
+права не проверяются, владелец нового контента — God (resolve_actor).
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
-import secrets
-from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse
-from fastapi.routing import APIRoute
+from fastapi import Depends, Request
+from starlette.responses import PlainTextResponse
 
-OPEN_PATHS = {"/api/health"}
+from app.dependencies.db import get_db
+from app.usecase import auth as auth_uc
 
-# Маршруты документации: setup() FastAPI добавляет их как starlette-маршруты,
-# на которые app-level dependencies не действуют
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from sqlalchemy.orm import Session
+
+    from app.config import Settings
+    from app.models import User
+
+# Доступны без сессии: здоровье и сами входы
+OPEN_PATHS = {
+    "/api/health",
+    "/api/auth/login",
+    "/api/auth/token-login",
+    "/api/auth/reapply",
+}
 _DOCS_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
-
-# Catch-all закрывает и неизвестные пути: без авторизации они отдают 404
 _CATCH_ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
 
 class AuthRequiredError(Exception):
-    """Нет или неверные учётные данные → 401 текстом без WWW-Authenticate."""
+    """Нет/просрочена сессия (api-слой → 401 PlainText, паритет с Basic)."""
 
 
-async def require_basic_auth(request: Request) -> None:
-    """Глобальная зависимость: проверить Authorization: Basic … на каждом запросе."""
-    auth = getattr(request.app.state, "auth", None)
-    if auth is None or not auth.enabled:
-        return
+async def require_user(request: Request, db: Session = Depends(get_db)) -> User | None:
+    """Зависимость уровня приложения: кладёт текущего пользователя.
+
+    Возвращает None только когда авторизация выключена (тесты/локально) —
+    тогда права не проверяются, а владелец нового контента — God.
+    """
+    if not request.app.state.auth.get("enabled"):
+        return None
     if request.url.path in OPEN_PATHS:
-        return
-    if auth.password and _check_credentials(request.headers, auth.username, auth.password):
-        return
-    raise AuthRequiredError()
+        return None
+    user = _user_for_request(request, db)
+    if user is None:
+        raise AuthRequiredError()
+    return user
 
 
-def _check_credentials(headers, username: str, password: str) -> bool:
-    scheme, _, param = headers.get("Authorization", "").partition(" ")
-    if scheme.lower() != "basic":
-        return False
-    try:
-        decoded = base64.b64decode(param.strip(), validate=True).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError, ValueError):
-        return False
-    got_username, _, got_password = decoded.partition(":")
-    # compare_digest не принимает не-ASCII строки — сравниваем байты UTF-8
-    return secrets.compare_digest(
-        got_username.encode("utf-8"), username.encode("utf-8")
-    ) and secrets.compare_digest(got_password.encode("utf-8"), password.encode("utf-8"))
+def _user_for_request(request: Request, db: Session) -> User | None:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    return auth_uc.user_for_session(db, auth.removeprefix("Bearer ").strip())
 
 
-def _auth_required_handler(_request: Request, _exc: AuthRequiredError) -> PlainTextResponse:
-    # Без WWW-Authenticate: SPA имеет собственную форму входа, а заголовок
-    # заставляет браузер рисовать нативный диалог поверх приложения.
+def resolve_actor(db: Session, user: User | None) -> User:
+    """Владелец нового контента: текущий пользователь, при выключенной
+    авторизации — God (единственный до одобрения заявок)."""
+    if user is not None:
+        return user
+    from sqlalchemy import select
+
+    from app.models import Role, User as UserModel
+
+    god = db.scalar(select(UserModel).join(Role).where(Role.is_system.is_(True)).limit(1))
+    if god is None:  # seed_auth ещё не выполнялся (юнит-тесты без lifespan)
+        raise AuthRequiredError()
+    return god
+
+
+def require_permission(key: str):
+    """Фабрика зависимостей: пользователь с правом key (или disabled)."""
+
+    def _dependency(user: User | None = Depends(require_user)) -> User | None:
+        try:
+            auth_uc.ensure_permission(user, key)
+        except auth_uc.PermissionDenied as exc:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        return user
+
+    return _dependency
+
+
+# ── документация и catch-all (как раньше, с новой зависимостью) ──────
+
+
+def _auth_required_handler(request: Request, exc: Exception) -> PlainTextResponse:
     return PlainTextResponse("Требуется авторизация", status_code=401)
 
 
-def _not_found() -> None:
-    raise HTTPException(status_code=404, detail="Not Found")
+def _protect_docs(app: "FastAPI") -> None:
+    """Перерегистрировать маршруты документации как APIRoute с авторизацией
+    (старый механизм с этапа basic-auth, зависимость сменена на require_user)."""
+    from fastapi.routing import APIRoute
+    from fastapi import Depends
 
-
-def _protect_docs(app: FastAPI) -> None:
-    """Перерегистрировать маршруты документации как APIRoute с авторизацией."""
     protected: list[APIRoute] = []
     for route in list(app.router.routes):
         if getattr(route, "path", None) in _DOCS_PATHS and not isinstance(route, APIRoute):
@@ -90,37 +114,34 @@ def _protect_docs(app: FastAPI) -> None:
                     route.endpoint,
                     name=route.name,
                     include_in_schema=False,
-                    dependencies=[Depends(require_basic_auth)],
+                    dependencies=[Depends(require_user)],
                 )
             )
     app.router.routes.extend(protected)
 
 
-def install_auth(app: FastAPI, settings) -> None:
-    """Положить параметры авторизации в app.state и закрыть документацию.
+def add_catch_all(app) -> None:
+    """Неизвестные пути: 404, но после авторизации (паритет с Basic-этапом)."""
+    from fastapi import HTTPException
 
-    Вызывается из create_app сразу после создания приложения: глобальная
-    зависимость require_basic_auth уже объявлена в конструкторе FastAPI,
-    сюда остаётся только конфигурация и нестандартные маршруты.
-    """
-    app.state.auth = SimpleNamespace(
-        enabled=bool(settings.auth_enabled),
-        username=settings.app_username,
-        password=settings.app_password,
-    )
-    app.add_exception_handler(AuthRequiredError, _auth_required_handler)
-    _protect_docs(app)
+    def _not_found():
+        raise HTTPException(status_code=404)
 
-
-def add_catch_all(app: FastAPI) -> None:
-    """Неизвестные пути тоже требуют авторизации (паритет с middleware).
-
-    Вызывается ПОСЛЕ всех include_router: catch-all матчит любой путь и
-    должен стоять в таблице маршрутов последним, иначе перекроет API.
-    """
     app.add_api_route(
         "/{full_path:path}",
         _not_found,
         methods=_CATCH_ALL_METHODS,
         include_in_schema=False,
+        dependencies=[Depends(require_user)],
     )
+
+
+def install_auth(app, settings: Settings) -> None:
+    """Состояние авторизации: включена ли и учётка God (вход по паролю)."""
+    app.state.auth = {
+        "enabled": bool(settings.auth_enabled),
+        "username": settings.app_username,
+        "password": settings.app_password,
+    }
+    app.add_exception_handler(AuthRequiredError, _auth_required_handler)
+    _protect_docs(app)

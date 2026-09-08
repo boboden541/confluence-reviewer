@@ -101,8 +101,8 @@ describe("events: SSE-стрим через fetch", () => {
     expect(connected).toHaveLength(1);
   });
 
-  it("учётка уходит в заголовке Authorization", async () => {
-    localStorage.setItem(AUTH_STORAGE_KEY, "dXNlcjpwYXNz");
+  it("сессия уходит в заголовке Authorization", async () => {
+    localStorage.setItem(AUTH_STORAGE_KEY, "sess-token");
     const fetchMock = mockStreamFetch([""]);
 
     startEvents();
@@ -111,7 +111,7 @@ describe("events: SSE-стрим через fetch", () => {
     });
 
     const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Basic dXNlcjpwYXNz");
+    expect(headers.Authorization).toBe("Bearer sess-token");
     expect(headers.Accept).toBe("text/event-stream");
   });
 

@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
-  AUTH_STORAGE_KEY,
-  clearCredentials,
   hasCredentials,
   login,
-  saveCredentials,
   UNAUTHORIZED_EVENT,
   api,
   type Analyst,
@@ -22,6 +19,8 @@ import TeamPage from "./pages/TeamPage";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
 import HomePage from "./pages/HomePage";
+import RequestsPage from "./pages/RequestsPage";
+import RolesPage from "./pages/RolesPage";
 import AnalystStatsPage from "./pages/AnalystStatsPage";
 import AiSettingsPage from "./pages/AiSettingsPage";
 import CriteriaPage from "./pages/CriteriaPage";
@@ -31,22 +30,33 @@ import TemplatePage from "./pages/TemplatePage";
 import TemplatesPage from "./pages/TemplatesPage";
 import GlobalSearch from "./GlobalSearch";
 import { on, startEvents, stopEvents } from "./events";
+import { fetchMe, loginWithToken, logout as authLogout, reapply, type Me } from "./auth";
+import { UserContext, useCan, useMe } from "./userContext";
 
-export function LoginGate() {
+export function LoginGate({
+  onAuthenticated,
+}: {
+  onAuthenticated: (me: Me) => void;
+}) {
   const navigate = useNavigate();
+  const [mode, setMode] = useState<"password" | "token">("password");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+  const [rejected, setRejected] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
       // Сначала проверяем учётку, потом сохраняем — иначе цикл перезагрузок.
       if (await login(username, password)) {
-        saveCredentials(username, password);
+        const me = await fetchMe();
+        onAuthenticated(me);
         navigate(0);
       } else {
         setError("Неверный логин или пароль");
@@ -58,26 +68,149 @@ export function LoginGate() {
     }
   };
 
+  const onTokenSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const outcome = await loginWithToken(token);
+      if (outcome.kind === "session") {
+        onAuthenticated(outcome.me);
+        navigate(0);
+      } else if (outcome.kind === "pending") {
+        setPending(outcome.fullName);
+      } else if (outcome.kind === "rejected") {
+        setRejected(true);
+      } else {
+        setError(outcome.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onReapply = async () => {
+    setBusy(true);
+    const ok = await reapply(token);
+    setBusy(false);
+    if (ok) {
+      setRejected(false);
+      setPending("заявка подана повторно");
+    } else {
+      setError("Не удалось подать заявку повторно");
+    }
+  };
+
+  if (pending) {
+    return (
+      <div className="login">
+        <span className="logo-mark big">РТ</span>
+        <h1>Заявка отправлена</h1>
+        <p>
+          Мы проверили ваш токен в Confluence и передали заявку администратору
+          сервиса{pending ? ` (${pending})` : ""}. Как только её одобрят — войдите тем же
+          токеном.
+        </p>
+        <button type="button" className="btn primary" onClick={() => { setPending(null); setToken(""); }}>
+          Вернуться ко входу
+        </button>
+      </div>
+    );
+  }
+
+  if (rejected) {
+    return (
+      <div className="login">
+        <span className="logo-mark big">РТ</span>
+        <h1>Заявка отклонена</h1>
+        <p>
+          Если считаете, что доступ вам нужен, — свяжитесь с администратором
+          сервиса и подайте заявку повторно.
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <button type="button" className="btn primary" onClick={onReapply} disabled={busy}>
+            Подать заявку повторно
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setRejected(false);
+              setToken("");
+            }}
+          >
+            Вернуться ко входу
+          </button>
+        </div>
+        {error && <div className="error">{error}</div>}
+      </div>
+    );
+  }
+
   return (
-    <form className="login" onSubmit={onSubmit}>
+    <form
+      className="login"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (mode === "password") void onPasswordSubmit(e);
+        else void onTokenSubmit(e);
+      }}
+    >
       <span className="logo-mark big">РТ</span>
       <h1>Ревью требований</h1>
-      <p>Введите учётные данные сервиса</p>
-      <input
-        placeholder="Логин"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        autoFocus
-      />
-      <input
-        placeholder="Пароль"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      <p>Вход в сервис</p>
+
+      <div className="login-tabs">
+        <button
+          type="button"
+          className={mode === "password" ? "active" : ""}
+          onClick={() => setMode("password")}
+        >
+          Логин и пароль
+        </button>
+        <button
+          type="button"
+          className={mode === "token" ? "active" : ""}
+          onClick={() => setMode("token")}
+        >
+          Токен Confluence
+        </button>
+      </div>
+
+      {mode === "password" ? (
+        <>
+          <input
+            placeholder="Логин"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoFocus
+          />
+          <input
+            placeholder="Пароль"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </>
+      ) : (
+        <>
+          <input
+            placeholder="Персональный токен Confluence"
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoFocus
+          />
+          <p className="login-hint">
+            Токен создаётся в Confluence: Профиль → Настройки → Личные токены доступа.
+            Мы прочитаем из него ваше имя, почту и логин и создадим заявку на доступ.
+          </p>
+        </>
+      )}
+
       {error && <div className="error">{error}</div>}
       <button type="submit" className="btn primary" disabled={busy}>
-        {busy ? "Проверка…" : "Войти"}
+        {busy ? "Проверка…" : mode === "password" ? "Войти" : "Продолжить"}
       </button>
     </form>
   );
@@ -182,8 +315,18 @@ function loadSidebarWidth(): number {
  *  аналитики → последние 5 документов» (плюс ветка «Без команды»).
  *  Документы ветки грузятся лениво, при первом раскрытии. На узких экранах
  *  прячется off-canvas и открывается кнопкой «Меню». */
-export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function Sidebar({
+  open,
+  onClose,
+  onLogout,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onLogout: () => void;
+}) {
   const location = useLocation();
+  const me = useMe();
+  const canUser = useCan();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [structureOpen, setStructureOpen] = useState(true);
@@ -613,7 +756,49 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         <span className="ic">👥</span> <span>Все аналитики</span>
       </Link>
 
-      <div className="nav-label">Настройка</div>
+      <div className="nav-label">Моё</div>
+      <Link to="/ai-connection" className={`nav-item${onAiConnection ? " active" : ""}`} onClick={onClose}>
+        <span className="ic">⚡</span> Мой доступ к ИИ
+      </Link>
+
+      {canUser("moderation") && (
+        <>
+          <div className="nav-label">Администрирование</div>
+          <Link to="/requests" className={`nav-item${location.pathname.startsWith("/requests") ? " active" : ""}`} onClick={onClose}>
+            <span className="ic">📥</span> Заявки на доступ
+            {(me?.pending_requests ?? 0) > 0 && (
+              <span className="nav-count nav-count-accent">{me?.pending_requests}</span>
+            )}
+          </Link>
+        </>
+      )}
+      <Link to="/roles" className={`nav-item${location.pathname.startsWith("/roles") ? " active" : ""}`} onClick={onClose}>
+        <span className="ic">🛡</span> Роли и права
+        {!canUser("roles.manage") && <span className="nav-count">просмотр</span>}
+      </Link>
+
+      <div className="user-box">
+        <span className="u-avatar" aria-hidden="true">
+          {(me?.full_name ?? "Р").trim().charAt(0).toUpperCase()}
+        </span>
+        <span className="user-box-info">
+          <span className="u-name">{me?.full_name ?? "…"}</span>
+          <span className="u-role">
+            <span className={`role-pill ${me?.is_god ? "role-god" : "role-lead"}`}>
+              {(me?.role_name ?? "…").toUpperCase()}
+            </span>
+          </span>
+        </span>
+        <button
+          type="button"
+          className="u-logout"
+          title="Выйти"
+          aria-label="Выйти"
+          onClick={onLogout}
+        >
+          ⎋
+        </button>
+      </div>
       <Link
         to="/templates"
         className={`nav-item${onTemplate ? " active" : ""}`}
@@ -668,7 +853,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
 export default function App() {
   const [authed, setAuthed] = useState(hasCredentials());
-  const [me, setMe] = useState("Р");
+  const [me, setMeState] = useState<Me | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
 
@@ -683,6 +868,17 @@ export default function App() {
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
+  // текущий пользователь: имя, роль, права (канвас кнопок), личный ИИ
+  useEffect(() => {
+    if (!authed) {
+      setMeState(null);
+      return;
+    }
+    fetchMe()
+      .then(setMeState)
+      .catch(() => setAuthed(false));
+  }, [authed]);
+
   // SSE-стрим событий фоновых задач: итог проверок и синхронизаций
   // приходит на открытые страницы сам. Живёт, пока пользователь в сервисе.
   useEffect(() => {
@@ -690,25 +886,19 @@ export default function App() {
     else stopEvents();
   }, [authed]);
 
-  // буква аватара — первый символ логина
-  useEffect(() => {
-    try {
-      const creds = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (creds) {
-        const [user] = atob(creds).split(":");
-        if (user) setMe(user[0].toUpperCase());
-      }
-    } catch {
-      // повреждённые креды — останется буква по умолчанию
-    }
-  }, [authed]);
-
   if (!authed) {
-    return <LoginGate />;
+    return (
+      <LoginGate
+        onAuthenticated={(meFull) => {
+          setMeState(meFull);
+          setAuthed(true);
+        }}
+      />
+    );
   }
 
   return (
-    <div className="app">
+    <UserContext.Provider value={me}>
       <header className="topbar">
         <button
           type="button"
@@ -727,18 +917,26 @@ export default function App() {
         <button
           type="button"
           className="topbar-avatar"
-          title="Выйти"
-          aria-label="Выйти"
+          title={`${me?.full_name ?? ""} — выйти`}
+          aria-label={`Выйти (${me?.full_name ?? "пользователь"})`}
           onClick={() => {
-            clearCredentials();
+            authLogout();
             setAuthed(false);
           }}
         >
-          {me}
+          {(me?.full_name ?? "Р").trim().charAt(0).toUpperCase()}
         </button>
       </header>
       <div className="layout">
-        <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
+        <Sidebar
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+          onLogout={() => {
+            authLogout();
+            setMeState(null);
+            setAuthed(false);
+          }}
+        />
         <div
           className={`sidebar-backdrop${navOpen ? " show" : ""}`}
           onClick={() => setNavOpen(false)}
@@ -760,10 +958,12 @@ export default function App() {
             {/* старый путь одного шаблона — ведём на список */}
             <Route path="/template" element={<Navigate to="/templates" replace />} />
             <Route path="/criteria" element={<CriteriaPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/roles" element={<RolesPage />} />
             <Route path="/ai-connection" element={<AiSettingsPage />} />
           </Routes>
         </main>
       </div>
-    </div>
+    </UserContext.Provider>
   );
 }

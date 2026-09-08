@@ -37,8 +37,20 @@ class DashboardSection(BaseModel):
     items: list[DashboardItem] = Field(default_factory=list, max_length=8)
 
 
+class MyAnalystItem(BaseModel):
+    """Аналитик, которого курирует текущий пользователь (лид)."""
+
+    key: str
+    analyst_id: int
+    name: str
+    team_name: str | None = None
+    validation_status: str | None = None
+    documents_count: int = 0
+
+
 class DashboardOut(BaseModel):
     sections: list[DashboardSection]
+    my_analysts: list[MyAnalystItem] = Field(default_factory=list)
 
 
 class FeedItem(BaseModel):

@@ -72,6 +72,7 @@ const DASHBOARD: DashboardOut = {
     },
     { type: "references", title: "Проблемы справочников", total: 0, items: [] },
   ],
+  my_analysts: [],
 };
 
 const CLUSTERS = [
@@ -186,6 +187,7 @@ describe("HomePage", () => {
   it("shows the all-clear state when nothing needs attention", async () => {
     const empty: DashboardOut = {
       sections: DASHBOARD.sections.map((s) => ({ ...s, total: 0, items: [] })),
+      my_analysts: [],
     };
     mockFetch({ ...baseResponses(), "/api/dashboard": empty });
     renderHome();

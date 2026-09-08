@@ -16,7 +16,10 @@ from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.usecase import tasks
 from app.clients.ai_validator import AIConnection
 from app.clients.ai_validator import AIValidationResult, SYSTEM_PROMPT
-from app.usecase.validation import run_validation as _run_validation
+from app.usecase.validation import (
+    _UNSET,
+    run_validation as _run_validation,
+)
 from app.utils import now_utc
 
 
@@ -227,7 +230,7 @@ def test_validate_endpoint_accepts_options_body(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured.update(
             template=template_version_id, prompt=ai_prompt, doc=document_id, checks=checks
         )
@@ -276,7 +279,7 @@ def test_batch_runs_selected_documents_in_order(client, monkeypatch):
     ids = [seed_document() for _ in range(3)]
     seen: list[tuple[int, str | None, int | None]] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=_UNSET, owner_user=None):
         seen.append((document_id, ai_prompt, template_version_id))
         return SimpleNamespace(id=document_id)
 
@@ -313,7 +316,7 @@ def test_batch_empty_ids_and_bad_prompt_422(client):
 def test_batch_conflict_while_running(client, monkeypatch):
     doc_id = seed_document()
 
-    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def slow_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, **_kwargs):
         await asyncio.sleep(0.2)  # держим прогон открытым
         return SimpleNamespace(id=1)
 
@@ -419,7 +422,7 @@ def test_validate_endpoint_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 
@@ -437,7 +440,7 @@ def test_batch_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     seen: list[list[str] | None] = []
 
-    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    async def fake_exec(document_id, trigger, force, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=_UNSET, owner_user=None):
         seen.append(checks)
         return SimpleNamespace(id=document_id)
 
@@ -467,7 +470,7 @@ def test_duplicate_checks_collapsed(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 

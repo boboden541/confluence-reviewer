@@ -12,6 +12,7 @@ org); этот фасад собирает все ORM-классы и enum'ы в
 
 from app.models.ai import AIConnectionSettings, AiCriterion, CriterionRating
 from app.models.analysts import Analyst, AnalystNote
+from app.models.auth import AuthSession, RegistrationRequest, Role, User
 from app.models.documents import ConfluenceDocument, DocumentNote
 from app.models.org import Cluster, Team
 from app.models.templates import Template, TemplateVersion
@@ -22,14 +23,18 @@ __all__ = [
     "AiCriterion",
     "Analyst",
     "AnalystNote",
+    "AuthSession",
     "Cluster",
     "ConfluenceDocument",
     "CriterionRating",
     "DocumentNote",
+    "RegistrationRequest",
+    "Role",
     "Team",
     "Template",
     "TemplateVersion",
     "TriggerType",
+    "User",
     "ValidationReport",
     "ValidationStatus",
 ]

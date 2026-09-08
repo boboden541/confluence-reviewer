@@ -30,7 +30,11 @@ class AIConnectionSettings(Base):
 
     __tablename__ = "ai_connection_settings"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # всегда 1
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # NULL — настройка «по умолчанию» (одна, правит God); иначе — личная пользователя
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, unique=True, index=True
+    )
     protocol: Mapped[str] = mapped_column(String(16), nullable=False, default="anthropic")
     base_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     api_key: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -62,6 +66,10 @@ class AiCriterion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+    # владелец: критерии персональны; NULL — только до миграции (см. seed_auth)
+    owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
     )
 
 

@@ -63,6 +63,8 @@ const ANALYSTS: Analyst[] = [
     cluster_id: null,
     cluster_name: null,
     domains: [],
+    lead_user_id: null,
+    lead_name: null,
   },
 ];
 

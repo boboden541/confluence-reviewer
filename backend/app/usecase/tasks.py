@@ -21,6 +21,8 @@ from app.utils import now_utc
 
 logger = logging.getLogger("confluence_reviewer.tasks")
 
+_UNSET = object()  # «не передано»: валидация сама считает эффективное подключение
+
 _sync_state: dict[str, Any] = {
     "running": False,
     "started_at": None,
@@ -156,6 +158,13 @@ def _run_validation_sync(document_id: int, **kwargs) -> Any:
         return run_validation(db, document_id, **kwargs)
 
 
+def _actor_fields(actor_user) -> dict:
+    """Атрибуты события для «Моей активности» (кто запустил прогон)."""
+    if actor_user is None:
+        return {}
+    return {"actor_id": actor_user.id, "actor_name": actor_user.full_name}
+
+
 async def _execute_validation(
     document_id: int,
     trigger: TriggerType,
@@ -164,8 +173,15 @@ async def _execute_validation(
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
     criterion_ids: list[int] | None = None,
+    ai_connection: Any = _UNSET,
+    owner_user=None,
 ) -> Any:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
+    extra: dict[str, Any] = {}
+    if ai_connection is not _UNSET:
+        extra["ai_connection"] = ai_connection
+    if owner_user is not None:
+        extra["owner_user"] = owner_user
     return await asyncio.to_thread(
         _run_validation_sync,
         document_id,
@@ -175,6 +191,7 @@ async def _execute_validation(
         ai_prompt=ai_prompt,
         checks=checks,
         criterion_ids=criterion_ids,
+        **extra,
     )
 
 
@@ -187,6 +204,9 @@ def start_validation(
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
     criterion_ids: list[int] | None = None,
+    ai_connection: Any = _UNSET,
+    owner_user=None,
+    actor_user=None,
 ) -> tuple[bool, str]:
     """Запустить валидацию документа в фоне (ФТ-CR-16). True — запущена.
 
@@ -203,10 +223,25 @@ def start_validation(
             "started_at": now_utc().isoformat(),
             "error": None,
         }
-        _publish_event("validation", {"document_id": document_id, **_validation_state[document_id]})
+        _publish_event(
+            "validation",
+            {"document_id": document_id, **_validation_state[document_id], **_actor_fields(actor_user)},
+        )
+        extra: dict[str, Any] = {}
+        if ai_connection is not _UNSET:
+            extra["ai_connection"] = ai_connection
+        if owner_user is not None:
+            extra["owner_user"] = owner_user
         try:
             report = await _execute_validation(
-                document_id, trigger, force, template_version_id, ai_prompt, checks, criterion_ids
+                document_id,
+                trigger,
+                force,
+                template_version_id,
+                ai_prompt,
+                checks,
+                criterion_ids,
+                **extra,
             )
             _validation_state[document_id].update(
                 status="done", report_id=report.id, finished_at=now_utc().isoformat()
@@ -218,7 +253,10 @@ def start_validation(
         except Exception as exc:  # noqa: BLE001
             logger.exception("Фоновая валидация документа %s упала", document_id)
             _validation_state[document_id].update(status="error", error=str(exc))
-        _publish_event("validation", {"document_id": document_id, **_validation_state[document_id]})
+        _publish_event(
+            "validation",
+            {"document_id": document_id, **_validation_state[document_id], **_actor_fields(actor_user)},
+        )
 
     try:
         loop = asyncio.get_running_loop()
@@ -242,6 +280,9 @@ def start_bulk_validation(
     ai_prompt: str | None = None,
     checks: list[str] | None = None,
     criterion_ids: list[int] | None = None,
+    ai_connection: Any = _UNSET,
+    owner_user=None,
+    actor_user=None,
 ) -> tuple[bool, str]:
     """Проверить документы последовательно, в фоне (выбор пользователя
     в списке или «все документы аналитика»).
@@ -265,7 +306,7 @@ def start_bulk_validation(
             finished_at=None,
             error=None,
         )
-        _publish_event("bulk", bulk_status())
+        _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
         try:
             for doc_id in document_ids:
                 _validation_state[doc_id] = {
@@ -273,7 +314,15 @@ def start_bulk_validation(
                     "started_at": now_utc().isoformat(),
                     "error": None,
                 }
-                _publish_event("validation", {"document_id": doc_id, **_validation_state[doc_id]})
+                _publish_event(
+                    "validation",
+                    {"document_id": doc_id, **_validation_state[doc_id], **_actor_fields(actor_user)},
+                )
+                extra: dict[str, Any] = {}
+                if ai_connection is not _UNSET:
+                    extra["ai_connection"] = ai_connection
+                if owner_user is not None:
+                    extra["owner_user"] = owner_user
                 try:
                     report = await _execute_validation(
                         doc_id,
@@ -283,6 +332,7 @@ def start_bulk_validation(
                         ai_prompt,
                         checks,
                         criterion_ids,
+                        **extra,
                     )
                     _validation_state[doc_id].update(
                         status="done", report_id=report.id, finished_at=now_utc().isoformat()
@@ -294,9 +344,12 @@ def start_bulk_validation(
                 except Exception as exc:  # noqa: BLE001 — один документ не роняет прогон
                     logger.exception("Массовая валидация: документ %s упал", doc_id)
                     _validation_state[doc_id].update(status="error", error=str(exc))
-                _publish_event("validation", {"document_id": doc_id, **_validation_state[doc_id]})
+                _publish_event(
+                    "validation",
+                    {"document_id": doc_id, **_validation_state[doc_id], **_actor_fields(actor_user)},
+                )
                 _bulk_state["done"] += 1
-                _publish_event("bulk", bulk_status())
+                _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
         finally:
             _bulk_state.update(running=False, finished_at=now_utc().isoformat())
             _publish_event("bulk", bulk_status())
@@ -310,10 +363,18 @@ def start_bulk_validation(
     return True, "Массовая проверка запущена"
 
 
-def start_analyst_bulk_validation(analyst_id: int) -> tuple[bool, str]:
+def start_analyst_bulk_validation(
+    analyst_id: int, *, actor_user=None, ai_connection: Any = _UNSET, owner_user=None
+) -> tuple[bool, str]:
     """«Проверить все документы аналитика»: набор id из БД (legacy-эндпоинт)."""
     with SessionLocal() as db:
         doc_ids = repository.documents.ids_for_analyst(db, analyst_id)
     if not doc_ids:
         return False, "У аналитика нет документов для проверки"
-    return start_bulk_validation(doc_ids, analyst_id)
+    return start_bulk_validation(
+        doc_ids,
+        analyst_id,
+        actor_user=actor_user,
+        ai_connection=ai_connection,
+        owner_user=owner_user,
+    )

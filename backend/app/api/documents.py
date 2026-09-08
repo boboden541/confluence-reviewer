@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.clients.confluence import ConfluenceError
 from app.clients.semantic_search import SemanticSearchError
-from app.dependencies import get_db
+from app.dependencies import get_db, require_permission, require_user
+from app.dependencies.auth import resolve_actor
 from app.schemas import (
     CriterionOptionOut,
     DocumentOut,
@@ -51,10 +52,23 @@ from app.usecase.validation import (
     latest_report,
     normalize_checks,
 )
-from app.models import TriggerType
+from app.models import TriggerType, User
 from app.utils import normalize_period_end, to_naive_utc
 
 router = APIRouter(prefix="/api", tags=["documents"])
+
+_UNSET = object()  # валидация сама считает подключение, когда не передано
+
+
+def _ai_connection_dep(
+    db: Session = Depends(get_db), user: User | None = Depends(require_user)
+):
+    """Эффективное подключение ИИ текущего пользователя (None — не настроено)."""
+    from app.usecase.ai_settings import get_ai_connection
+
+    return get_ai_connection(db, resolve_actor(db, user))
+
+
 
 
 def _get_document_or_404(db: Session, document_id: int):
@@ -152,17 +166,20 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/validation-config", response_model=ValidationConfigOut)
-def get_validation_config(db: Session = Depends(get_db)):
+def get_validation_config(
+    db: Session = Depends(get_db), user: User | None = Depends(require_user)
+):
     """Конфиг диалога проверки: шаблоны, ИИ-критерии и части собранного промта.
 
     Шаблоны — неархивные с активными версиями («по умолчанию» первым); id
     элемента = номер активной версии, он уходит в проверку как template_id.
     Критерии отдаются только активные: галочки диалога и блоки собранного промта.
     """
-    seed_if_missing(db)
-    seed_criteria_if_missing(db)
+    actor = resolve_actor(db, user)
+    seed_if_missing(db, owner_user_id=actor.id)
+    seed_criteria_if_missing(db, owner_user_id=actor.id)
     templates = []
-    for template in list_templates(db):
+    for template in list_templates(db, owner_user_id=actor.id):
         if template.archived_at is not None:
             continue
         version = get_active_version(db, template)
@@ -179,7 +196,7 @@ def get_validation_config(db: Session = Depends(get_db)):
         )
     criteria = [
         CriterionOptionOut(id=c.id, code=c.code, name=c.name, prompt=c.prompt)
-        for c in select_criteria(db)
+        for c in select_criteria(db, owner_user_id=actor.id)
     ]
     return ValidationConfigOut(
         templates=templates,
@@ -197,14 +214,17 @@ def get_validation_config(db: Session = Depends(get_db)):
 async def validate_document(
     document_id: int,
     db: Session = Depends(get_db),
+    user: User | None = Depends(require_permission("checks")),
     force: bool = Query(default=False, description="Перевалидировать безусловно"),
     options: ValidationOptions | None = None,
+    ai_connection=Depends(_ai_connection_dep),
 ):
     """ФТ-CR-16: ручной запуск валидации (в фоне).
 
     Тело (опционально) — настройки из диалога проверки: критерии checks,
     template_id, ai_prompt и criterion_ids (ИИ-критерии запуска).
     """
+    actor = resolve_actor(db, user)
     _get_document_or_404(db, document_id)
     checks = options.checks if options else None
     # существование версии проверяем, только если шаблонная проверка запрошена
@@ -212,7 +232,13 @@ async def validate_document(
         _check_template_exists(options.template_id if options else None, db)
     # критерии ИИ — только при запущенной ИИ-проверке
     if AI_CHECK in normalize_checks(checks):
-        _check_criteria_usable(options.criterion_ids if options else None, db)
+        _check_criteria_usable(db, options.criterion_ids if options else None, actor)
+        if ai_connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Настройте личный доступ к ИИ (раздел «Мой доступ к ИИ»), "
+                "чтобы запускать ИИ-проверку",
+            )
     started, message = tasks.start_validation(
         document_id,
         trigger=TriggerType.MANUAL,
@@ -221,19 +247,21 @@ async def validate_document(
         ai_prompt=options.ai_prompt if options else None,
         checks=checks,
         criterion_ids=options.criterion_ids if options else None,
+        ai_connection=ai_connection if ai_connection is not None else _UNSET,
+        owner_user=actor,
+        actor_user=actor,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"detail": message, "document_id": document_id}
 
 
-def _check_criteria_usable(criterion_ids: list[int] | None, db: Session) -> None:
-    """Выбранные ИИ-критерии должны существовать и быть активными: молча
-    вычеркнуть нельзя — промт запуска незаметно изменился бы."""
+def _check_criteria_usable(db: Session, criterion_ids: list[int] | None, actor) -> None:
+    """Выбранные ИИ-критерии владельца должны существовать и быть активными."""
     if criterion_ids is None:
         return
     try:
-        select_criteria(db, criterion_ids)
+        select_criteria(db, criterion_ids, owner_user_id=actor.id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -248,18 +276,24 @@ def _check_template_exists(template_id: int | None, db: Session) -> None:
 
 
 @router.post("/documents/validate-batch", status_code=status.HTTP_202_ACCEPTED)
-async def validate_documents_batch(payload: ValidationBatchRequest, db: Session = Depends(get_db)):
+async def validate_documents_batch(
+    payload: ValidationBatchRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_permission("checks")),
+    ai_connection=Depends(_ai_connection_dep),
+):
     """Проверка выбранных документов (в фоне, последовательно).
 
     Не-force: актуальные документы пропускаются идемпотентностью;
     изменённый промт ИИ (override или правка критерия) сам по себе
     принуждает к перепроверке — сравнением хэша промта.
     """
+    actor = resolve_actor(db, user)
     # существование версии проверяем, только если шаблонная проверка запрошена
     if TEMPLATE_CHECK in normalize_checks(payload.checks):
         _check_template_exists(payload.template_id, db)
     if AI_CHECK in normalize_checks(payload.checks):
-        _check_criteria_usable(payload.criterion_ids, db)
+        _check_criteria_usable(db, payload.criterion_ids, actor)
     missing = documents_uc.missing_document_ids(db, payload.document_ids)
     if missing:
         raise HTTPException(
@@ -268,6 +302,12 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         )
     # порядок = порядок выбора, дубликаты не проверяем дважды
     doc_ids = list(dict.fromkeys(payload.document_ids))
+    if AI_CHECK in normalize_checks(payload.checks) and ai_connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Настройте личный доступ к ИИ (раздел «Мой доступ к ИИ»), "
+            "чтобы запускать ИИ-проверку",
+        )
     started, message = tasks.start_bulk_validation(
         doc_ids,
         force=payload.force,
@@ -275,6 +315,9 @@ async def validate_documents_batch(payload: ValidationBatchRequest, db: Session 
         ai_prompt=payload.ai_prompt,
         checks=payload.checks,
         criterion_ids=payload.criterion_ids,
+        ai_connection=ai_connection if ai_connection is not None else _UNSET,
+        owner_user=actor,
+        actor_user=actor,
     )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
@@ -295,7 +338,11 @@ def get_report(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/documents/{document_id}/comment", response_model=ValidationReportOut)
-async def post_comment(document_id: int, db: Session = Depends(get_db)):
+async def post_comment(
+    document_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_permission("comments")),
+):
     """ФТ-CR-17: опубликовать замечания отчёта комментарием на страницу Confluence."""
     _get_document_or_404(db, document_id)
     try:
@@ -316,25 +363,34 @@ async def post_comment(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/documents/{document_id}/ratings", response_model=RatingsOut)
-def get_ratings(document_id: int, db: Session = Depends(get_db)):
-    """Блок оценивания: все активные критерии справочника с оценками руководителя.
+def get_ratings(
+    document_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
+    """Блок оценивания: мои активные критерии с моими оценками этого документа.
 
     Виден до первого ИИ-прогона; пустой criteria — в справочнике
     нет активных критериев.
     """
     _get_document_or_404(db, document_id)
-    return ratings.get_ratings_view(db, document_id)
+    return ratings.get_ratings_view(db, document_id, owner_user=user)
 
 
 @router.put("/documents/{document_id}/ratings", response_model=RatingsOut)
-def update_ratings(document_id: int, payload: RatingsUpdate, db: Session = Depends(get_db)):
+def update_ratings(
+    document_id: int,
+    payload: RatingsUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_user),
+):
     """Выставить/изменить оценки (1..10); score=None — снять («—»).
 
-    Архивный или несуществующий критерий — 404 (молча вычеркнуть нельзя).
+    Оценивать можно только свои критерии; архивный или чужой — 404.
     """
     _get_document_or_404(db, document_id)
     try:
-        return ratings.apply_ratings(db, document_id, payload.ratings)
+        return ratings.apply_ratings(db, document_id, payload.ratings, owner_user=user)
     except CriterionNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, notifyOrgChanged, type Team, type TeamInput } from "../api";
 import { clusterColor, initials } from "../orgUi";
+import { useCan } from "../userContext";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
 import { Breadcrumbs } from "../Breadcrumbs";
@@ -12,6 +13,7 @@ import { Breadcrumbs } from "../Breadcrumbs";
 export default function TeamPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
+  const canDelete = useCan()("delete");
   const id = Number(teamId);
   const [team, setTeam] = useState<Team | null>(null);
   const [error, setError] = useState("");
@@ -135,9 +137,9 @@ export default function TeamPage() {
           >
             <span aria-hidden="true">✎</span> Редактировать
           </button>
-          <button className="btn subtle danger" onClick={deleteTeam}>
+{canDelete && (          <button className="btn subtle danger" onClick={deleteTeam}>
             Удалить
-          </button>
+          </button>)}
           <button className="btn primary" onClick={() => setAddingAnalyst(true)}>
             <span aria-hidden="true">＋</span> Добавить аналитика
           </button>

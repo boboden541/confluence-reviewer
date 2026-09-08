@@ -36,6 +36,21 @@ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "analysts": [
         ("team_id", "INTEGER REFERENCES teams(id)"),
         ("domains", "TEXT DEFAULT '[]'"),
+        # куратор-лид из числа пользователей сервиса (NULL — не назначен)
+        ("lead_user_id", "INTEGER REFERENCES users(id)"),
+    ],
+    # Персональные шаблоны и критерии: владелец (NULL — только до миграции,
+    # заполняет seed_auth на God-пользователя)
+    "templates": [
+        ("owner_user_id", "INTEGER REFERENCES users(id)"),
+    ],
+    "ai_criteria": [
+        ("owner_user_id", "INTEGER REFERENCES users(id)"),
+    ],
+    # Персональный доступ к ИИ: NULL — настройка «по умолчанию» (правит God),
+    # у каждой пользователя — максимум одна своя строка
+    "ai_connection_settings": [
+        ("user_id", "INTEGER REFERENCES users(id)"),
     ],
 }
 

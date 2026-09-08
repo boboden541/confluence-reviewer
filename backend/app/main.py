@@ -10,57 +10,66 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.dependencies import add_catch_all, install_auth, require_basic_auth
+from app.dependencies import add_catch_all, install_auth, require_user
 
 logger = logging.getLogger("confluence_reviewer")
 logging.basicConfig(level=logging.INFO)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    settings = get_settings()
-    init_db()
+def _lifespan_for(settings):
+    """Lifespan замкнут на настройки конкретного приложения (create_app может
+    получить их аргументом — тесты), а не на глобальный get_settings()."""
 
-    # Первичное наполнение: карточки аналитиков и первая версия шаблона
-    # требований — одна сессия на оба сида
-    from app.database import SessionLocal
-    from app.usecase.seed import seed_analysts
-    from app.usecase.templates import seed_if_missing
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        init_db()
 
-    with SessionLocal() as db:
-        if settings.seed_analysts:
-            created = seed_analysts(db, settings.seed_analysts)
-            if created:
-                logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
+        # Первичное наполнение: карточки аналитиков и первая версия шаблона
+        # требований — одна сессия на все сиды
+        from app.database import SessionLocal
+        from app.usecase.auth import seed_auth
+        from app.usecase.seed import seed_analysts
+        from app.usecase.templates import seed_if_missing
 
-        if seed_if_missing(db) is not None:
-            logger.info("Первая версия шаблона требований создана из файла")
+        with SessionLocal() as db:
+            # роли и God-пользователь — до сидов контента: он пишет владельца
+            seed_auth(db, settings)
 
-    # ФТ-CR-5: регламентная автосинхронизация раз в N часов
-    scheduler = None
-    if settings.confluence_base_url:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+            if settings.seed_analysts:
+                created = seed_analysts(db, settings.seed_analysts)
+                if created:
+                    logger.info("Первичное наполнение: создано карточек аналитиков — %d", created)
 
-        from app.usecase.tasks import start_sync
+            if seed_if_missing(db) is not None:
+                logger.info("Первая версия шаблона требований создана из файла")
 
-        scheduler = AsyncIOScheduler(timezone="UTC")
-        scheduler.add_job(
-            lambda: start_sync(None),
-            trigger="interval",
-            hours=max(settings.sync_interval_hours, 1),
-            id="scheduled_sync",
-            max_instances=1,
-            coalesce=True,
-        )
-        scheduler.start()
-        logger.info(
-            "Планировщик запущен: синхронизация каждые %s ч", settings.sync_interval_hours
-        )
-    try:
-        yield
-    finally:
-        if scheduler is not None:
-            scheduler.shutdown(wait=False)
+        # ФТ-CR-5: регламентная автосинхронизация раз в N часов
+        scheduler = None
+        if settings.confluence_base_url:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+            from app.usecase.tasks import start_sync
+
+            scheduler = AsyncIOScheduler(timezone="UTC")
+            scheduler.add_job(
+                lambda: start_sync(None),
+                trigger="interval",
+                hours=max(settings.sync_interval_hours, 1),
+                id="scheduled_sync",
+                max_instances=1,
+                coalesce=True,
+            )
+            scheduler.start()
+            logger.info(
+                "Планировщик запущен: синхронизация каждые %s ч", settings.sync_interval_hours
+            )
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                scheduler.shutdown(wait=False)
+
+    return lifespan
 
 
 def create_app(settings=None) -> FastAPI:
@@ -68,11 +77,11 @@ def create_app(settings=None) -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        lifespan=lifespan,
-        # НФТ-CR-7: basic-auth на всё, кроме /api/health. 401 генерируется
-        # внутри приложения, поэтому CORS-заголовки ставит внешняя
-        # CORSMiddleware — как раньше, при middleware-реализации
-        dependencies=[Depends(require_basic_auth)],
+        lifespan=_lifespan_for(settings),
+        # Авторизация Bearer-сессиями на всё, кроме /api/health и входов.
+        # 401 генерируется внутри приложения, поэтому CORS-заголовки ставит
+        # внешняя CORSMiddleware
+        dependencies=[Depends(require_user)],
     )
 
     # Параметры авторизации в app.state + закрытые docs/catch-all (детали —
@@ -93,8 +102,9 @@ def create_app(settings=None) -> FastAPI:
     )
 
     from app.api.ai_settings import router as ai_settings_router
-    from app.api.criteria import router as criteria_router
     from app.api.analysts import router as analysts_router
+    from app.api.auth import roles_router, router as auth_router, users_router
+    from app.api.criteria import router as criteria_router
     from app.api.dashboard import router as dashboard_router
     from app.api.documents import router as documents_router
     from app.api.events import router as events_router
@@ -105,6 +115,9 @@ def create_app(settings=None) -> FastAPI:
     from app.api.templates import router as templates_router
 
     app.include_router(health_router)
+    app.include_router(auth_router)
+    app.include_router(roles_router)
+    app.include_router(users_router)
     app.include_router(analysts_router)
     app.include_router(clusters_router)
     app.include_router(teams_router)

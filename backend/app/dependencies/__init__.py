@@ -1,13 +1,14 @@
-"""FastAPI-зависимости: сессия БД и basic-авторизация.
+"""FastAPI-зависимости: сессия БД, Bearer-авторизация и права.
 
-Фасад для импорта в роутерах: `from app.dependencies import get_db, require_basic_auth`.
+Фасад для импорта в роутерах: `from app.dependencies import get_db, require_user`.
 """
 
 from app.dependencies.auth import (
     AuthRequiredError,
     add_catch_all,
     install_auth,
-    require_basic_auth,
+    require_permission,
+    require_user,
 )
 from app.dependencies.db import get_db
 
@@ -16,5 +17,6 @@ __all__ = [
     "add_catch_all",
     "get_db",
     "install_auth",
-    "require_basic_auth",
+    "require_permission",
+    "require_user",
 ]

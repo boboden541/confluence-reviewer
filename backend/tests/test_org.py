@@ -323,7 +323,7 @@ def test_migrate_adds_org_columns_to_existing_db(client):
     cols = {c["name"] for c in sa_inspect(engine).get_columns("analysts")}
     assert {"team_id", "domains"} <= cols
     # записи в словаре миграций присутствуют (для существующих развёртываний)
-    assert {c[0] for c in _ADDED_COLUMNS["analysts"]} == {"team_id", "domains"}
+    assert {c[0] for c in _ADDED_COLUMNS["analysts"]} == {"team_id", "domains", "lead_user_id"}
 
 
 def test_existing_analysts_default_to_no_team_and_empty_domains(client):

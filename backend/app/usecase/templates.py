@@ -160,10 +160,12 @@ def get_active_version(db: Session, template: Template) -> TemplateVersion | Non
     return repository.templates.get_active_version(db, template)
 
 
-def list_templates(db: Session) -> list[Template]:
-    """Все шаблоны: активные (по умолчанию — первым, дальше свежие обновления),
-    затем архивные (свежая архивация сверху)."""
+def list_templates(db: Session, owner_user_id: int | None = None) -> list[Template]:
+    """Шаблоны владельца: активные (по умолчанию — первым, дальше свежие
+    обновления), затем архивные (свежая архивация сверху)."""
     rows = repository.templates.list_containers(db)
+    if owner_user_id is not None:
+        rows = [t for t in rows if t.owner_user_id == owner_user_id]
     active = [t for t in rows if t.archived_at is None]
     archived = [t for t in rows if t.archived_at is not None]
 
@@ -176,16 +178,24 @@ def list_templates(db: Session) -> list[Template]:
     return active + archived
 
 
-def get_default_template(db: Session) -> Template | None:
-    return repository.templates.get_default(db)
+def get_default_template(db: Session, owner_user_id: int | None = None) -> Template | None:
+    template = repository.templates.get_default(db)
+    if owner_user_id is not None and template is not None and template.owner_user_id != owner_user_id:
+        return None
+    return template
 
 
-def get_active(db: Session) -> TemplateVersion | None:
-    """Legacy (/api/template): активная версия шаблона «по умолчанию»;
-    если пометки нет — самого свежего неархивного шаблона."""
-    template = get_default_template(db)
+def get_active(db: Session, owner_user_id: int | None = None) -> TemplateVersion | None:
+    """Legacy (/api/template): активная версия моего шаблона «по умолчанию»;
+    если пометки нет — самого свежего моего неархивного шаблона."""
+    template = repository.templates.get_default(db)
+    if owner_user_id is not None and template is not None and template.owner_user_id != owner_user_id:
+        template = None
     if template is None:
-        template = next((t for t in list_templates(db) if t.archived_at is None), None)
+        template = next(
+            (t for t in list_templates(db, owner_user_id=owner_user_id) if t.archived_at is None),
+            None,
+        )
     return get_active_version(db, template) if template else None
 
 
@@ -203,12 +213,14 @@ def list_versions(db: Session, template_id: int) -> list[TemplateVersion]:
 
 
 def find_name_duplicate(
-    db: Session, name: str, exclude_id: int | None = None
+    db: Session, name: str, exclude_id: int | None = None, owner_user_id: int | None = None
 ) -> Template | None:
-    """Неархивный шаблон с таким названием (регистр не важен) — или None."""
+    """Неархивный шаблон владельца с таким названием (регистр не важен)."""
     needle = name.strip().lower()
     for template in repository.templates.list_not_archived(db):
         if template.id == exclude_id:
+            continue
+        if owner_user_id is not None and template.owner_user_id != owner_user_id:
             continue
         version = get_active_version(db, template)
         if version is not None and version.name.strip().lower() == needle:
@@ -216,14 +228,19 @@ def find_name_duplicate(
     return None
 
 
-def seed_if_missing(db: Session) -> TemplateVersion | None:
-    """Залить первый шаблон из файла, если в БД ещё нет ни одного."""
+def seed_if_missing(db: Session, owner_user_id: int | None = None) -> TemplateVersion | None:
+    """Залить первый шаблон из файла, если в БД ещё нет ни одного. Без явного
+    владельца — God (если уже создан seed_auth'ом)."""
     if repository.templates.any_exists(db):
         return None
+    if owner_user_id is None:
+        from app.usecase.auth import default_owner_id
+
+        owner_user_id = default_owner_id(db)
     seed = load_seed_file()
     if seed is None:
         return None
-    template = Template(is_default=True)
+    template = Template(is_default=True, owner_user_id=owner_user_id)
     db.add(template)
     db.flush()  # id контейнера нужен версии
     version = TemplateVersion(
@@ -248,10 +265,11 @@ def create_template(
     description: str | None,
     title_marker: str,
     sections: list[dict],
+    owner_user_id: int | None = None,
 ) -> Template:
     """Новый шаблон с первой версией. Создаётся «с нуля»: повторяемых блоков
     доработок нет (они остаются особенностью сидированного шаблона)."""
-    template = Template()
+    template = Template(owner_user_id=owner_user_id)
     db.add(template)
     db.flush()
     version = TemplateVersion(
@@ -264,8 +282,9 @@ def create_template(
         is_active=True,
     )
     db.add(version)
-    # первый шаблон в пустой системе сразу становится «по умолчанию»
-    others = repository.templates.list_others(db, template.id)
+    # первый шаблон владельца сразу становится «по умолчанию»
+    others = [t for t in repository.templates.list_others(db, template.id)
+              if t.owner_user_id == owner_user_id]
     if not any(t.is_default and t.archived_at is None for t in others):
         template.is_default = True
     db.commit()
@@ -303,9 +322,10 @@ def save_version(
 
 
 def set_default(db: Session, template: Template) -> Template:
-    """Пометка «по умолчанию»: предвыбор в диалоге проверки. Одна на всех."""
+    """Пометка «по умолчанию»: предвыбор в диалоге проверки. Одна у владельца."""
     for other in repository.templates.list_others(db, template.id):
-        other.is_default = False
+        if other.owner_user_id == template.owner_user_id:
+            other.is_default = False
     template.is_default = True
     db.commit()
     db.refresh(template)
@@ -314,11 +334,16 @@ def set_default(db: Session, template: Template) -> Template:
 
 def archive_template(db: Session, template: Template) -> Template:
     """Шаблон в архив: исчезает из диалога проверки, карточка и история живы.
-    Если он был «по умолчанию» — пометка переходит самому свежему из оставшихся."""
+    Если он был «по умолчанию» — пометка переходит самому свежему из
+    оставшихся шаблонов владельца."""
     template.archived_at = now_utc()
     if template.is_default:
         template.is_default = False
-        remaining = [t for t in list_templates(db) if t.archived_at is None]
+        remaining = [
+            t
+            for t in list_templates(db, owner_user_id=template.owner_user_id)
+            if t.archived_at is None
+        ]
         if remaining:
             set_default(db, remaining[0])
         else:
@@ -364,3 +389,27 @@ def get_template_for_validation(
         return (version_to_dict(version), version.id) if version is not None else None
     active = get_active(db) or seed_if_missing(db)
     return (version_to_dict(active), active.id) if active is not None else None
+
+
+def copy_template(
+    db: Session, template: Template, *, owner_user_id: int | None
+) -> Template:
+    """Копия шаблона из общего реестра себе: контейнер + активная версия
+    целиком (секции, маркер, описания). Имя как у оригинала; при коллизии
+    у владельца — «{name} (2)», « (3)»…"""
+    source_version = get_active_version(db, template)
+    if source_version is None:
+        raise TemplateHasNoActiveVersion("У шаблона нет активной версии")
+    candidate, counter = source_version.name, 2
+    while find_name_duplicate(db, candidate, owner_user_id=owner_user_id) is not None:
+        candidate = f"{source_version.name} ({counter})"
+        counter += 1
+    new_template = create_template(
+        db,
+        name=candidate,
+        description=source_version.description,
+        title_marker=source_version.title_marker,
+        sections=json.loads(source_version.sections_json),
+        owner_user_id=owner_user_id,
+    )
+    return new_template

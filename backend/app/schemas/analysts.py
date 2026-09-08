@@ -41,6 +41,9 @@ class AnalystOut(BaseModel):
     cluster_id: int | None = None
     cluster_name: str | None = None
     domains: list[str] = []
+    # куратор-лид (пользователь сервиса)
+    lead_user_id: int | None = None
+    lead_name: str | None = None
 
     @field_validator("domains", mode="before")
     @classmethod
@@ -73,3 +76,9 @@ class AnalystNoteOut(BaseModel):
     content: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class AnalystLeadUpdate(BaseModel):
+    """Назначение лида аналитику: id пользователя с ролью lead или null."""
+
+    user_id: int | None = None

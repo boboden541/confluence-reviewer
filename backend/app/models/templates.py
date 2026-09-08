@@ -28,6 +28,10 @@ class Template(Base):
     # NULL — активный шаблон; дата — в архиве (не участвует в выборе при проверке)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    # владелец: шаблоны персональны; NULL — только до миграции (см. seed_auth)
+    owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
 
     versions: Mapped[list["TemplateVersion"]] = relationship(
         back_populates="template", cascade="all, delete-orphan"
