@@ -29,6 +29,8 @@ class Analyst(Base):
     # Переопределение имени пользователя Confluence, если оно не совпадает
     # с email / локальной частью email (БФТ 3.1 №13)
     confluence_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # куратор из числа пользователей сервиса (роль lead); NULL — не назначен
+    lead_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     # Команда аналитика (ровно одна; NULL — «без команды»). Без ON DELETE
     # каскада: при удалении команды usecase сначала отвязывает участников.
     team_id: Mapped[int | None] = mapped_column(

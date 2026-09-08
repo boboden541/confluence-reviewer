@@ -87,11 +87,20 @@ def creator_candidates(email: str, override_username: str | None, mode: str) -> 
 class ConfluenceClient:
     """Тонкая обёртка над /rest/api Confluence."""
 
-    def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        transport: httpx.AsyncBaseTransport | None = None,
+        bearer_token: str | None = None,
+    ):
+        """bearer_token — персональный токен пользователя (вход/проверка
+        личности); без него используются сервисные креды из настроек."""
         self._settings = settings
         headers = {"Accept": "application/json", "User-Agent": "confluence-reviewer/1.0"}
         auth = None
-        if settings.confluence_auth_type == "basic":
+        if bearer_token:
+            headers["Authorization"] = f"Bearer {bearer_token}"
+        elif settings.confluence_auth_type == "basic":
             auth = httpx.BasicAuth(
                 settings.confluence_username or "", settings.confluence_password or ""
             )

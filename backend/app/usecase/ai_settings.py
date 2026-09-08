@@ -77,3 +77,22 @@ def mask_api_key(value: str) -> str:
     if len(value) <= 8:
         return "••••"
     return f"{value[:3]}…{value[-3:]}"
+
+def get_row_for_user(db, user) -> AIConnectionSettings | None:
+    """Личная строка настроек пользователя (без фолбэка на дефолт)."""
+    if user is None:
+        return None
+    from sqlalchemy import select
+
+    from app.models import AIConnectionSettings
+
+    return db.scalar(
+        select(AIConnectionSettings).where(AIConnectionSettings.user_id == user.id)
+    )
+
+
+def ai_configured(db, user) -> bool:
+    """Личный доступ заполнен целиком (URL + модель + токен) — без него
+    ИИ-проверки пользователя заблокированы."""
+    row = get_row_for_user(db, user)
+    return bool(row and row.base_url and row.model and row.api_key)
