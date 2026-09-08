@@ -10,7 +10,7 @@ from app.clients.confluence import ConfluenceClient
 from app.config import Settings
 from app.database import Base, SessionLocal, engine
 from app.main import create_app
-from app.models import Analyst, ConfluenceDocument
+from app.models import Analyst, ConfluenceDocument, TriggerType, ValidationReport, ValidationStatus
 from app.utils import now_utc
 
 USERNAME = "boss"
@@ -256,3 +256,72 @@ def test_my_analysts_panel_for_lead(auth_client, monkeypatch):
     # у God своих подопечных нет
     god_body = auth_client.get("/api/dashboard", headers=_god(auth_client)).json()
     assert god_body["my_analysts"] == []
+
+
+# ── очередь внимания лида: только подопечные ─────────────────────────
+
+
+def test_lead_queue_filters_to_assigned_analysts(auth_client, monkeypatch):
+    """Лид видит документные секции очереди только по своим подопечным;
+    «Без команды» — общая; God видит всё."""
+    lead = _lead_session(auth_client, monkeypatch)
+    god = _god(auth_client)
+
+    mine = auth_client.post(
+        "/api/analysts",
+        json={"full_name": "Мой подопечный", "email": "mine@company.ru"},
+        headers=lead,
+    ).json()
+    other = auth_client.post(
+        "/api/analysts",
+        json={"full_name": "Чужой аналитик", "email": "other@company.ru"},
+        headers=lead,
+    ).json()
+
+    def _failed_doc(analyst_id: int, title: str) -> None:
+        with SessionLocal() as db:
+            doc = ConfluenceDocument(
+                analyst_id=analyst_id,
+                confluence_page_id=str(now_utc().timestamp()).replace(".", "")
+                + str(id(object())),
+                title=title,
+                url="https://conf.test/x",
+                content_html="<h1>Введение</h1>",
+                validation_status=ValidationStatus.FAILED,
+                last_modified_in_confluence_at=now_utc(),
+            )
+            db.add(doc)
+            db.commit()
+            doc_id = doc.id
+        with SessionLocal() as db:
+            db.add(
+                ValidationReport(
+                    document_id=doc_id,
+                    triggered_by=TriggerType.MANUAL,
+                    ai_passed=False,
+                    created_at=now_utc(),
+                )
+            )
+            db.commit()
+
+    # назначаем лида на «моего»
+    leads = auth_client.get("/api/users?role=Lead", headers=lead).json()
+    maria = next(u for u in leads if u["full_name"] == "Мария Смирнова")
+    auth_client.put(
+        f"/api/analysts/{mine['id']}/lead", json={"user_id": maria["id"]}, headers=lead
+    )
+
+    _failed_doc(mine["id"], "Провал у подопечного")
+    _failed_doc(other["id"], "Провал у чужого")
+
+    lead_dash = auth_client.get("/api/dashboard", headers=lead).json()
+    failed = next(s for s in lead_dash["sections"] if s["type"] == "failed")
+    titles = [i["title"] for i in failed["items"]]
+    assert "Провал у подопечного" in titles
+    assert "Провал у чужого" not in titles
+    assert failed["total"] == 1
+
+    # God видит оба
+    god_dash = auth_client.get("/api/dashboard", headers=god).json()
+    god_failed = next(s for s in god_dash["sections"] if s["type"] == "failed")
+    assert god_failed["total"] == 2

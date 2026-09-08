@@ -24,11 +24,16 @@ SECTION_LIMIT = 8
 
 
 def get_dashboard(db: Session, user=None) -> DashboardOut:
+    """Лид (не God) видит документные секции только по своим подопечным;
+    «Без команды» и справочники — общие."""
+    lead_user_id = None
+    if user is not None and not user.role.is_system:
+        lead_user_id = user.id
     return DashboardOut(
         sections=[
-            _failed_section(db),
-            _stale_section(db),
-            _ratings_section(db),
+            _failed_section(db, lead_user_id),
+            _stale_section(db, lead_user_id),
+            _ratings_section(db, lead_user_id),
             _no_team_section(db),
             _references_section(db, user),
         ],
@@ -87,8 +92,8 @@ def _my_analysts(db: Session, user) -> list:
     return items
 
 
-def _failed_section(db: Session) -> DashboardSection:
-    rows = repository.dashboard.failed_docs(db, limit=SECTION_LIMIT)
+def _failed_section(db: Session, lead_user_id: int | None = None) -> DashboardSection:
+    rows = repository.dashboard.failed_docs(db, limit=SECTION_LIMIT, lead_user_id=lead_user_id)
     items = []
     for doc, report in rows:
         items.append(
@@ -103,13 +108,13 @@ def _failed_section(db: Session) -> DashboardSection:
     return DashboardSection(
         type="failed",
         title="Провалены проверки",
-        total=repository.dashboard.failed_total(db),
+        total=repository.dashboard.failed_total(db, lead_user_id=lead_user_id),
         items=items,
     )
 
 
-def _stale_section(db: Session) -> DashboardSection:
-    rows = repository.dashboard.stale_docs(db, limit=SECTION_LIMIT)
+def _stale_section(db: Session, lead_user_id: int | None = None) -> DashboardSection:
+    rows = repository.dashboard.stale_docs(db, limit=SECTION_LIMIT, lead_user_id=lead_user_id)
     items = [
         DashboardItem(
             key=f"doc-{doc.id}",
@@ -123,13 +128,13 @@ def _stale_section(db: Session) -> DashboardSection:
     return DashboardSection(
         type="stale",
         title="Устарели после правок в Confluence",
-        total=repository.dashboard.stale_total(db),
+        total=repository.dashboard.stale_total(db, lead_user_id=lead_user_id),
         items=items,
     )
 
 
-def _ratings_section(db: Session) -> DashboardSection:
-    rows = repository.dashboard.awaiting_ratings(db, limit=SECTION_LIMIT)
+def _ratings_section(db: Session, lead_user_id: int | None = None) -> DashboardSection:
+    rows = repository.dashboard.awaiting_ratings(db, limit=SECTION_LIMIT, lead_user_id=lead_user_id)
     items = []
     for doc, report, _last_rated in rows:
         items.append(
@@ -144,7 +149,7 @@ def _ratings_section(db: Session) -> DashboardSection:
     return DashboardSection(
         type="ratings",
         title="Ждут оценки руководителя",
-        total=repository.dashboard.awaiting_ratings_total(db),
+        total=repository.dashboard.awaiting_ratings_total(db, lead_user_id=lead_user_id),
         items=items,
     )
 

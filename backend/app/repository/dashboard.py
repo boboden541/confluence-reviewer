@@ -22,13 +22,13 @@ from app.models import (
 
 
 def failed_docs(
-    db: Session, limit: int = 8
+    db: Session, limit: int = 8, lead_user_id: int | None = None
 ) -> list[tuple[ConfluenceDocument, ValidationReport | None]]:
     """Проваленные/ошибочные документы, свежие сверху, + их последний отчёт."""
     docs = list(
         db.scalars(
             select(ConfluenceDocument)
-            .where(_failed_condition())
+            .where(*_failed_condition(lead_user_id))
             .order_by(
                 ConfluenceDocument.last_validated_at.desc().nullslast(),
                 ConfluenceDocument.id.desc(),
@@ -42,19 +42,23 @@ def failed_docs(
     return [(doc, reports.get(doc.id)) for doc in docs]
 
 
-def failed_total(db: Session) -> int:
-    return _count_docs(db, _failed_condition())
+def failed_total(db: Session, lead_user_id: int | None = None) -> int:
+    return _count_docs(db, *_failed_condition(lead_user_id))
 
 
 def stale_docs(
-    db: Session, limit: int = 8
+    db: Session, limit: int = 8, lead_user_id: int | None = None
 ) -> list[tuple[ConfluenceDocument, datetime | None]]:
     """Документы «не проверено» с историей проверок: страницу правнули после
     ревью. at — момент последней известной правки."""
+    conditions = [*_stale_condition()]
+    lead = _lead_filter(lead_user_id)
+    if lead is not None:
+        conditions.append(lead)
     docs = list(
         db.scalars(
             select(ConfluenceDocument)
-            .where(*_stale_condition())
+            .where(*conditions)
             .order_by(ConfluenceDocument.last_modified_in_confluence_at.desc().nullslast())
             .limit(limit)
         ).all()
@@ -62,25 +66,27 @@ def stale_docs(
     return [(doc, doc.last_modified_in_confluence_at) for doc in docs]
 
 
-def stale_total(db: Session) -> int:
-    return _count_docs(db, *_stale_condition())
+def stale_total(db: Session, lead_user_id: int | None = None) -> int:
+    conditions = [*_stale_condition()]
+    lead = _lead_filter(lead_user_id)
+    if lead is not None:
+        conditions.append(lead)
+    return _count_docs(db, *conditions)
 
 
 def awaiting_ratings(
-    db: Session, limit: int = 8
+    db: Session, limit: int = 8, lead_user_id: int | None = None
 ) -> list[tuple[ConfluenceDocument, ValidationReport, datetime | None]]:
     """Документы, чей последний успешный ИИ-прогон не оценён или оценён
     устаревше (оценка старше отчёта). Возвращает (документ, отчёт, момент
     последней оценки)."""
-    rows = db.execute(
-        _awaiting_query().limit(limit)
-    ).all()
+    rows = db.execute(_awaiting_query(lead_user_id).limit(limit)).all()
     return [(doc, report, last_rated) for doc, report, last_rated in rows]
 
 
-def awaiting_ratings_total(db: Session) -> int:
+def awaiting_ratings_total(db: Session, lead_user_id: int | None = None) -> int:
     return db.scalar(
-        select(func.count()).select_from(_awaiting_query().subquery())
+        select(func.count()).select_from(_awaiting_query(lead_user_id).subquery())
     ) or 0
 
 
@@ -107,10 +113,23 @@ def analysts_without_team_total(db: Session) -> int:
     ) or 0
 
 
-def _failed_condition():
-    return ConfluenceDocument.validation_status.in_(
+def _lead_filter(lead_user_id: int | None):
+    """Ограничение документов аналитиками, которых курирует лид (None — без
+    фильтра: God и выключенная авторизация видят всю очередь)."""
+    if lead_user_id is None:
+        return None
+    analyst_sq = select(Analyst.id).where(Analyst.lead_user_id == lead_user_id)
+    return ConfluenceDocument.analyst_id.in_(analyst_sq)
+
+
+def _failed_condition(lead_user_id: int | None = None):
+    conditions = [ConfluenceDocument.validation_status.in_(
         (ValidationStatus.FAILED, ValidationStatus.ERROR)
-    )
+    )]
+    lead = _lead_filter(lead_user_id)
+    if lead is not None:
+        conditions.append(lead)
+    return conditions
 
 
 def _stale_condition():
@@ -129,7 +148,7 @@ def _stale_condition():
     )
 
 
-def _awaiting_query():
+def _awaiting_query(lead_user_id: int | None = None):
     """Запрос документов, ждущих оценки: последний успешный ИИ-отчёт есть,
     оценок нет либо все они старше отчёта. Момент последней оценки — в довесок."""
     latest_ai_sq = (
@@ -153,7 +172,7 @@ def _awaiting_query():
         .group_by(CriterionRating.document_id)
         .subquery()
     )
-    return (
+    query = (
         select(ConfluenceDocument, ValidationReport, rating_sq.c.last_rated_at)
         .join(latest_ai_sq, latest_ai_sq.c.document_id == ConfluenceDocument.id)
         .join(ValidationReport, ValidationReport.id == latest_ai_sq.c.report_id)
@@ -170,6 +189,10 @@ def _awaiting_query():
         )
         .order_by(ValidationReport.created_at.desc())
     )
+    if lead_user_id is not None:
+        lead_sq = select(Analyst.id).where(Analyst.lead_user_id == lead_user_id)
+        query = query.where(ConfluenceDocument.analyst_id.in_(lead_sq))
+    return query
 
 
 def _latest_reports(db: Session, document_ids: list[int]) -> dict[int, ValidationReport]:
