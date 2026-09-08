@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_permission, require_user
+from app.api.documents import _UNSET
+from app.usecase.ai_settings import get_ai_connection
 from app.dependencies.auth import resolve_actor
 from app.schemas import (
     AnalystLeadUpdate,
@@ -28,6 +30,8 @@ from app.usecase import auth as auth_uc
 from app.usecase import analysts as analysts_uc
 from app.usecase import tasks
 from app.usecase.exceptions import AnalystEmailTaken, AnalystNotFound
+
+AI_CHECK_TRUE = True  # validate-all всегда включает ИИ-проверку (историческое поведение)
 from app.utils import normalize_period_end, to_naive_utc
 
 router = APIRouter(prefix="/api/analysts", tags=["analysts"])
@@ -47,7 +51,11 @@ def list_analysts(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=AnalystOut, status_code=status.HTTP_201_CREATED)
-def create_analyst(payload: AnalystCreate, db: Session = Depends(get_db)):
+def create_analyst(
+    payload: AnalystCreate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("analysts.edit")),
+):
     """ФТ-CR-1: создание карточки аналитика."""
     try:
         return analysts_uc.create_analyst(db, payload)
@@ -67,7 +75,12 @@ def get_analyst(analyst_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{analyst_id}", response_model=AnalystOut)
-def update_analyst(analyst_id: int, payload: AnalystUpdate, db: Session = Depends(get_db)):
+def update_analyst(
+    analyst_id: int,
+    payload: AnalystUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("analysts.edit")),
+):
     """Редактирование карточки аналитика (ФИО, email, username в Confluence)."""
     try:
         return analysts_uc.update_analyst(db, analyst_id, payload)
@@ -120,7 +133,10 @@ def get_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{analyst_id}/note", response_model=AnalystNoteOut)
 def update_analyst_note(
-    analyst_id: int, payload: AnalystNoteUpdate, db: Session = Depends(get_db)
+    analyst_id: int,
+    payload: AnalystNoteUpdate,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("comments")),
 ):
     """Создать или перезаписать заметку (Markdown, одна на аналитика)."""
     _get_analyst_or_404(analyst_id, db)
@@ -128,7 +144,11 @@ def update_analyst_note(
 
 
 @router.delete("/{analyst_id}/note", status_code=status.HTTP_204_NO_CONTENT)
-def delete_analyst_note(analyst_id: int, db: Session = Depends(get_db)):
+def delete_analyst_note(
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("comments")),
+):
     """Удалить заметку аналитика. Идемпотентно: заметки нет — тоже 204."""
     _get_analyst_or_404(analyst_id, db)
     analysts_uc.delete_note(db, analyst_id)
@@ -176,7 +196,11 @@ def get_ratings_summary(
 
 
 @router.post("/{analyst_id}/sync", status_code=status.HTTP_202_ACCEPTED, tags=["sync"])
-async def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
+async def trigger_analyst_sync(
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    _: User | None = Depends(require_permission("checks")),
+):
     """ФТ-CR-6: ручной запуск парсинга всех страниц аналитика."""
     _get_analyst_or_404(analyst_id, db)
     started, message = tasks.start_sync(analyst_id)
@@ -186,14 +210,27 @@ async def trigger_analyst_sync(analyst_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{analyst_id}/validate-all", status_code=status.HTTP_202_ACCEPTED)
-async def validate_all_documents(analyst_id: int, db: Session = Depends(get_db)):
+async def validate_all_documents(
+    analyst_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(require_permission("checks")),
+):
     """Ручная массовая проверка документов аналитика (в фоне, последовательно).
 
     Не-force: актуальные документы пропускаются, проверяются только новые
     и изменившиеся после прошлой проверки.
     """
     _get_analyst_or_404(analyst_id, db)
-    started, message = tasks.start_analyst_bulk_validation(analyst_id)
+    ai_connection = get_ai_connection(db, resolve_actor(db, user))
+    actor = resolve_actor(db, user)
+    if AI_CHECK_TRUE and ai_connection is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Настройте личный доступ к ИИ (раздел «Мой доступ к ИИ»)")
+    started, message = tasks.start_analyst_bulk_validation(
+        analyst_id,
+        actor_user=actor,
+        owner_user=actor,
+        ai_connection=ai_connection if ai_connection is not None else _UNSET,
+    )
     if not started:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message)
     return {"status": "started", "message": message}

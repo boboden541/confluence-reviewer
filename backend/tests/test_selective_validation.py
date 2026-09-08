@@ -230,7 +230,7 @@ def test_validate_endpoint_accepts_options_body(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured.update(
             template=template_version_id, prompt=ai_prompt, doc=document_id, checks=checks
         )
@@ -422,7 +422,7 @@ def test_validate_endpoint_passes_checks(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 
@@ -470,7 +470,7 @@ def test_duplicate_checks_collapsed(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured["checks"] = checks
         return SimpleNamespace(id=9)
 

@@ -363,10 +363,18 @@ def start_bulk_validation(
     return True, "Массовая проверка запущена"
 
 
-def start_analyst_bulk_validation(analyst_id: int) -> tuple[bool, str]:
+def start_analyst_bulk_validation(
+    analyst_id: int, *, actor_user=None, ai_connection: Any = _UNSET, owner_user=None
+) -> tuple[bool, str]:
     """«Проверить все документы аналитика»: набор id из БД (legacy-эндпоинт)."""
     with SessionLocal() as db:
         doc_ids = repository.documents.ids_for_analyst(db, analyst_id)
     if not doc_ids:
         return False, "У аналитика нет документов для проверки"
-    return start_bulk_validation(doc_ids, analyst_id)
+    return start_bulk_validation(
+        doc_ids,
+        analyst_id,
+        actor_user=actor_user,
+        ai_connection=ai_connection,
+        owner_user=owner_user,
+    )

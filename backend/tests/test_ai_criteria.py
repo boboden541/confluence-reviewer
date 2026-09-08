@@ -346,7 +346,7 @@ def test_validate_endpoint_passes_criterion_ids(client, monkeypatch):
     doc_id = seed_document()
     captured: dict = {}
 
-    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None):
+    def fake_run(db, document_id, *, trigger, force=False, template_version_id=None, ai_prompt=None, checks=None, criterion_ids=None, ai_connection=None, owner_user=None):
         captured["criterion_ids"] = criterion_ids
         return SimpleNamespace(id=9)
 

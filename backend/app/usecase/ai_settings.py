@@ -35,7 +35,7 @@ def save_settings(
     (user_id=None, одна строка). api_key=None не трогает сохранённый токен,
     "" — очищает его. Применяется к следующим запускам проверки."""
     if user_id is None:
-        row = repository.ai_settings.get_row(db)
+        row = get_default_row(db)
     else:
         row = db.scalar(
             select(AIConnectionSettings).where(AIConnectionSettings.user_id == user_id)
@@ -55,8 +55,13 @@ def save_settings(
 
 
 def get_default_row(db: Session) -> AIConnectionSettings | None:
-    """Настройка «по умолчанию» (user_id IS NULL) — правит God."""
-    return repository.ai_settings.get_row(db)
+    """Настройка «по умолчанию»: строка без user_id (не pk id=1 — личные
+    строки пользователей живут в той же таблице)."""
+    from sqlalchemy import select
+
+    return db.scalar(
+        select(AIConnectionSettings).where(AIConnectionSettings.user_id.is_(None)).limit(1)
+    )
 
 
 def get_ai_connection(db: Session, user=None) -> AIConnection | None:
@@ -115,20 +120,6 @@ def get_row_for_user(db, user) -> AIConnectionSettings | None:
         select(AIConnectionSettings).where(AIConnectionSettings.user_id == user.id)
     )
 
-
-
-
-def get_row_for_user(db, user) -> AIConnectionSettings | None:
-    """Личная строка настроек пользователя (без фолбэка на дефолт)."""
-    if user is None:
-        return None
-    from sqlalchemy import select
-
-    from app.models import AIConnectionSettings
-
-    return db.scalar(
-        select(AIConnectionSettings).where(AIConnectionSettings.user_id == user.id)
-    )
 
 
 def ai_configured(db, user) -> bool:

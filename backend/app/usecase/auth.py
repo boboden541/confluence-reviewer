@@ -226,7 +226,15 @@ def list_requests(db: Session) -> list[RegistrationRequest]:
 
 def approve_request(db: Session, request: RegistrationRequest, role: Role) -> User:
     """Одобрить заявку: создать пользователя с выбранной ролью и хэшем
-    токена из заявки (этим же токеном он теперь входит)."""
+    токена из заявки (этим же токеном он теперь входит). Повторное одобрение
+    того же логина (новый PAT) обновляет токен и роль существующего."""
+    existing = db.scalar(select(User).where(User.confluence_login == request.confluence_login))
+    if existing is not None:
+        existing.token_hash = request.token_hash
+        existing.role_id = role.id
+        db.commit()
+        db.refresh(existing)
+        return existing
     user = create_lead_user(
         db,
         login=request.confluence_login,

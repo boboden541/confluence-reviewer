@@ -2,6 +2,8 @@
 // единая обработка ошибок.
 
 export const AUTH_STORAGE_KEY = "cr-session";
+// миграция: старый basic-ключ больше не используется — удаляем
+if (typeof localStorage !== "undefined") localStorage.removeItem("cr-auth");
 export const UNAUTHORIZED_EVENT = "cr:unauthorized";
 
 export class ApiError extends Error {

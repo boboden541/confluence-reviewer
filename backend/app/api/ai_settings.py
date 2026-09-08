@@ -106,7 +106,12 @@ def test_connection(
     Эффективные значения: форма → сохранённое → env. Сбой подключения —
     ок, а не исключение: пользователь видит сообщение в форме настроек.
     """
-    saved = get_ai_connection(db, user)
+    saved = get_ai_connection(db, resolve_actor(db, user))
+    if saved is None:
+        # личный доступ не настроен: тестируем форму поверх env-значений
+        from app.clients.ai_validator import connection_from_settings
+
+        saved = connection_from_settings(get_settings())
     conn = replace(
         saved,
         protocol=payload.protocol,

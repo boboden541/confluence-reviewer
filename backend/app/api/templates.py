@@ -157,7 +157,6 @@ def registry(db: Session = Depends(get_db), user: User | None = Depends(require_
                 "description": card.description,
                 "section_count": card.section_count,
                 "owner_user_id": template.owner_user_id,
-                "is_god_owner": False,
             }
         )
     # авторы — одним запросом

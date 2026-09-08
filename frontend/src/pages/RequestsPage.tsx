@@ -26,6 +26,15 @@ export default function RequestsPage() {
       ]);
       setRequests(list);
       setRoles(roleList);
+      // дефолт роли для каждой новой заявки — первая несистемная (Lead)
+      const leadRole = roleList.find((r) => !r.is_system) ?? roleList[0];
+      const defaults: Record<number, number> = {};
+      list
+        .filter((r) => r.status === "pending")
+        .forEach((r) => {
+          defaults[r.id] = leadRole?.id ?? 0;
+        });
+      setRoleChoice((prev) => ({ ...defaults, ...prev }));
       setError("");
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось загрузить заявки");

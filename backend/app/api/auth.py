@@ -215,6 +215,10 @@ def approve_request(
     role = auth_uc.get_role(db, payload.role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Роль не найдена")
+    if role.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Системную роль нельзя назначать"
+        )
     auth_uc.approve_request(db, request, role)
     db.refresh(request)
     return request
@@ -258,6 +262,10 @@ def change_user_role(
     role = auth_uc.get_role(db, payload.role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Роль не найдена")
+    if role.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Системную роль нельзя назначать"
+        )
     user = auth_uc.approve_user_role(db, user, role)
     return _me(db, user)
 

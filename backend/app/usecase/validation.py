@@ -128,9 +128,13 @@ def run_validation(
     effective_prompt: str | None = None
     prompt_hash: str | None = None
     if run_ai:
-        seed_criteria_if_missing(db)
+        seed_criteria_if_missing(db, owner_user_id=owner_user.id if owner_user else None)
         try:
-            criteria = select_criteria(db, criterion_ids)
+            criteria = select_criteria(
+                db,
+                criterion_ids,
+                owner_user_id=owner_user.id if owner_user else None,
+            )
         except LookupError as exc:
             return _save_error(db, doc, trigger, str(exc))
         if not criteria:

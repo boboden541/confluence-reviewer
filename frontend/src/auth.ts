@@ -1,7 +1,7 @@
 // Авторизация: сессия в localStorage, текущий пользователь (me), вход
 // God логином+паролем и лидов токеном Confluence (заявка → модерация).
 
-import { api, ApiError, clearCredentials } from "./api";
+import { api, ApiError, authHeaders, clearCredentials } from "./api";
 
 export interface Me {
   id: number;
@@ -71,6 +71,8 @@ export function fetchMe(): Promise<Me> {
 }
 
 export function logout(): void {
+  // серверную сессию гасим (best effort), локальный токен — всегда
+  void fetch("/api/auth/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
   clearCredentials();
 }
 

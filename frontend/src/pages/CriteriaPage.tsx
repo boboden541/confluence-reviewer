@@ -157,7 +157,7 @@ export default function CriteriaPage() {
       {info && <div className="alert ok">{info}</div>}
 
       <div className="panel">
-        <h2>🌐 Из общего реестра критериев</h2>
+        <h2>Новый критерий</h2>
         <p className="muted">
           Название увидит руководитель в блоке оценок; промт — инструкция для ИИ,
           станет блоком в собранном промте проверки.
@@ -285,17 +285,6 @@ export default function CriteriaPage() {
             </div>
           ))}
         </div>
-      )}
-      {registryOpen && (
-        <RegistryModal
-          title="🌐 Общий реестр критериев"
-          endpoint="/api/ai-criteria/registry"
-          onCopy={async (entry) => {
-            await api(`/api/ai-criteria/${entry.id}/copy`, { method: "POST" });
-            await load();
-          }}
-          onClose={() => setRegistryOpen(false)}
-        />
       )}
     </section>
   );
