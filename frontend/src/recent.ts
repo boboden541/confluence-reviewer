@@ -13,11 +13,24 @@ export interface RecentEntry {
 const STORAGE_KEY = "cr-recent";
 const MAX_ENTRIES = 8;
 
+const KINDS: RecentKind[] = ["document", "analyst", "cluster"];
+
 export function listRecent(): RecentEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as RecentEntry[]) : [];
-    return Array.isArray(parsed) ? parsed.slice(0, MAX_ENTRIES) : [];
+    if (!Array.isArray(parsed)) return [];
+    // localStorage может быть переписан чем угодно: битая запись не должна
+    // ронять рендер главной
+    return parsed
+      .filter(
+        (e): e is RecentEntry =>
+          e != null &&
+          typeof e.id === "number" &&
+          typeof e.title === "string" &&
+          KINDS.includes(e.kind),
+      )
+      .slice(0, MAX_ENTRIES);
   } catch {
     return [];
   }

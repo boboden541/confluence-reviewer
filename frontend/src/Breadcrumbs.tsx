@@ -22,7 +22,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
       {items.map((crumb, index) => {
         const last = index === items.length - 1;
         return (
-          <span key={`${index}-${String(crumb.label)}`}>
+          <span key={index}>
             <span className="sep">/</span>
             {crumb.to && !last ? (
               <Link to={crumb.to}>{crumb.label}</Link>

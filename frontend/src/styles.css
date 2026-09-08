@@ -3548,12 +3548,8 @@ label.found-row.disabled {
   transform: rotate(90deg);
 }
 .q-items {
-  display: none;
   border-left: 2px solid var(--border-subtle, #ebecf0);
   margin: 0 8px 8px 20px;
-}
-.q-items.open {
-  display: block;
 }
 .q-item {
   display: flex;
@@ -3635,11 +3631,19 @@ label.found-row.disabled {
 }
 .feed-item {
   display: flex;
+  width: 100%;
   gap: 10px;
   padding: 9px 16px;
   cursor: pointer;
   text-decoration: none;
   color: var(--text, #172b4d);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+.feed-item:disabled {
+  cursor: default;
 }
 .feed-item:hover {
   background: var(--row-hover, #f8f9fa);

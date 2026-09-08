@@ -172,7 +172,7 @@ export default function HomePage() {
 
   useEffect(() => {
     void load();
-    setRecent(listRecent());
+    setRecent(listRecent()); // визиты других вкладок могли изменить список
     // служебные состояния и лента: разовый опрос + живые события поверх
     api<SyncStatus>("/api/sync/status").then(setSync).catch(() => setSync(null));
     api<BulkValidationStatus>("/api/sync/bulk-validation").then(setBulk).catch(() => setBulk(null));
@@ -191,21 +191,36 @@ export default function HomePage() {
       at: new Date().toISOString(),
       payload,
     });
+    // снимок подключения (синхронный статус, без at) — не событие: в ленту
+    // не попадает, а состояния «сейчас» обновляет
+    // перезагрузка очереди не чаще раза в 1.5 c: массовая проверка шлёт
+    // событие на каждый документ, а агрегат пересчитывать надо один раз
+    let reloadTimer: number | undefined;
+    const scheduleReload = () => {
+      window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => void load(), 1500);
+    };
     const offs = [
       on("validation", (e) => {
         setFeed((prev) => [asFeed("validation", { ...e }), ...prev].slice(0, 30));
-        if (e.status === "done" || e.status === "not_found") void load();
+        if (e.status !== "running") scheduleReload();
       }),
       on("sync", (e) => {
-        setSync(e as SyncStatus);
+        setSync(e);
+        if (e.at === undefined) return;
         setFeed((prev) => [asFeed("sync", { ...e }), ...prev].slice(0, 30));
+        scheduleReload();
       }),
       on("bulk", (e) => {
-        setBulk(e as BulkValidationStatus);
+        setBulk(e);
+        if (e.at === undefined) return;
         setFeed((prev) => [asFeed("bulk", { ...e }), ...prev].slice(0, 30));
       }),
     ];
-    return () => offs.forEach((off) => off());
+    return () => {
+      window.clearTimeout(reloadTimer);
+      offs.forEach((off) => off());
+    };
   }, [load]);
 
   const toggleSection = (type: string) => {
@@ -394,18 +409,20 @@ export default function HomePage() {
               )}
               {feed.map((event, index) => {
                 const look = feedText(event);
+                const p = event.payload as Record<string, unknown>;
+                const target =
+                  event.type === "validation" && p.document_id != null
+                    ? `/documents/${Number(p.document_id)}`
+                    : null;
                 return (
-                  <a
+                  <button
                     key={`${event.at}-${event.type}-${index}`}
+                    type="button"
                     className="feed-item"
-                    href="/"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      const p = event.payload as Record<string, unknown>;
-                      if (event.type === "validation" && p.document_id != null) {
-                        navigate(`/documents/${Number(p.document_id)}`);
-                      }
+                    onClick={() => {
+                      if (target) navigate(target);
                     }}
+                    disabled={!target}
                   >
                     <span className="feed-ico" style={{ background: look.bg }} aria-hidden="true">{look.ico}</span>
                     <span className="feed-main">
@@ -413,7 +430,7 @@ export default function HomePage() {
                       {look.sub && <span className="feed-sub">{look.sub}</span>}
                     </span>
                     <span className="feed-time">{formatTime(event.at)}</span>
-                  </a>
+                  </button>
                 );
               })}
             </div>

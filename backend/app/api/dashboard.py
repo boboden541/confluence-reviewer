@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
@@ -24,7 +24,7 @@ def get_dashboard(db: Session = Depends(get_db)):
 
 
 @router.get("/feed", response_model=list[FeedItem])
-def get_feed(limit: int = 30):
+def get_feed(limit: int = Query(default=30, ge=1, le=100)):
     """Последние события фоновых задач (свежие сверху) — для живой ленты."""
     return [
         FeedItem(type=event["type"], at=event["at"], payload={

@@ -208,7 +208,7 @@ describe("HomePage", () => {
     expect(screen.getByText("+2 новых, 5 обновлено")).toBeInTheDocument();
 
     // живое событие приходит само и встаёт наверх ленты
-    emitServerEvent("validation", { document_id: 5, status: "done", report_id: 77 } as never);
+    emitServerEvent("validation", { type: "validation", document_id: 5, status: "done", report_id: 77, at: new Date().toISOString() });
     expect(await screen.findByText("Проверка завершена")).toBeInTheDocument();
     const first = screen.getAllByText(/Проверка завершена|Синхронизация завершена/)[0];
     expect(first).toHaveTextContent("Проверка завершена");

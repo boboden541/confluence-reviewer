@@ -330,6 +330,24 @@ def test_reference_problems_listed(client):
     assert all(i["section"] for i in refs["items"])
 
 
+def test_reference_section_survives_many_broken_templates(client):
+    """Регрессия 500: секция не ограничена выборкой, схема — да; больше 8
+    проблемных шаблонов не должно валить весь дашборд (ревью, воспроизведено)."""
+    with SessionLocal() as db:
+        from app.models import Template
+
+        for _ in range(10):
+            db.add(Template())
+        db.commit()
+
+    resp = client.get("/api/dashboard")
+    assert resp.status_code == 200
+    refs = _section(resp.json()["sections"], "references")
+    # 10 шаблонов + «нет активных критериев» (чистая база без сида)
+    assert refs["total"] == 11
+    assert len(refs["items"]) == 8  # SECTION_LIMIT
+
+
 # --- лимит секции ---
 
 

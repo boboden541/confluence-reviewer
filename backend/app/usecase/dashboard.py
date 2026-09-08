@@ -162,11 +162,12 @@ def _references_section(db: Session) -> DashboardSection:
                 section="ai",
             )
         )
+    # секция не ограничена выборкой — режем руками: схема допускает 8 строк
     return DashboardSection(
         type="references",
         title="Проблемы справочников",
         total=len(items),
-        items=items,
+        items=items[:SECTION_LIMIT],
     )
 
 

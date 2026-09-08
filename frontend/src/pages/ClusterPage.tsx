@@ -14,6 +14,7 @@ import { clusterColor, clusterColorBg, initials } from "../orgUi";
 import { ClusterModal } from "../ClusterModal";
 import { TeamModal } from "../TeamModal";
 import { AddAnalystModal } from "../AddAnalystModal";
+import { pushRecent } from "../recent";
 import { Breadcrumbs } from "../Breadcrumbs";
 
 /** Экран кластера: шапка с описанием и счётчиками, команды «колоннами»
@@ -54,6 +55,11 @@ export default function ClusterPage() {
     setCluster(null);
     void load();
   }, [load]);
+
+  // визит кластера попадает в «Недавние» на главной
+  useEffect(() => {
+    if (cluster) pushRecent("cluster", cluster.id, cluster.name);
+  }, [cluster?.id, cluster?.name]);
 
   const membersByTeam = useMemo(() => {
     const map = new Map<number, Analyst[]>();
@@ -107,7 +113,7 @@ export default function ClusterPage() {
     try {
       await api(`/api/clusters/${id}`, { method: "DELETE" });
       notifyOrgChanged();
-      navigate("/");
+      navigate("/clusters");
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : "Не удалось удалить кластер");
     }

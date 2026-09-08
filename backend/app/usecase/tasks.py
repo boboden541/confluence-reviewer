@@ -92,14 +92,15 @@ def _publish_event(event_type: str, payload: dict[str, Any]) -> None:
 
     Звать только из корутин event loop. Журнал пополняется всегда — даже
     когда подписчиков нет: лента главной показывает события, случившиеся
-    до открытия страницы.
+    до открытия страницы. Журналу и каждому подписчику уходит своя копия:
+    потребитель, поменявший полученное событие, не переписывает историю.
     """
     event = {"type": event_type, "at": now_utc().isoformat(), **payload}
-    _event_journal.append(event)
+    _event_journal.append(dict(event))
     if not _event_subscribers:
         return
     for queue in list(_event_subscribers):
-        queue.put_nowait(event)
+        queue.put_nowait(dict(event))
 
 
 async def _execute_sync(analyst_id: int | None) -> list[SyncResult]:
