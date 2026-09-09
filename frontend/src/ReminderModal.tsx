@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Fuse from "fuse.js";
 import { api, ApiError, type Analyst, type DocumentListItem, type ReminderInput } from "./api";
 import { STATUS_LABELS } from "./StatusBadge";
 
 /** Модалка создания напоминания: аналитик и документ — комбоксы с нечётким
- *  поиском (fuse.js); документ подгружается по выбранному аналитику;
- *  дата «вернуться» необязательна — просроченные поднимаются на главной. */
+ *  поиском (fuse.js, реальный fuzzy — опечатки и неполные слова находятся).
+ *  Опции — кнопки: клик по ним выбирает значение, списки не закрываются
+ *  раньше времени (закрытие — по выбору, клику вне или Esc).
+ *  Дата «вернуться» необязательна — просроченные поднимаются на главной. */
 
 export interface ReminderModalProps {
   prefill?: { analyst_id?: number; analyst_name?: string; document_id?: number; document_title?: string };
@@ -18,7 +21,6 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // выбранные значения (id); строки поиска — отдельно
   const [analystId, setAnalystId] = useState<number | null>(prefill?.analyst_id ?? null);
   const [documentId, setDocumentId] = useState<number | null>(prefill?.document_id ?? null);
   const [text, setText] = useState("");
@@ -28,6 +30,8 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
   const [docQuery, setDocQuery] = useState(prefill?.document_title ?? "");
   const [analystListOpen, setAnalystListOpen] = useState(false);
   const [docListOpen, setDocListOpen] = useState(false);
+  const analystBoxRef = useRef<HTMLDivElement>(null);
+  const docBoxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api<Analyst[]>("/api/analysts")
@@ -63,6 +67,17 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // клик вне комбобокса закрывает его список
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (analystBoxRef.current && !analystBoxRef.current.contains(target)) setAnalystListOpen(false);
+      if (docBoxRef.current && !docBoxRef.current.contains(target)) setDocListOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const selectedAnalyst = useMemo(
     () => analysts.find((a) => a.id === analystId) ?? null,
     [analysts, analystId],
@@ -71,6 +86,34 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
     () => docs.find((d) => d.id === documentId) ?? null,
     [docs, documentId],
   );
+
+  // нечёткий поиск: fuse по ФИО/email и по названию документа
+  const analystFuse = useMemo(
+    () => new Fuse(analysts, { keys: ["full_name", "email"], threshold: 0.4, ignoreLocation: true }),
+    [analysts],
+  );
+  const docFuse = useMemo(
+    () => new Fuse(docs, { keys: ["title"], threshold: 0.4, ignoreLocation: true }),
+    [docs],
+  );
+
+  const analystMatches = useMemo(() => {
+    const needle = analystQuery.trim();
+    if (!needle) return analysts.slice(0, 8);
+    const fuzzy = analystFuse.search(needle).map((r) => r.item);
+    const fallback = analysts.filter(
+      (a) => a.full_name.toLowerCase().includes(needle.toLowerCase()) || a.email.toLowerCase().includes(needle.toLowerCase()),
+    );
+    return (fuzzy.length ? fuzzy : fallback).slice(0, 8);
+  }, [analystQuery, analystFuse, analysts]);
+
+  const docMatches = useMemo(() => {
+    const needle = docQuery.trim();
+    if (!needle) return docs.slice(0, 8);
+    const fuzzy = docFuse.search(needle).map((r) => r.item);
+    const fallback = docs.filter((d) => d.title.toLowerCase().includes(needle.toLowerCase()));
+    return (fuzzy.length ? fuzzy : fallback).slice(0, 8);
+  }, [docQuery, docFuse, docs]);
 
   const submit = async () => {
     if (analystId == null || !text.trim()) return;
@@ -118,30 +161,29 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
 
             <span className="field">
               <label htmlFor="rem-analyst">Аналитик *</label>
-              <input
-                id="rem-analyst"
-                className="text-input"
-                placeholder="Поиск по ФИО — нечёткий"
-                value={selectedAnalyst ? selectedAnalyst.full_name : analystQuery}
-                onChange={(e) => {
-                  setAnalystId(null);
-                  setAnalystQuery(e.target.value);
-                  setAnalystListOpen(true);
-                }}
-                onFocus={() => setAnalystListOpen(true)}
-                onBlur={() => window.setTimeout(() => setAnalystListOpen(false), 150)}
-                autoComplete="off"
-              />
-              {analystListOpen && !selectedAnalyst && (
-                <div className="combo-list open">
-                  {analysts.length === 0 && <div className="combo-empty">аналитики не заведены</div>}
-                  {analysts
-                    .filter((a) => !analystQuery.trim() || a.full_name.toLowerCase().includes(analystQuery.trim().toLowerCase()))
-                    .slice(0, 8)
-                    .map((a) => (
-                      <div
+              <div className="combo" ref={analystBoxRef}>
+                <input
+                  id="rem-analyst"
+                  className="text-input"
+                  placeholder="Поиск по ФИО — нечёткий"
+                  value={selectedAnalyst ? selectedAnalyst.full_name : analystQuery}
+                  onChange={(e) => {
+                    setAnalystId(null);
+                    setAnalystQuery(e.target.value);
+                    setAnalystListOpen(true);
+                  }}
+                  onFocus={() => setAnalystListOpen(true)}
+                  autoComplete="off"
+                />
+                {analystListOpen && !selectedAnalyst && (
+                  <div className="combo-list">
+                    {analysts.length === 0 && <div className="combo-empty">аналитики не заведены</div>}
+                    {analystMatches.map((a) => (
+                      <button
                         key={a.id}
+                        type="button"
                         className="combo-opt"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setAnalystId(a.id);
                           setDocumentId(null);
@@ -155,49 +197,54 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                           <br />
                           <span className="combo-sub">{a.team_name ? `${a.team_name} · ` : ""}{a.email}</span>
                         </span>
-                      </div>
+                      </button>
                     ))}
-                </div>
-              )}
-              {selectedAnalyst && <div className="hint">поиск снова откроется при правке поля</div>}
+                    {analystMatches.length === 0 && analysts.length > 0 && (
+                      <div className="combo-empty">никого не найдено</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </span>
 
             <span className="field">
               <label htmlFor="rem-doc">Документ (необязательно)</label>
-              <input
-                id="rem-doc"
-                className="text-input"
-                placeholder={analystId == null ? "сначала выберите аналитика" : "Поиск по документам аналитика — нечёткий"}
-                disabled={analystId == null}
-                value={selectedDoc ? selectedDoc.title : docQuery}
-                onChange={(e) => {
-                  setDocumentId(null);
-                  setDocQuery(e.target.value);
-                  setDocListOpen(true);
-                }}
-                onFocus={() => setDocListOpen(true)}
-                onBlur={() => window.setTimeout(() => setDocListOpen(false), 150)}
-                autoComplete="off"
-              />
-              {docListOpen && analystId != null && !selectedDoc && (
-                <div className="combo-list open">
-                  <div
-                    className="combo-opt"
-                    onClick={() => {
-                      setDocumentId(null);
-                      setDocQuery("");
-                      setDocListOpen(false);
-                    }}
-                  >
-                    <span className="combo-name">— без документа —</span>
-                  </div>
-                  {docs
-                    .filter((d) => !docQuery.trim() || d.title.toLowerCase().includes(docQuery.trim().toLowerCase()))
-                    .slice(0, 8)
-                    .map((d) => (
-                      <div
+              <div className="combo" ref={docBoxRef}>
+                <input
+                  id="rem-doc"
+                  className="text-input"
+                  placeholder={analystId == null ? "Сначала выберите аналитика" : "Поиск по документам аналитика — нечёткий"}
+                  value={selectedDoc ? selectedDoc.title : docQuery}
+                  onChange={(e) => {
+                    setDocumentId(null);
+                    setDocQuery(e.target.value);
+                    setDocListOpen(true);
+                  }}
+                  onFocus={() => {
+                    if (analystId != null) setDocListOpen(true);
+                  }}
+                  autoComplete="off"
+                />
+                {docListOpen && analystId != null && !selectedDoc && (
+                  <div className="combo-list">
+                    <button
+                      type="button"
+                      className="combo-opt"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setDocumentId(null);
+                        setDocQuery("");
+                        setDocListOpen(false);
+                      }}
+                    >
+                      <span className="combo-name">— без документа —</span>
+                    </button>
+                    {docMatches.map((d) => (
+                      <button
                         key={d.id}
+                        type="button"
                         className="combo-opt"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setDocumentId(d.id);
                           setDocQuery(d.title);
@@ -209,11 +256,14 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                           <br />
                           <span className="combo-sub">проверка: {STATUS_LABELS[d.validation_status]}</span>
                         </span>
-                      </div>
+                      </button>
                     ))}
-                </div>
-              )}
-              <div className="hint">В карточке напоминания будет ссылка в отчёт документа.</div>
+                  </div>
+                )}
+                {analystId == null && (
+                  <div className="hint">Сначала выберите аналитика — появятся его документы.</div>
+                )}
+              </div>
             </span>
 
             <span className="field">
