@@ -190,3 +190,35 @@ def test_delete_open_409_done_204(client):
     client.post(f"/api/reminders/{created['id']}/done")
     assert client.delete(f"/api/reminders/{created['id']}").status_code == 204
     assert client.get("/api/reminders").json() == []
+
+
+def test_group_reflects_moment_not_local_day(client):
+    """Группу считает сервер по моменту «вернуться» (UTC): будущее — не
+    просрочено, независимо от часового пояса пользователя (регрессия
+    «10.09 12:00 UTC показывалось просроченным»)."""
+    analyst = _analyst()
+    future = client.post(
+        "/api/reminders",
+        json={
+            "analyst_id": analyst.id,
+            "text": "будущее",
+            "remind_at": (now_utc() + timedelta(days=1)).isoformat(),
+        },
+    ).json()
+    body = client.get("/api/reminders").json()
+    row = next(r for r in body if r["id"] == future["id"])
+    assert row["group"] == "later"
+
+    # момент «вернуться» = сейчас: не просрочено наперёд
+    created_today = client.post(
+        "/api/reminders",
+        json={
+            "analyst_id": analyst.id,
+            "text": "сегодня",
+            "remind_at": (now_utc() + timedelta(hours=1)).isoformat(),
+        },
+    ).json()
+    body = client.get("/api/reminders").json()
+    row = next(r for r in body if r["id"] == created_today["id"])
+    # remind_at сегодня (в пределах UTC-дня) — «today», а не overdue
+    assert row["group"] == "today"

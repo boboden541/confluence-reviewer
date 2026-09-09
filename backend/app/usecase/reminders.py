@@ -88,6 +88,23 @@ def list_for_user(
     )
 
 
+def group_of(reminder: Reminder, now: datetime | None = None) -> str:
+    """Группа открытого напоминания по моменту «вернуться» (UTC):
+    момент уже прошёл — overdue; в течение текущего UTC-дня — today; позже —
+    later. Без даты — later. Выполненные не группируются."""
+    if reminder.done_at is not None:
+        return "done"
+    if reminder.remind_at is None:
+        return "later"
+    current = now or now_utc()
+    end_of_day = current.replace(hour=23, minute=59, second=59, microsecond=0)
+    if reminder.remind_at < current:
+        return "overdue"
+    if reminder.remind_at <= end_of_day:
+        return "today"
+    return "later"
+
+
 def mark_done(db: Session, user: User, reminder_id: int) -> Reminder:
     reminder = get_own(db, user, reminder_id)
     if reminder.done_at is None:

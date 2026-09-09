@@ -33,6 +33,7 @@ def _out(db: Session, reminder: Reminder) -> ReminderOut:
         done_at=reminder.done_at,
         created_at=reminder.created_at,
         status="done" if reminder.done_at is not None else "open",
+        group=reminders_uc.group_of(reminder),
     )
 
 

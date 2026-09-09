@@ -33,3 +33,5 @@ class ReminderOut(BaseModel):
     done_at: datetime | None = None
     created_at: datetime
     status: str  # "open" | "done"
+    # группа очереди (для открытых): overdue | today | later; у выполненных — "done"
+    group: str = "later"
