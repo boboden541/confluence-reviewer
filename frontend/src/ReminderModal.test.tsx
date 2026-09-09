@@ -182,4 +182,43 @@ describe("ReminderModal", () => {
     fireEvent.focus(screen.getByPlaceholderText("Сначала выберите аналитика"));
     expect(await screen.findByText(/Сначала выберите аналитика/)).toBeInTheDocument();
   });
+
+  it("blocks submit with a past reminder date and shows an error", async () => {
+    renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText("Поиск по ФИО — нечёткий"), {
+      target: { value: "Никулин" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Никулин Владислав/ }));
+    fireEvent.change(screen.getByLabelText("Что напомнить *"), {
+      target: { value: "Проверить правки" },
+    });
+    // прошлая дата — нельзя ввести через пикер (min) и вручную нельзя сабмитить
+    const dateInput = screen.getByLabelText("Вернуться (дата)") as HTMLInputElement;
+    expect(dateInput).toHaveAttribute("min");
+    fireEvent.change(dateInput, { target: { value: "2025-09-10" } });
+    expect(await screen.findByText(/Дата уже прошла/)).toBeInTheDocument();
+
+    const submitBtn = screen.getByRole("button", { name: "Создать напоминание" });
+    expect(submitBtn).toBeDisabled();
+  });
+
+  it("accepts today and future dates without an error", async () => {
+    renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText("Поиск по ФИО — нечёткий"), {
+      target: { value: "Никулин" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Никулин Владислав/ }));
+    const dateInput = screen.getByLabelText("Вернуться (дата)") as HTMLInputElement;
+    const today = new Date();
+    const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 10);
+    fireEvent.change(dateInput, { target: { value: localToday } });
+    expect(screen.queryByText(/Дата уже прошла/)).not.toBeInTheDocument();
+
+    fireEvent.change(dateInput, { target: { value: "2027-01-15" } });
+    expect(screen.queryByText(/Дата уже прошла/)).not.toBeInTheDocument();
+  });
 });

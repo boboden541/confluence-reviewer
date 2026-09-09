@@ -35,6 +35,13 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
   const [docQuery, setDocQuery] = useState(prefill?.document_title ?? "");
   const [analystListOpen, setAnalystListOpen] = useState(false);
   const [docListOpen, setDocListOpen] = useState(false);
+
+  // сегодня по локальной зоне — ниже этой даты напоминание сразу «просрочено»
+  const now = new Date();
+  const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+  const dateInPast = date !== "" && date < todayStr;
   const analystBoxRef = useRef<HTMLDivElement>(null);
   const docBoxRef = useRef<HTMLDivElement>(null);
 
@@ -286,15 +293,29 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
 
             <span className="field">
               <label htmlFor="rem-date">Вернуться (дата)</label>
-              <input id="rem-date" className="text-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              <div className="hint">Необязательно: просроченные напоминания поднимутся в верхнюю группу на главной.</div>
+              <input
+                id="rem-date"
+                className="text-input"
+                type="date"
+                min={todayStr}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+              {dateInPast && (
+                <div className="alert error" style={{ marginTop: 6 }}>
+                  Дата уже прошла — выберите сегодняшнюю или будущую.
+                </div>
+              )}
+              {!dateInPast && (
+                <div className="hint">Необязательно: напоминание с датой поднимется в группу «Вернуться» на главной.</div>
+              )}
             </span>
           </div>
           <div className="modal-foot">
             <button className="btn subtle" type="button" onClick={onClose}>
               Отмена
             </button>
-            <button className="btn primary" type="submit" disabled={saving || analystId == null || !text.trim()}>
+            <button className="btn primary" type="submit" disabled={saving || analystId == null || !text.trim() || dateInPast}>
               {saving ? "Создание…" : "Создать напоминание"}
             </button>
           </div>
