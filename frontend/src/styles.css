@@ -4158,34 +4158,19 @@ label.found-row.disabled {
 }
 
 
-/* ── напоминания: комбоксы с нечётким поиском ────────────────── */
+/* ── напоминания: выпадающие списки комбобоксов (стиль found-*) ── */
 .combo { position: relative; }
-.combo-list {
+.combo .combo-list {
   position: absolute;
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-  background: var(--surface, #fff);
-  border: 2px solid var(--border, #d0d5dd);
-  border-radius: 8px;
-  box-shadow: 0 10px 22px rgba(9, 30, 66, 0.18);
-  max-height: 220px;
-  overflow: auto;
   z-index: 5;
-}
-.combo-opt {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  padding: 8px 11px;
-  cursor: pointer;
-}
-.combo-opt:hover { background: var(--row-hover, #f8f9fa); }
-.combo-name { font-size: 13.5px; }
-.combo-sub { font-size: 11.5px; color: var(--text-subtlest, #626f86); }
-.combo-empty {
-  padding: 10px 12px;
-  font-size: 12.5px;
-  color: var(--text-subtlest, #626f86);
-  font-style: italic;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 6px;
+  box-shadow: 0 10px 22px rgba(9, 30, 66, 0.18);
+  padding: 4px;
+  max-height: 240px;
+  overflow: auto;
 }

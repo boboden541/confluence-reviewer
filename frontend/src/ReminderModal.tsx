@@ -15,6 +15,11 @@ export interface ReminderModalProps {
   onClose: () => void;
 }
 
+function initials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p.charAt(0).toUpperCase()).join("") || "?";
+}
+
 export default function ReminderModal({ prefill, onCreated, onClose }: ReminderModalProps) {
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
@@ -176,13 +181,16 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                   autoComplete="off"
                 />
                 {analystListOpen && !selectedAnalyst && (
-                  <div className="combo-list">
+                  <div className="combo-list found-list">
                     {analysts.length === 0 && <div className="combo-empty">аналитики не заведены</div>}
+                    {analystMatches.length === 0 && analysts.length > 0 && (
+                      <div className="combo-empty">никого не найдено</div>
+                    )}
                     {analystMatches.map((a) => (
                       <button
                         key={a.id}
                         type="button"
-                        className="combo-opt"
+                        className="found-row"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setAnalystId(a.id);
@@ -192,16 +200,15 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                           setAnalystListOpen(false);
                         }}
                       >
-                        <span>
-                          <span className="combo-name">{a.full_name}</span>
-                          <br />
-                          <span className="combo-sub">{a.team_name ? `${a.team_name} · ` : ""}{a.email}</span>
+                        <span className="p-avatar small" style={{ background: "var(--blue, #0c66e4)" }} aria-hidden="true">
+                          {initials(a.full_name)}
+                        </span>
+                        <span className="found-info">
+                          <span className="found-name">{a.full_name}</span>
+                          <span className="found-sub">{a.team_name ? `${a.team_name} · ` : ""}{a.email}</span>
                         </span>
                       </button>
                     ))}
-                    {analystMatches.length === 0 && analysts.length > 0 && (
-                      <div className="combo-empty">никого не найдено</div>
-                    )}
                   </div>
                 )}
               </div>
@@ -226,10 +233,10 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                   autoComplete="off"
                 />
                 {docListOpen && analystId != null && !selectedDoc && (
-                  <div className="combo-list">
+                  <div className="combo-list found-list">
                     <button
                       type="button"
-                      className="combo-opt"
+                      className="found-row"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         setDocumentId(null);
@@ -237,13 +244,13 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                         setDocListOpen(false);
                       }}
                     >
-                      <span className="combo-name">— без документа —</span>
+                      <span className="found-name">— без документа —</span>
                     </button>
                     {docMatches.map((d) => (
                       <button
                         key={d.id}
                         type="button"
-                        className="combo-opt"
+                        className="found-row"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setDocumentId(d.id);
@@ -251,10 +258,9 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                           setDocListOpen(false);
                         }}
                       >
-                        <span>
-                          <span className="combo-name">{d.title}</span>
-                          <br />
-                          <span className="combo-sub">проверка: {STATUS_LABELS[d.validation_status]}</span>
+                        <span className="found-info">
+                          <span className="found-name">{d.title}</span>
+                          <span className="found-sub">проверка: {STATUS_LABELS[d.validation_status]}</span>
                         </span>
                       </button>
                     ))}
