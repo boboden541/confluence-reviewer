@@ -15,6 +15,7 @@ from app.models.analysts import Analyst, AnalystNote
 from app.models.auth import AuthSession, RegistrationRequest, Role, User
 from app.models.documents import ConfluenceDocument, DocumentNote
 from app.models.org import Cluster, Team
+from app.models.reminders import Reminder
 from app.models.templates import Template, TemplateVersion
 from app.models.validation import TriggerType, ValidationReport, ValidationStatus
 
@@ -28,6 +29,7 @@ __all__ = [
     "ConfluenceDocument",
     "CriterionRating",
     "DocumentNote",
+    "Reminder",
     "RegistrationRequest",
     "Role",
     "Team",
