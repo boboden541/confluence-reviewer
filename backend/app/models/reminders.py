@@ -23,11 +23,15 @@ class Reminder(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # владелец; чужие напоминания не видны в принципе (404)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    analyst_id: Mapped[int] = mapped_column(ForeignKey("analysts.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    analyst_id: Mapped[int] = mapped_column(
+        ForeignKey("analysts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     # опциональный контекст ревью: документ, к которому вернуться
     document_id: Mapped[int | None] = mapped_column(
-        ForeignKey("confluence_documents.id"), nullable=True, index=True
+        ForeignKey("confluence_documents.id", ondelete="CASCADE"), nullable=True, index=True
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     # дата «вернуться»; NULL — живёт в списке открытых без срока

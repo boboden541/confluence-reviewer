@@ -84,7 +84,7 @@ export default function RemindersPanel({
   for (const reminder of openItems) {
     const stamp = dayStamp(reminder.remind_at);
     if (stamp === null) groups.later.push(reminder);
-    else if (new Date(stamp).getTime() < new Date(todayStamp).getTime()) groups.overdue.push(reminder);
+    else if (stamp < todayStamp) groups.overdue.push(reminder);
     else if (stamp === todayStamp) groups.today.push(reminder);
     else groups.later.push(reminder);
   }
@@ -133,7 +133,7 @@ export default function RemindersPanel({
       {items !== null && (
         <div className="panel" style={{ padding: 0 }}>
           <div className="panel-head">
-            <h2>⏰ Напоминания{analystId != null ? "" : ""}</h2>
+            <h2>⏰ Напоминания</h2>
             <span className="count">
               {compact
                 ? `${openItems.length} открыт`

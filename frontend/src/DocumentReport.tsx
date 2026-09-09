@@ -60,6 +60,7 @@ export default function DocumentReport({
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+  const reminders = useReminders();
 
   // в панели шапка документа уезжает при прокрутке — «липкая» строка
   // с крошками и названием всегда сверху
@@ -312,7 +313,13 @@ export default function DocumentReport({
         <div className="head-actions doc-actions">
           <button
             className="btn"
-            onClick={() => useReminders().open({ analyst_id: doc.analyst_id, document_id: doc.id, document_title: doc.title })}
+            onClick={() =>
+              reminders.open({
+                analyst_id: doc.analyst_id,
+                document_id: doc.id,
+                document_title: doc.title,
+              })
+            }
             disabled={busy || checking}
             title="Напомнить себе вернуться к этому документу"
           >

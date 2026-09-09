@@ -107,16 +107,16 @@ describe("RemindersPanel", () => {
   });
 
   it("checks a reminder to mark it done (POST)", async () => {
+    vi.useRealTimers();
     const fetchMock = mockFetch({
       "/api/reminders": OPEN,
       "POST /api/reminders/1/done": { ...OPEN[0], status: "done", done_at: NOW },
     });
     renderPanel();
 
-    const check = (await screen.findByText("просроченная задача").then(() =>
-      screen.getAllByRole("checkbox", { name: "Выполнить" })[0],
-    )) as HTMLInputElement;
-    fireEvent.click(check);
+    await screen.findByText("просроченная задача");
+    const checks = screen.getAllByRole("checkbox", { name: "Выполнить" });
+    fireEvent.click(checks[0]);
 
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(

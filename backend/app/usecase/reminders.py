@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Analyst, ConfluenceDocument, Reminder, User
 from app.usecase.exceptions import AnalystNotFound
-from app.utils import to_naive_utc
+from app.utils import now_utc, to_naive_utc
 
 
 class ReminderNotFound(Exception):
@@ -28,7 +28,8 @@ class ReminderNotDone(Exception):
     """Удалить можно только выполненное напоминание."""
 
 
-def _get_own(db: Session, user: User, reminder_id: int) -> Reminder:
+def get_own(db: Session, user: User, reminder_id: int) -> Reminder:
+    """Напоминание владельца; чужое/несуществующее — ReminderNotFound."""
     reminder = db.get(Reminder, reminder_id)
     if reminder is None or reminder.user_id != user.id:
         raise ReminderNotFound("Напоминание не найдено")
@@ -88,25 +89,23 @@ def list_for_user(
 
 
 def mark_done(db: Session, user: User, reminder_id: int) -> Reminder:
-    reminder = _get_own(db, user, reminder_id)
+    reminder = get_own(db, user, reminder_id)
     if reminder.done_at is None:
-        reminder.done_at = datetime.utcnow()
+        reminder.done_at = now_utc()
         db.commit()
-        db.refresh(reminder)
     return reminder
 
 
 def reopen(db: Session, user: User, reminder_id: int) -> Reminder:
-    reminder = _get_own(db, user, reminder_id)
+    reminder = get_own(db, user, reminder_id)
     if reminder.done_at is not None:
         reminder.done_at = None
         db.commit()
-        db.refresh(reminder)
     return reminder
 
 
 def delete(db: Session, user: User, reminder_id: int) -> None:
-    reminder = _get_own(db, user, reminder_id)
+    reminder = get_own(db, user, reminder_id)
     if reminder.done_at is None:
         raise ReminderNotDone("Удалить можно только выполненное напоминание")
     db.delete(reminder)

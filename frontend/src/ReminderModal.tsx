@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type Analyst, type DocumentListItem, type ReminderInput } from "./api";
+import { STATUS_LABELS } from "./StatusBadge";
 
 /** Модалка создания напоминания: аналитик и документ — комбоксы с нечётким
  *  поиском (fuse.js); документ подгружается по выбранному аналитику;
@@ -34,16 +35,33 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
       .catch(() => setAnalysts([]));
   }, []);
 
-  // документы выбранного аналитика
+  // документы выбранного аналитика; ответ устаревшего запроса игнорируется
   useEffect(() => {
     if (analystId == null) {
       setDocs([]);
       return;
     }
+    let stale = false;
     api<{ items: DocumentListItem[] }>(`/api/analysts/${analystId}/documents?page=1&page_size=100`)
-      .then((page: { items: DocumentListItem[] }) => setDocs(page.items))
-      .catch(() => setDocs([]));
+      .then((page: { items: DocumentListItem[] }) => {
+        if (!stale) setDocs(page.items);
+      })
+      .catch(() => {
+        if (!stale) setDocs([]);
+      });
+    return () => {
+      stale = true;
+    };
   }, [analystId]);
+
+  // Esc закрывает модалку — как во всех диалогах сервиса
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
 
   const selectedAnalyst = useMemo(
     () => analysts.find((a) => a.id === analystId) ?? null,
@@ -189,7 +207,7 @@ export default function ReminderModal({ prefill, onCreated, onClose }: ReminderM
                         <span>
                           <span className="combo-name">{d.title}</span>
                           <br />
-                          <span className="combo-sub">проверка: {d.validation_status === "failed" ? "не пройдена" : d.validation_status === "passed" ? "пройдена" : d.validation_status === "error" ? "ошибка" : "не проверялся"}</span>
+                          <span className="combo-sub">проверка: {STATUS_LABELS[d.validation_status]}</span>
                         </span>
                       </div>
                     ))}

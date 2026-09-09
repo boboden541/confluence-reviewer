@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
-from app.dependencies.auth import require_user
+from app.dependencies.auth import require_user, resolve_actor
 from app.models import Analyst, ConfluenceDocument, Reminder, User
 from app.schemas.reminders import ReminderCreate, ReminderOut
 from app.usecase import reminders as reminders_uc
@@ -37,20 +37,15 @@ def _out(db: Session, reminder: Reminder) -> ReminderOut:
 
 
 def _actor(db: Session, user: User | None) -> User:
-    from app.dependencies.auth import resolve_actor
-
     return resolve_actor(db, user)
 
 
-def _own(db: Session, user: User | None, reminder_id: int) -> User:
-    from app.dependencies.auth import resolve_actor
-
+def _own(db: Session, user: User | None, reminder_id: int) -> Reminder:
     actor = resolve_actor(db, user)
     try:
-        reminders_uc._get_own(db, actor, reminder_id)
+        return reminders_uc.get_own(db, actor, reminder_id)
     except reminders_uc.ReminderNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return actor
 
 
 @router.get("", response_model=list[ReminderOut])
@@ -93,8 +88,8 @@ def mark_done(
     db: Session = Depends(get_db),
     user: User | None = Depends(require_user),
 ):
-    actor = _own(db, user, reminder_id)
-    return _out(db, reminders_uc.mark_done(db, actor, reminder_id))
+    reminder = _own(db, user, reminder_id)
+    return _out(db, reminders_uc.mark_done(db, _actor(db, user), reminder_id))
 
 
 @router.post("/{reminder_id}/reopen", response_model=ReminderOut)
@@ -103,8 +98,8 @@ def reopen(
     db: Session = Depends(get_db),
     user: User | None = Depends(require_user),
 ):
-    actor = _own(db, user, reminder_id)
-    return _out(db, reminders_uc.reopen(db, actor, reminder_id))
+    reminder = _own(db, user, reminder_id)
+    return _out(db, reminders_uc.reopen(db, _actor(db, user), reminder_id))
 
 
 @router.delete("/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -113,9 +108,9 @@ def delete_reminder(
     db: Session = Depends(get_db),
     user: User | None = Depends(require_user),
 ):
-    actor = _own(db, user, reminder_id)
+    _own(db, user, reminder_id)
     try:
-        reminders_uc.delete(db, actor, reminder_id)
+        reminders_uc.delete(db, _actor(db, user), reminder_id)
     except reminders_uc.ReminderNotDone as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

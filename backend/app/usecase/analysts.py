@@ -96,7 +96,15 @@ def update_analyst(db, analyst_id: int, payload: AnalystUpdate) -> AnalystOut:
 
 
 def delete_analyst(db, analyst_id: int) -> None:
-    """Удалить аналитика вместе с его документами, отчётами и заметками."""
+    """Удалить аналитика вместе с его документами, отчётами и заметками.
+
+    Напоминания (личные, могут быть у любого пользователя) удаляются явно:
+    старые таблицы reminders созданы без ON DELETE CASCADE."""
+    from app.models import Reminder
+
+    db.query(Reminder).filter(Reminder.analyst_id == analyst_id).delete(
+        synchronize_session=False
+    )
     analyst = get_analyst(db, analyst_id)
     db.delete(analyst)  # каскад: документы → отчёты и заметки
     db.commit()
