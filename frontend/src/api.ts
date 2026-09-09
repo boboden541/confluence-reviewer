@@ -559,3 +559,25 @@ export const PERMISSION_LABELS: Record<string, string> = {
   moderation: "Модерация заявок и смена ролей",
   "roles.manage": "Создание ролей и настройка их прав",
 };
+
+// --- напоминания ---
+
+export interface Reminder {
+  id: number;
+  analyst_id: number;
+  analyst_name: string;
+  document_id: number | null;
+  document_title: string | null;
+  text: string;
+  remind_at: string | null;
+  done_at: string | null;
+  created_at: string;
+  status: "open" | "done";
+}
+
+export interface ReminderInput {
+  analyst_id: number;
+  document_id: number | null;
+  text: string;
+  remind_at: string | null;
+}

@@ -14,6 +14,7 @@ import {
 import { on } from "./events";
 import { pushRecent } from "./recent";
 import { Breadcrumbs } from "./Breadcrumbs";
+import { useReminders } from "./remindersContext";
 
 interface Note {
   document_id: number;
@@ -309,6 +310,14 @@ export default function DocumentReport({
 
         {/* одна главная кнопка; вторичные — тише (ghost) */}
         <div className="head-actions doc-actions">
+          <button
+            className="btn"
+            onClick={() => useReminders().open({ analyst_id: doc.analyst_id, document_id: doc.id, document_title: doc.title })}
+            disabled={busy || checking}
+            title="Напомнить себе вернуться к этому документу"
+          >
+            ⏰ Напомнить
+          </button>
           <button
             className="btn primary"
             onClick={() => {

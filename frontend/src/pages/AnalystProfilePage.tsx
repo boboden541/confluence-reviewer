@@ -5,6 +5,7 @@ import { DomainsInput } from "../DomainsInput";
 import Markdown from "../Markdown";
 import { pushRecent } from "../recent";
 import { Breadcrumbs } from "../Breadcrumbs";
+import RemindersPanel from "../RemindersPanel";
 import { useCan } from "../userContext";
 
 
@@ -247,6 +248,10 @@ export default function AnalystProfilePage() {
           )}
         </div>
       </div>
+
+      <div className="zone-label">Напоминания</div>
+
+      <RemindersPanel analystId={analyst.id} compact />
 
       <div className="zone-label">Заметки руководителя</div>
 

@@ -4054,3 +4054,105 @@ label.found-row.disabled {
 .registry-btn:hover {
   background: var(--blue-subtle-bg, #e9f2ff);
 }
+
+/* ── напоминания ─────────────────────────────────────────────── */
+.reminders-fab {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--blue, #0c66e4);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(9, 30, 66, 0.28);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.reminders-fab:hover {
+  background: var(--blue-hover, #0055cc);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(9, 30, 66, 0.34);
+}
+
+.rem-group {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 10px 16px 4px;
+}
+.rem-group.overdue { color: var(--red-text, #ae2e24); }
+.rem-group.today { color: var(--yellow-text, #7a5d00); }
+.rem-group.later { color: var(--text-subtlest, #626f86); }
+
+.rem-item {
+  display: flex;
+  gap: 10px;
+  padding: 9px 16px;
+  align-items: flex-start;
+}
+.rem-item + .rem-item {
+  border-top: 1px dashed var(--border-subtle, #ebecf0);
+}
+.rem-check {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--blue, #0c66e4);
+  cursor: pointer;
+}
+.rem-main { flex: 1; min-width: 0; }
+.rem-text { font-size: 13px; line-height: 1.45; }
+.rem-item.done .rem-text {
+  text-decoration: line-through;
+  color: var(--text-subtlest, #626f86);
+}
+.rem-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-subtle, #44546f);
+  flex-wrap: wrap;
+}
+.rem-who a {
+  color: var(--blue, #0c66e4);
+  text-decoration: none;
+}
+.rem-who a:hover { text-decoration: underline; }
+.rem-date {
+  font-size: 11.5px;
+  color: var(--text-subtlest, #626f86);
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.rem-date.overdue {
+  color: var(--red-text, #ae2e24);
+  font-weight: 600;
+}
+.rem-done-toggle {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-subtle, #44546f);
+  cursor: pointer;
+  padding: 6px 16px;
+  width: 100%;
+  text-align: left;
+}
+.rem-done-toggle:hover { background: var(--row-hover, #f8f9fa); }
+.rem-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-subtle, #44546f);
+  font-size: 13px;
+}
