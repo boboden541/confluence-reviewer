@@ -329,3 +329,54 @@ def test_lead_queue_filters_to_assigned_analysts(auth_client, monkeypatch):
     god_dash = auth_client.get("/api/dashboard", headers=god).json()
     god_failed = next(s for s in god_dash["sections"] if s["type"] == "failed")
     assert god_failed["total"] == 2
+
+
+def test_put_ratings_response_keeps_owner_filter(auth_client, monkeypatch):
+    """Регрессия дублей в блоке оценивания: PUT должен вернуть блок в том же
+    owner-фильтре, что и GET, — только свои критерии, а не весь справочник."""
+    lead = _lead_session(auth_client, monkeypatch)
+    god = _god(auth_client)
+
+    # свой критерий у лида
+    mine = auth_client.post(
+        "/api/ai-criteria",
+        json={"name": "Мой критерий лида", "prompt": "проверка по критерию лида."},
+        headers=lead,
+    ).json()
+    # и чужой — у God (в блоке лида его быть не должно)
+    auth_client.post(
+        "/api/ai-criteria",
+        json={"name": "Критерий God", "prompt": "проверка по критерию бога."},
+        headers=god,
+    )
+
+    # документ: создаёт лид, оценивает лид
+    doc = auth_client.post(
+        "/api/analysts",
+        json={"full_name": "Оцениваемый аналитик", "email": "rate@company.ru"},
+        headers=lead,
+    ).json()
+    # аналитик без документов не мешает: оценки вешаются на документ — создадим его
+    with SessionLocal() as db:
+        doc_row = ConfluenceDocument(
+            analyst_id=doc["id"],
+            confluence_page_id=str(now_utc().timestamp()).replace(".", ""),
+            title="Документ под оценку",
+            url="https://conf.test/r",
+            content_html="<h1>Введение</h1>",
+        )
+        db.add(doc_row)
+        db.commit()
+        document_id = doc_row.id
+
+    view = auth_client.get(f"/api/documents/{document_id}/ratings", headers=lead).json()
+    assert [c["name"] for c in view["criteria"]] == ["Мой критерий лида"]
+
+    rated = auth_client.put(
+        f"/api/documents/{document_id}/ratings",
+        json={"ratings": [{"criterion_id": mine["id"], "score": 7}]},
+        headers=lead,
+    ).json()
+    # регрессия: PUT раньше возвращал все активные критерии справочника
+    assert [c["name"] for c in rated["criteria"]] == ["Мой критерий лида"]
+    assert rated["criteria"][0]["score"] == 7
