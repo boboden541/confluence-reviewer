@@ -4,17 +4,12 @@ import { api, ApiError, type Reminder } from "./api";
 import { useReminders } from "./remindersContext";
 
 /** Панель напоминаний: открытые группами «просрочено / сегодня / дальше»
- *  (по локальной дате пользователя), выполненные — свёрнутым блоком.
+ *  (группу считает сервер по моменту «вернуться» в UTC — часовые пояса
+ *  пользователя не влияют), выполненные — свёрнутым блоком.
  *  analystId ограничивает список одним аналитиком (блок в профиле);
  *  showDoneToggle включает свёрнутый блок выполненных (главная). */
 
 type Group = "overdue" | "today" | "later";
-
-function dayStamp(value: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value.endsWith("Z") || value.includes("+") ? value : `${value}Z`);
-  return Number.isNaN(date.getTime()) ? null : date.toDateString();
-}
 
 export default function RemindersPanel({
   analystId,
@@ -77,16 +72,12 @@ export default function RemindersPanel({
     }
   };
 
-  const todayStamp = new Date().toDateString();
   const openItems = (items ?? []).filter((r) => r.status === "open");
   const done = (items ?? []).filter((r) => r.status === "done");
   const groups: Record<Group, Reminder[]> = { overdue: [], today: [], later: [] };
   for (const reminder of openItems) {
-    const stamp = dayStamp(reminder.remind_at);
-    if (stamp === null) groups.later.push(reminder);
-    else if (stamp < todayStamp) groups.overdue.push(reminder);
-    else if (stamp === todayStamp) groups.today.push(reminder);
-    else groups.later.push(reminder);
+    // группу присылает сервер (moment-based, UTC) — см. Reminder.group
+    groups[reminder.group === "done" ? "later" : reminder.group].push(reminder);
   }
 
   const renderOne = (reminder: Reminder, done: boolean) => (
@@ -118,7 +109,15 @@ export default function RemindersPanel({
           </button>
         </>
       ) : (
-        reminder.remind_at && <span className="rem-date">{dayStamp(reminder.remind_at) === todayStamp ? "сегодня" : new Date(reminder.remind_at).toLocaleDateString("ru-RU")}</span>
+        reminder.remind_at && (
+          <span className={`rem-date${reminder.group === "overdue" ? " overdue" : ""}`}>
+            {new Date(
+              reminder.remind_at.endsWith("Z") || reminder.remind_at.includes("+")
+                ? reminder.remind_at
+                : `${reminder.remind_at}Z`,
+            ).toLocaleDateString("ru-RU")}
+          </span>
+        )
       )}
     </div>
   );

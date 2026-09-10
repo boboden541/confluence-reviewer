@@ -41,6 +41,7 @@ function reminder(over: Partial<Reminder>): Reminder {
     done_at: null,
     created_at: "2026-09-01T00:00:00",
     status: "open",
+    group: "later",
     ...over,
   };
 }

@@ -573,6 +573,8 @@ export interface Reminder {
   done_at: string | null;
   created_at: string;
   status: "open" | "done";
+  /** Группа очереди по моменту «вернуться» (считает сервер в UTC) */
+  group: "overdue" | "today" | "later" | "done";
 }
 
 export interface ReminderInput {
