@@ -32,6 +32,10 @@ from app.schemas.dashboard import (
     DashboardSection,
     FeedItem,
 )
+from app.schemas.reminders import (
+    ReminderCreate,
+    ReminderOut,
+)
 from app.schemas.documents import (
     DocumentListItem,
     DocumentOut,

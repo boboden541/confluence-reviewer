@@ -17,6 +17,7 @@ import {
 import { clusterColor, clusterColorBg } from "../orgUi";
 import { listRecent, RecentEntry, RecentKind } from "../recent";
 import { on } from "../events";
+import RemindersPanel from "../RemindersPanel";
 import type { Me } from "../auth";
 import { useUser } from "../userContext";
 
@@ -430,6 +431,8 @@ export default function HomePage() {
               </div>
             </div>
           )}
+          <RemindersPanel showDoneToggle />
+
           <div className="panel">
             <div className="panel-head"><h2>⏳ Сейчас происходит</h2></div>
             <div className="now-row">

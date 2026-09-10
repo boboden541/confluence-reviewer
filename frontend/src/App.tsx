@@ -19,6 +19,9 @@ import TeamPage from "./pages/TeamPage";
 import AnalystsPage from "./pages/AnalystsPage";
 import AnalystProfilePage from "./pages/AnalystProfilePage";
 import HomePage from "./pages/HomePage";
+import ReminderModal from "./ReminderModal";
+import type { ReminderPrefill } from "./remindersContext";
+import { RemindersContext } from "./remindersContext";
 import RequestsPage from "./pages/RequestsPage";
 import RolesPage from "./pages/RolesPage";
 import AnalystStatsPage from "./pages/AnalystStatsPage";
@@ -853,6 +856,11 @@ export function Sidebar({
 
 export default function App() {
   const [authed, setAuthed] = useState(hasCredentials());
+  // создание напоминания: глобальный FAB и предзаполнение с контекстных экранов
+  const [reminderModal, setReminderModal] = useState<ReminderPrefill | null>(null);
+  const openReminder = useCallback((prefill?: ReminderPrefill) => {
+    setReminderModal(prefill ?? {});
+  }, []);
   const [me, setMeState] = useState<Me | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
@@ -898,6 +906,7 @@ export default function App() {
   }
 
   return (
+    <RemindersContext.Provider value={{ open: openReminder }}>
     <UserContext.Provider value={me}>
       <header className="topbar">
         <button
@@ -964,6 +973,23 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      {reminderModal !== null && (
+        <ReminderModal
+          prefill={reminderModal}
+          onCreated={() => window.dispatchEvent(new Event("reminders-changed"))}
+          onClose={() => setReminderModal(null)}
+        />
+      )}
+      <button
+        type="button"
+        className="reminders-fab"
+        title="Создать напоминание"
+        aria-label="Создать напоминание"
+        onClick={() => openReminder()}
+      >
+        ⏰
+      </button>
     </UserContext.Provider>
+    </RemindersContext.Provider>
   );
 }

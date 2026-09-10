@@ -337,3 +337,31 @@ def test_role_crud_and_guards(auth_client, monkeypatch):
         == 200
     )
     assert auth_client.delete(f"/api/roles/{viewer_id}", headers=god).status_code == 204
+
+
+def test_reminders_are_personal(auth_client, monkeypatch):
+    """Напоминание лида не видно God-у в списке, а прямая операция — 404:
+    напоминалки строго личные."""
+    lead = _approved_lead_session(auth_client, monkeypatch)
+    god = _god(auth_client)
+
+    # лид создаёт напоминание по аналитику
+    analyst = auth_client.post(
+        "/api/analysts",
+        json={"full_name": "Аналитик для напоминания", "email": "rem-user@company.ru"},
+        headers=lead,
+    ).json()
+    created = auth_client.post(
+        "/api/reminders",
+        json={"analyst_id": analyst["id"], "text": "лидское напоминание", "remind_at": None},
+        headers=lead,
+    ).json()
+
+    # God в списке видит только свои (пусто), лид — своё
+    assert [r["id"] for r in auth_client.get("/api/reminders", headers=god).json()] == []
+    mine = auth_client.get("/api/reminders", headers=lead).json()
+    assert [r["id"] for r in mine] == [created["id"]]
+
+    # прямая операция God-а над чужим — 404 (не раскрываем существование)
+    assert auth_client.post(f"/api/reminders/{created['id']}/done", headers=god).status_code == 404
+    assert auth_client.delete(f"/api/reminders/{created['id']}", headers=god).status_code == 404

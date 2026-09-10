@@ -110,6 +110,7 @@ def create_app(settings=None) -> FastAPI:
     from app.api.events import router as events_router
     from app.api.health import router as health_router
     from app.api.org import clusters_router, teams_router
+    from app.api.reminders import router as reminders_router
     from app.api.sync import router as sync_router
     from app.api.templates import multi_router as templates_multi_router
     from app.api.templates import router as templates_router
@@ -125,6 +126,7 @@ def create_app(settings=None) -> FastAPI:
     app.include_router(documents_router)
     app.include_router(events_router)
     app.include_router(sync_router)
+    app.include_router(reminders_router)
     app.include_router(dashboard_router)
     app.include_router(templates_router)
     app.include_router(templates_multi_router)
