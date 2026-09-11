@@ -223,11 +223,16 @@ def test_sync_lifecycle_streamed(live_server, monkeypatch):
     with httpx.stream("GET", f"{live_server}/api/events", timeout=10) as resp:
         assert httpx.post(f"{live_server}/api/analysts/{analyst_id}/sync").status_code == 202
 
-        events = read_events(resp, 4)
-        assert [e["type"] for e in events] == ["sync", "bulk", "sync", "sync"]
+        events = read_events(resp, 5)
+        assert [e["type"] for e in events] == ["sync", "bulk", "sync", "sync", "sync"]
+        # старт; указатель «кто синхронизируется»; финал с итогами
         assert events[2]["running"] is True
-        assert events[3]["running"] is False
-        assert events[3]["last_results"] == [
+        assert events[3]["running"] is True
+        assert events[3]["current"]["analyst_id"] == analyst_id
+        assert events[3]["current"]["analyst_name"] == "Синк"
+        assert events[4]["running"] is False
+        assert events[4]["current"] is None
+        assert events[4]["last_results"] == [
             {"analyst_id": analyst_id, "analyst_name": "Синк",
              "created": 3, "updated": 2, "error": None}
         ]

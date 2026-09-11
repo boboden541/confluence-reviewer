@@ -15,7 +15,7 @@ from typing import Any
 
 from app import repository
 from app.database import SessionLocal
-from app.models import TriggerType
+from app.models import Analyst, TriggerType
 from app.usecase.sync import SyncResult, sync_all, sync_analyst
 from app.usecase.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
@@ -138,6 +138,17 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
             _publish_event("sync", sync_status())
 
         try:
+            if analyst_id is not None:
+                # одиночная синхронизация: указать сущность сразу, до запросов
+                with SessionLocal() as db:
+                    analyst = db.get(Analyst, analyst_id)
+                _sync_state["current"] = {
+                    "analyst_id": analyst_id,
+                    "analyst_name": analyst.full_name if analyst else "?",
+                    "index": 1,
+                    "total": 1,
+                }
+                _publish_event("sync", sync_status())
             results = await _execute_sync(analyst_id, on_analyst)
             _sync_state["last_results"] = [
                 {
