@@ -1279,13 +1279,14 @@ describe("DocumentsPage", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(screen.getByText("без изменений")).toBeInTheDocument();
 
-      // финал: список перечитан, лозенг ещё живёт
+      // финал: список перечитан, лозенг ещё живёт, итог прогона — строкой
       emitServerEvent("bulk", {
         type: "bulk", running: false, analyst_id: 5, total: 1, done: 1,
         started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:00:01", error: null,
       });
       await vi.advanceTimersByTimeAsync(0);
       expect(screen.getByText("без изменений")).toBeInTheDocument();
+      expect(screen.getByText("Проверка завершена: без изменений 1").closest(".alert")).toHaveClass("ok");
 
       await vi.advanceTimersByTimeAsync(4000);
       expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
@@ -1399,10 +1400,26 @@ describe("DocumentsPage", () => {
     expect(screen.getByText("проверяется")).toBeInTheDocument(); // теперь второй
     expect(screen.queryByText("в очереди")).not.toBeInTheDocument();
 
-    // список был перечитан при запуске только один раз — события живут без перезагрузки
-    const initialLoads = fetchMock.mock.calls.filter(([url]) =>
+    // финал прогона: смешанный итог — строкой
+    emitServerEvent("validation", { type: "validation", document_id: 12, status: "running" });
+    emitServerEvent("validation", { type: "validation", document_id: 12, status: "done", report_id: 10 });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 2,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+      // второй документ не менялся — отчёт из кэша, прогон его не перепроверял
+      last_document: { document_id: 12, status: "failed", unchanged: true },
+    });
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: 5, total: 2, done: 2,
+      started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:01:00", error: null,
+    });
+    expect(await screen.findByText("Проверка завершена: проверено 1, без изменений 1")).toBeInTheDocument();
+
+    // события живут без перезагрузки: список перечитан лишь один раз — по финалу
+    const documentLoads = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes("/api/analysts/5/documents"),
     ).length;
-    expect(initialLoads).toBe(1);
+    expect(documentLoads).toBe(2);
   });
 });

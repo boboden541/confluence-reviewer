@@ -101,6 +101,8 @@ export default function DocumentsPage() {
   // после его финала: для мгновенных идемпотентных проверок это единственная
   // видимая индикация, но вечно висеть на строках они не должны
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // зеркало bulkResults для обработчика событий: замыкание эффекта устарело бы
+  const bulkResultsRef = useRef<Record<number, { status: ValidationStatus | null; unchanged: boolean }>>({});
   useEffect(() => () => {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
   }, []);
@@ -293,20 +295,40 @@ export default function DocumentsPage() {
       setRunningDocId(e.running && cd ? cd.document_id : null);
       const ld = e.last_document ?? null;
       if (ld) {
-        setBulkResults((prev) => ({
-          ...prev,
+        const next = {
+          ...bulkResultsRef.current,
           [ld.document_id]: { status: ld.status, unchanged: ld.unchanged },
-        }));
+        };
+        bulkResultsRef.current = next;
+        setBulkResults(next);
       }
       if (e.running) {
         // застали прогон с начала — итоги прошлого неактуальны
-        if (e.done === 0) setBulkResults({});
+        if (e.done === 0) {
+          bulkResultsRef.current = {};
+          setBulkResults({});
+          setInfo(""); // прошлый итог не соседствует с новым прогоном
+        }
         sawBulkRunRef.current = true;
         return;
       }
       if (sawBulkRunRef.current) {
         sawBulkRunRef.current = false;
         void load(1, false);
+        // итог прогона — устойчивой строкой: мгновенный идемпотентный прогон
+        // (документы не менялись — отчёты из кэша) не оставляет анимации
+        const results = Object.values(bulkResultsRef.current);
+        if (results.length) {
+          const unchanged = results.filter((r) => r.unchanged).length;
+          const failed = results.filter((r) => !r.unchanged && r.status === "error").length;
+          const checked = results.length - unchanged - failed;
+          const parts = [
+            ...(checked ? [`проверено ${checked}`] : []),
+            ...(unchanged ? [`без изменений ${unchanged}`] : []),
+            ...(failed ? [`с ошибкой ${failed}`] : []),
+          ];
+          setInfo(`Проверка завершена: ${parts.join(", ")}`);
+        }
         if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
         badgeTimerRef.current = setTimeout(() => {
           setBulkQueue(null);
