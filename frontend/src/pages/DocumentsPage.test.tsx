@@ -1354,8 +1354,16 @@ describe("DocumentsPage", () => {
       within(dialog).getByRole("button", { name: /Запустить проверку — 2 док\./ }),
     );
 
-    // шаг 3: сразу после запуска оба выбранных помечены «в очереди»
-    expect(await screen.findAllByText("в очереди")).toHaveLength(2);
+    // шаг 3: сразу после запуска оба выбранных помечены «в очереди» —
+    // единственный статус строки: статус прошлой проверки скрыт
+    const queuedLozenges = await screen.findAllByText("в очереди");
+    expect(queuedLozenges).toHaveLength(2);
+    expect(screen.queryByText("не пройдено")).not.toBeInTheDocument();
+    expect(screen.queryByText("не проверено")).not.toBeInTheDocument();
+    // строки набора отличаются от общей массы: подсветка и у активной, и у ждущих
+    for (const lozenge of queuedLozenges) {
+      expect(lozenge.closest("tr")).toHaveClass("queued");
+    }
 
     // шаг 4: первый пошел в проверку — канонический лозенг, подсветка строки,
     // второй остаётся в очереди

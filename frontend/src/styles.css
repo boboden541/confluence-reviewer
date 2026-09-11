@@ -4194,3 +4194,22 @@ tr.processing td {
 tr.processing:hover td {
   background: #ddebff;
 }
+/* проверяемая строка: полоса у левого края и полужирное название —
+   она заметно выходит из общей массы списка */
+tr.processing td:first-child {
+  box-shadow: inset 3px 0 0 var(--blue, #0c66e4);
+}
+tr.processing .doc-link {
+  font-weight: 600;
+}
+/* ожидающие своего хода документы прогона: та же гамма, но тише активной
+   строки — весь набор запущенных документов читается одним взглядом */
+tr.queued td {
+  background: #f5f9ff;
+}
+tr.queued:hover td {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}
+tr.queued td:first-child {
+  box-shadow: inset 3px 0 0 #a7c5f8;
+}

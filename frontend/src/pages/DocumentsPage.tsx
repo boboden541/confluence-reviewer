@@ -645,10 +645,21 @@ export default function DocumentsPage() {
           </tr>
         </thead>
         <tbody>
-          {items.map((doc) => (
+          {items.map((doc) => {
+            // состояние строки в текущем прогоне: итог > проверяется > в очереди
+            const runState = bulkResults[doc.id]
+              ? "done"
+              : runningDocId === doc.id
+                ? "processing"
+                : bulkQueue?.includes(doc.id)
+                  ? "queued"
+                  : null;
+            return (
             <tr
               key={doc.id}
-              className={runningDocId === doc.id && !bulkResults[doc.id] ? "processing" : undefined}
+              className={
+                runState === "processing" ? "processing" : runState === "queued" ? "queued" : undefined
+              }
             >
               <td className="cb-cell">
                 <input
@@ -676,24 +687,23 @@ export default function DocumentsPage() {
                 )}
               </td>
               <td>
-                {runningDocId === doc.id && !bulkResults[doc.id] ? (
-                  // проверяемый прямо сейчас — канонический статус прогона;
-                  // как только по документу есть итог, он приоритетнее указателя
+                {runState === "processing" ? (
+                  // проверяемый прямо сейчас — канонический статус прогона
                   <StatusBadge status="in_progress" />
-                ) : (
-                  <>
-                    {/* свой ход документ уже прошёл: статус обновляется
-                        сразу из bulk-события, не дожидаясь перезагрузки списка */}
+                ) : runState === "queued" ? (
+                  // ожидает своего хода — вместо статуса прошлой проверки
+                  <span className="lozenge default">в очереди</span>
+                ) : runState === "done" ? (
+                  // свой ход прошёл: один итог — свежий статус из bulk-события
+                  bulkResults[doc.id].unchanged ? (
+                    <span className="lozenge default">без изменений</span>
+                  ) : (
                     <StatusBadge
-                      status={bulkResults[doc.id]?.status ?? doc.validation_status}
+                      status={bulkResults[doc.id].status ?? doc.validation_status}
                     />
-                    {bulkQueue?.includes(doc.id) && !bulkResults[doc.id] && (
-                      <span className="lozenge default" style={{ marginLeft: 6 }}>в очереди</span>
-                    )}
-                    {bulkResults[doc.id]?.unchanged && (
-                      <span className="lozenge default" style={{ marginLeft: 6 }}>без изменений</span>
-                    )}
-                  </>
+                  )
+                ) : (
+                  <StatusBadge status={doc.validation_status} />
                 )}
               </td>
               <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
@@ -705,8 +715,7 @@ export default function DocumentsPage() {
                 {doc.has_note ? "📝" : "—"}
               </td>
               <td className="actions-cell">
-                {doc.validation_status === "in_progress" ||
-                (runningDocId === doc.id && !bulkResults[doc.id]) ? (
+                {runState === "processing" || doc.validation_status === "in_progress" ? (
                   <span className="spinner" title="Проверяется…" />
                 ) : (
                   <button
@@ -726,7 +735,8 @@ export default function DocumentsPage() {
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
           {!loading && loaded && items.length === 0 && (
             <tr>
               <td colSpan={8} className="table-empty">
