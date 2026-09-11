@@ -33,6 +33,7 @@ import TemplatePage from "./pages/TemplatePage";
 import TemplatesPage from "./pages/TemplatesPage";
 import GlobalSearch from "./GlobalSearch";
 import { on, startEvents, stopEvents } from "./events";
+import { bindTaskState } from "./taskState";
 import { fetchMe, loginWithToken, logout as authLogout, reapply, type Me } from "./auth";
 import { UserContext, useCan, useMe } from "./userContext";
 
@@ -890,7 +891,10 @@ export default function App() {
   // SSE-стрим событий фоновых задач: итог проверок и синхронизаций
   // приходит на открытые страницы сам. Живёт, пока пользователь в сервисе.
   useEffect(() => {
-    if (authed) startEvents();
+    if (authed) {
+      startEvents();
+      bindTaskState();
+    }
     else stopEvents();
   }, [authed]);
 

@@ -78,6 +78,9 @@ export default function DocumentsPage() {
   // чистит error, и сообщение о сбое синхронизации жило бы ровно один
   // запрос перезагрузки списка.
   const [syncing, setSyncing] = useState(false);
+  // текущий проверяемый документ и прогресс bulk (для спиннера на строке)
+  const [runningDocId, setRunningDocId] = useState<number | null>(null);
+  const [bulkCurrent, setBulkCurrent] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
   const [info, setInfo] = useState("");
   const [syncError, setSyncError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -272,6 +275,7 @@ export default function DocumentsPage() {
   useEffect(() => {
     const offBulk = on("bulk", (e) => {
       setBulk(e.running ? e : null);
+      setBulkCurrent({ running: e.running, done: e.done, total: e.total });
       if (e.running) {
         sawBulkRunRef.current = true;
         return;
@@ -280,6 +284,10 @@ export default function DocumentsPage() {
         sawBulkRunRef.current = false;
         void load(1, false);
       }
+    });
+    // какой документ проверяется прямо сейчас — спиннер на его строке
+    const offValidation = on("validation", (e) => {
+      setRunningDocId(e.status === "running" ? e.document_id : null);
     });
     const offSync = on("sync", (e) => {
       if (e.running) {
@@ -305,6 +313,7 @@ export default function DocumentsPage() {
     });
     return () => {
       offBulk();
+      offValidation();
       offSync();
     };
   }, [load, loadAnalyst, analystId]);
@@ -631,6 +640,15 @@ export default function DocumentsPage() {
               </td>
               <td>
                 <StatusBadge status={doc.validation_status} />
+                {bulkCurrent.running &&
+                 doc.validation_status !== "in_progress" &&
+                 runningDocId !== doc.id &&
+                 selected.has(doc.id) && (
+                  <span className="lozenge default" style={{ marginLeft: 6 }}>в очереди</span>
+                )}
+                {runningDocId === doc.id && (
+                  <span className="spinner" style={{ marginLeft: 6 }} title="Проверяется…" />
+                )}
               </td>
               <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
               <td className="cell-subtle">{formatDate(doc.last_modified_in_confluence_at)}</td>
@@ -641,21 +659,24 @@ export default function DocumentsPage() {
                 {doc.has_note ? "📝" : "—"}
               </td>
               <td className="actions-cell">
-                <button
-                  className="btn small subtle"
-                  disabled={bulk?.running || doc.validation_status === "in_progress"}
-                  onClick={() => openSingleDialog(doc)}
-                >
-                  {doc.validation_status === "not_checked" ? (
-                    <>
-                      <span aria-hidden="true">▶</span> Проверить
-                    </>
-                  ) : (
-                    <>
-                      <span aria-hidden="true">⟳</span> Актуализировать
-                    </>
-                  )}
-                </button>
+                {doc.validation_status === "in_progress" || runningDocId === doc.id ? (
+                  <span className="spinner" title="Проверяется…" />
+                ) : (
+                  <button
+                    className="btn small subtle"
+                    onClick={() => openSingleDialog(doc)}
+                  >
+                    {doc.validation_status === "not_checked" ? (
+                      <>
+                        <span aria-hidden="true">▶</span> Проверить
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden="true">⟳</span> Актуализировать
+                      </>
+                    )}
+                  </button>
+                )}
               </td>
             </tr>
           ))}
