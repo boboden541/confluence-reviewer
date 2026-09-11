@@ -10,6 +10,8 @@ import logging
 from dataclasses import dataclass, field
 
 from app import repository
+from collections.abc import Awaitable, Callable
+
 from app.config import get_settings
 from app.clients.confluence import ConfluenceClient, ConfluenceError, PageSummary, creator_candidates
 from app.database import SessionLocal
@@ -129,11 +131,21 @@ async def sync_analyst(analyst_id: int) -> SyncResult:
     return result
 
 
-async def sync_all() -> list[SyncResult]:
-    """Синхронизация всех аналитиков (ФТ-CR-5)."""
+async def sync_all(
+    on_analyst: "Callable[[int, str, int, int], Awaitable[None]] | None" = None,
+) -> list[SyncResult]:
+    """Синхронизация всех аналитиков (ФТ-CR-5).
+
+    on_analyst(analyst_id, analyst_name, index, total) — колбэк прогресса:
+    вызывается перед каждым аналитиком, чтобы UI показал, кто обрабатывается.
+    """
     with SessionLocal() as db:
         ids = repository.analysts.list_ids(db)
+        names = {a.id: a.full_name for a in db.query(Analyst).filter(Analyst.id.in_(ids)).all()}
+    total = len(ids)
     results: list[SyncResult] = []
-    for analyst_id in ids:
+    for index, analyst_id in enumerate(ids, start=1):
+        if on_analyst is not None:
+            await on_analyst(analyst_id, names.get(analyst_id, "?"), index, total)
         results.append(await sync_analyst(analyst_id))
     return results

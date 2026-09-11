@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app import repository
@@ -105,11 +106,14 @@ def _publish_event(event_type: str, payload: dict[str, Any]) -> None:
         queue.put_nowait(dict(event))
 
 
-async def _execute_sync(analyst_id: int | None) -> list[SyncResult]:
+async def _execute_sync(
+    analyst_id: int | None,
+    on_analyst: "Callable[[int, str, int, int], Awaitable[None]] | None" = None,
+) -> list[SyncResult]:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     if analyst_id is not None:
         return [await sync_analyst(analyst_id)]
-    return await sync_all()
+    return await sync_all(on_analyst=on_analyst)
 
 
 def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
@@ -122,8 +126,19 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
             running=True, started_at=now_utc().isoformat(), finished_at=None, error=None
         )
         _publish_event("sync", sync_status())
+
+        async def on_analyst(analyst_id: int, analyst_name: str, index: int, total: int) -> None:
+            # кто обрабатывается прямо сейчас — для спиннеров на сущностях
+            _sync_state["current"] = {
+                "analyst_id": analyst_id,
+                "analyst_name": analyst_name,
+                "index": index,
+                "total": total,
+            }
+            _publish_event("sync", sync_status())
+
         try:
-            results = await _execute_sync(analyst_id)
+            results = await _execute_sync(analyst_id, on_analyst)
             _sync_state["last_results"] = [
                 {
                     "analyst_id": r.analyst_id,
@@ -140,6 +155,7 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
             logger.exception("Фоновая синхронизация упала")
             _sync_state["error"] = str(exc)
         finally:
+            _sync_state["current"] = None
             _sync_state.update(running=False, finished_at=now_utc().isoformat())
             _publish_event("sync", sync_status())
 

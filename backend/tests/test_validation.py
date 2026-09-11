@@ -264,7 +264,7 @@ def test_sync_does_not_trigger_validation(client, monkeypatch):
     monkeypatch.setattr(tasks, "start_validation", unexpected)
     monkeypatch.setattr(tasks, "start_bulk_validation", unexpected)
 
-    async def fake_execute(analyst_id):
+    async def fake_execute(analyst_id, on_analyst=None):
         return [tasks.SyncResult(analyst_id=1, analyst_name="A", created=3, updated=2)]
 
     monkeypatch.setattr(tasks, "_execute_sync", fake_execute)

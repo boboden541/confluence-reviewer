@@ -211,7 +211,7 @@ def test_sync_lifecycle_streamed(live_server, monkeypatch):
         db.commit()
         analyst_id = db.query(Analyst).first().id
 
-    async def fake_execute(analyst_id_arg):
+    async def fake_execute(analyst_id_arg, on_analyst=None):
         return [
             tasks.SyncResult(
                 analyst_id=analyst_id_arg, analyst_name="Синк", created=3, updated=2
