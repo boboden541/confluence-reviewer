@@ -447,8 +447,10 @@ export default function DocumentsPage() {
   };
 
   // Проверка выбранных документов: сначала диалог настроек (шаблон + промт ИИ).
+  // Запуск требует повторной проверки — кэш идемпотентности не отменяет
+  // явное требование пользователя (force, как у «Актуализировать»)
   const openBulkDialog = () => {
-    setDialogForce(false);
+    setDialogForce(true);
     setDialogOpen(true);
   };
 

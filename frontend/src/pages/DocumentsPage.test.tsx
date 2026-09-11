@@ -1018,7 +1018,8 @@ describe("DocumentsPage", () => {
       expect(call).toBeDefined();
       const body = JSON.parse(String(call?.[1]?.body));
       expect(body.document_ids).toEqual([11, 12]);
-      expect(body.force).toBe(false);
+      // явный запуск — всегда повторная проверка, кэш не отменяет требование
+      expect(body.force).toBe(true);
       expect(body.ai_prompt).toBeNull(); // промт не меняли — идём со стандартным
     });
   });
