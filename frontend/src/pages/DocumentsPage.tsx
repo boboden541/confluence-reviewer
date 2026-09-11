@@ -14,6 +14,7 @@ import {
   type BulkValidationStatus,
   type DocumentListItem,
   type DocumentPage,
+  type ValidationStatus,
 } from "../api";
 import StatusBadge from "../StatusBadge";
 import DocumentReport from "../DocumentReport";
@@ -84,7 +85,7 @@ export default function DocumentsPage() {
   const [, setBulkCurrent] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
   // очередь запущенного прогона и итоги по документам (из bulk-событий)
   const [bulkQueue, setBulkQueue] = useState<number[] | null>(null);
-  const [bulkResults, setBulkResults] = useState<Record<number, { status: string; unchanged: boolean }>>({});
+  const [bulkResults, setBulkResults] = useState<Record<number, { status: ValidationStatus | null; unchanged: boolean }>>({});
   const [info, setInfo] = useState("");
   const [syncError, setSyncError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -294,7 +295,7 @@ export default function DocumentsPage() {
       if (ld) {
         setBulkResults((prev) => ({
           ...prev,
-          [ld.document_id]: { status: ld.status ?? "", unchanged: ld.unchanged },
+          [ld.document_id]: { status: ld.status, unchanged: ld.unchanged },
         }));
       }
       if (e.running) {
@@ -441,6 +442,9 @@ export default function DocumentsPage() {
   // выделение больше не нужно
   const handleLaunched = () => {
     setDialogOpen(false);
+    // таймер прошлого прогона не должен погасить лозенги только что
+    // запущенного (перезапуск сразу после финала предыдущего)
+    if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
     // очередь прогона — для статусов «в очереди/проверяется» на строках
     setBulkQueue([...selected]);
     setSelected(new Set());
@@ -642,7 +646,10 @@ export default function DocumentsPage() {
         </thead>
         <tbody>
           {items.map((doc) => (
-            <tr key={doc.id}>
+            <tr
+              key={doc.id}
+              className={runningDocId === doc.id && !bulkResults[doc.id] ? "processing" : undefined}
+            >
               <td className="cb-cell">
                 <input
                   type="checkbox"
@@ -669,17 +676,24 @@ export default function DocumentsPage() {
                 )}
               </td>
               <td>
-                <StatusBadge status={doc.validation_status} />
-                {bulkQueue?.includes(doc.id) &&
-                 runningDocId !== doc.id &&
-                 !bulkResults[doc.id] && (
-                  <span className="lozenge default" style={{ marginLeft: 6 }}>в очереди</span>
-                )}
-                {runningDocId === doc.id && (
-                  <span className="spinner" style={{ marginLeft: 6 }} title="Проверяется…" />
-                )}
-                {bulkResults[doc.id]?.unchanged && (
-                  <span className="lozenge default" style={{ marginLeft: 6 }}>без изменений</span>
+                {runningDocId === doc.id && !bulkResults[doc.id] ? (
+                  // проверяемый прямо сейчас — канонический статус прогона;
+                  // как только по документу есть итог, он приоритетнее указателя
+                  <StatusBadge status="in_progress" />
+                ) : (
+                  <>
+                    {/* свой ход документ уже прошёл: статус обновляется
+                        сразу из bulk-события, не дожидаясь перезагрузки списка */}
+                    <StatusBadge
+                      status={bulkResults[doc.id]?.status ?? doc.validation_status}
+                    />
+                    {bulkQueue?.includes(doc.id) && !bulkResults[doc.id] && (
+                      <span className="lozenge default" style={{ marginLeft: 6 }}>в очереди</span>
+                    )}
+                    {bulkResults[doc.id]?.unchanged && (
+                      <span className="lozenge default" style={{ marginLeft: 6 }}>без изменений</span>
+                    )}
+                  </>
                 )}
               </td>
               <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
@@ -691,7 +705,8 @@ export default function DocumentsPage() {
                 {doc.has_note ? "📝" : "—"}
               </td>
               <td className="actions-cell">
-                {doc.validation_status === "in_progress" || runningDocId === doc.id ? (
+                {doc.validation_status === "in_progress" ||
+                (runningDocId === doc.id && !bulkResults[doc.id]) ? (
                   <span className="spinner" title="Проверяется…" />
                 ) : (
                   <button

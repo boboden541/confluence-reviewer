@@ -1256,14 +1256,15 @@ describe("DocumentsPage", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(screen.getByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
 
-      // текущий документ прогона — спиннер на его строке
+      // текущий документ прогона — канонический лозенг и подсветка строки
       emitServerEvent("bulk", {
         type: "bulk", running: true, analyst_id: 5, total: 1, done: 0,
         started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
         current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
       });
       await vi.advanceTimersByTimeAsync(0); // дать React перерисоваться
-      expect(screen.getAllByTitle("Проверяется…").length).toBeGreaterThan(0);
+      expect(screen.getByText("проверяется")).toBeInTheDocument();
+      expect(screen.getByText("проверяется").closest("tr")).toHaveClass("processing");
 
       emitServerEvent("validation", { type: "validation", document_id: 12, status: "running" });
       emitServerEvent("validation", {
@@ -1323,5 +1324,77 @@ describe("DocumentsPage", () => {
     await waitFor(() => {
       expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
     });
+  });
+
+  it("запущенный прогон виден в списке: «в очереди» → «проверяется» → свежий статус", async () => {
+    const fetchMock = mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+        "/api/validation-config": VALIDATION_CONFIG,
+        "/api/sync/bulk-validation": BULK_IDLE,
+      },
+      ["/api/documents/validate-batch"],
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // шаги 1–2: выбрали два документа и запустили массовую проверку
+    fireEvent.click(await screen.findByLabelText("Выбрать документ: [СТ] GDS-15 Загрузка кино"));
+    fireEvent.click(screen.getByLabelText("Выбрать документ: [СТ] Вторая доработка"));
+    fireEvent.click(screen.getByRole("button", { name: /Проверить выбранные \(2\)/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Запустить проверку — 2 док\./ }),
+    );
+
+    // шаг 3: сразу после запуска оба выбранных помечены «в очереди»
+    expect(await screen.findAllByText("в очереди")).toHaveLength(2);
+
+    // шаг 4: первый пошел в проверку — канонический лозенг, подсветка строки,
+    // второй остаётся в очереди
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 0,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 11, title: "[СТ] GDS-15 Загрузка кино" },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("проверяется")).toBeInTheDocument();
+    });
+    expect(screen.getByText("проверяется").closest("tr")).toHaveClass("processing");
+    expect(screen.getByText("в очереди")).toBeInTheDocument();
+
+    // первый прошёл: указатель ушёл на второй, статус первого обновился
+    // сразу из bulk-события («пройдено»), не дожидаясь перезагрузки списка
+    emitServerEvent("validation", { type: "validation", document_id: 11, status: "running" });
+    emitServerEvent("validation", { type: "validation", document_id: 11, status: "done", report_id: 9 });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 11, title: "[СТ] GDS-15 Загрузка кино" },
+      last_document: { document_id: 11, status: "passed", unchanged: false },
+    });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("пройдено")).toBeInTheDocument();
+    });
+    expect(screen.getByText("проверяется")).toBeInTheDocument(); // теперь второй
+    expect(screen.queryByText("в очереди")).not.toBeInTheDocument();
+
+    // список был перечитан при запуске только один раз — события живут без перезагрузки
+    const initialLoads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/api/analysts/5/documents"),
+    ).length;
+    expect(initialLoads).toBe(1);
   });
 });

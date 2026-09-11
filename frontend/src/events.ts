@@ -5,7 +5,13 @@
 // Подключение — fetch-стримом, а не EventSource: тому нельзя задать
 // Authorization-заголовок, а basic-учётка SPA живёт в localStorage.
 
-import { authHeaders, UNAUTHORIZED_EVENT, type BulkValidationStatus, type SyncStatus } from "./api";
+import {
+  authHeaders,
+  UNAUTHORIZED_EVENT,
+  type BulkValidationStatus,
+  type SyncStatus,
+  type ValidationStatus,
+} from "./api";
 
 /** Момент публикации; у снимков подключения (синхронный статус при открытии
  *  стрима) at нет — страницы отличают по нему настоящее событие от снимка. */
@@ -30,7 +36,7 @@ export type BulkEvent = BulkValidationStatus &
     type: "bulk";
     last_document?: {
       document_id: number;
-      status: string | null;
+      status: ValidationStatus | null;
       unchanged: boolean;
     } | null;
   };
