@@ -80,7 +80,10 @@ export default function DocumentsPage() {
   const [syncing, setSyncing] = useState(false);
   // текущий проверяемый документ и прогресс bulk (для спиннера на строке)
   const [runningDocId, setRunningDocId] = useState<number | null>(null);
-  const [bulkCurrent, setBulkCurrent] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
+  const [, setBulkCurrent] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
+  // очередь запущенного прогона и итоги по документам (из bulk-событий)
+  const [bulkQueue, setBulkQueue] = useState<number[] | null>(null);
+  const [bulkResults, setBulkResults] = useState<Record<number, { status: string; unchanged: boolean }>>({});
   const [info, setInfo] = useState("");
   const [syncError, setSyncError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -276,6 +279,16 @@ export default function DocumentsPage() {
     const offBulk = on("bulk", (e) => {
       setBulk(e.running ? e : null);
       setBulkCurrent({ running: e.running, done: e.done, total: e.total });
+      // текущий документ прогона и итог по завершённому
+      const cd = (e as { current_document?: { document_id: number } | null }).current_document ?? null;
+      setRunningDocId(e.running && cd ? cd.document_id : null);
+      const ld = (e as { last_document?: { document_id: number; status: string; unchanged?: boolean } | null }).last_document ?? null;
+      if (ld) {
+        setBulkResults((prev) => ({
+          ...prev,
+          [ld.document_id]: { status: ld.status, unchanged: Boolean(ld.unchanged) },
+        }));
+      }
       if (e.running) {
         sawBulkRunRef.current = true;
         return;
@@ -413,6 +426,8 @@ export default function DocumentsPage() {
   // выделение больше не нужно
   const handleLaunched = () => {
     setDialogOpen(false);
+    // очередь прогона — для статусов «в очереди/проверяется» на строках
+    setBulkQueue([...selected]);
     setSelected(new Set());
   };
 
@@ -640,14 +655,16 @@ export default function DocumentsPage() {
               </td>
               <td>
                 <StatusBadge status={doc.validation_status} />
-                {bulkCurrent.running &&
-                 doc.validation_status !== "in_progress" &&
+                {bulkQueue?.includes(doc.id) &&
                  runningDocId !== doc.id &&
-                 selected.has(doc.id) && (
+                 !bulkResults[doc.id] && (
                   <span className="lozenge default" style={{ marginLeft: 6 }}>в очереди</span>
                 )}
                 {runningDocId === doc.id && (
                   <span className="spinner" style={{ marginLeft: 6 }} title="Проверяется…" />
+                )}
+                {bulkResults[doc.id]?.unchanged && (
+                  <span className="lozenge default" style={{ marginLeft: 6 }}>без изменений</span>
                 )}
               </td>
               <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
