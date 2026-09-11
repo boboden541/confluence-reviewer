@@ -15,7 +15,7 @@ from typing import Any
 
 from app import repository
 from app.database import SessionLocal
-from app.models import Analyst, TriggerType
+from app.models import Analyst, ConfluenceDocument, TriggerType
 from app.usecase.sync import SyncResult, sync_all, sync_analyst
 from app.usecase.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
@@ -298,6 +298,25 @@ def bulk_status() -> dict[str, Any]:
     return dict(_bulk_state)
 
 
+def _doc_title(doc_id: int) -> str | None:
+    """Название документа для строки прогресса (короткая сессия)."""
+    with SessionLocal() as db:
+        doc = db.get(ConfluenceDocument, doc_id)
+        return doc.title if doc else None
+
+
+def _doc_snapshot(doc_id: int) -> tuple[str | None, Any]:
+    """Статус и момент последней валидации документа (короткая сессия)."""
+    with SessionLocal() as db:
+        doc = db.get(ConfluenceDocument, doc_id)
+        if doc is None:
+            return None, None
+        return (
+            doc.validation_status.value if doc.validation_status else None,
+            doc.last_validated_at,
+        )
+
+
 def start_bulk_validation(
     document_ids: list[int],
     analyst_id: int | None = None,
@@ -336,6 +355,11 @@ def start_bulk_validation(
         _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
         try:
             for doc_id in document_ids:
+                validated_before = await asyncio.to_thread(_doc_snapshot, doc_id)
+                # какой документ проверяется прямо сейчас (заголовок — для UI)
+                title = await asyncio.to_thread(_doc_title, doc_id)
+                _bulk_state["current_document"] = {"document_id": doc_id, "title": title}
+                _publish_event("bulk", {**bulk_status(), "current_document": _bulk_state["current_document"]})
                 _validation_state[doc_id] = {
                     "status": "running",
                     "started_at": now_utc().isoformat(),
@@ -376,7 +400,15 @@ def start_bulk_validation(
                     {"document_id": doc_id, **_validation_state[doc_id], **_actor_fields(actor_user)},
                 )
                 _bulk_state["done"] += 1
-                _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
+                status_after, validated_after = await asyncio.to_thread(_doc_snapshot, doc_id)
+                _publish_event(
+                    "bulk",
+                    {
+                        **bulk_status(),
+                        **_actor_fields(actor_user),
+                        "last_document": {"document_id": doc_id, "status": status_after, "unchanged": validated_before == validated_after},
+                    },
+                )
         finally:
             _bulk_state.update(running=False, finished_at=now_utc().isoformat())
             _publish_event("bulk", bulk_status())

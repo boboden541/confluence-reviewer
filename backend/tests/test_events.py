@@ -189,19 +189,34 @@ def test_bulk_events_for_valid_docs(live_server, monkeypatch):
             == 202
         )
         # снимки(2) + bulk старт + [валидация×2 + bulk прогресс]×2 + bulk финал
-        events = read_events(resp, 10)
+        events = read_events(resp, 12)
         assert [e["type"] for e in events] == [
             "sync", "bulk", "bulk",
-            "validation", "validation", "bulk",
-            "validation", "validation", "bulk", "bulk",
+            "bulk", "validation", "validation", "bulk",
+            "bulk", "validation", "validation", "bulk", "bulk",
         ]
         assert events[2]["running"] is True
         assert events[2]["total"] == 2
-        assert events[5]["done"] == 1
-        assert events[8]["running"] is True  # последний документ готов…
-        assert events[8]["done"] == 2
-        assert events[9]["running"] is False  # …и только затем прогон закрыт
-        assert seen == [first, second]
+        # перед каждым документом — указатель «кто проверяется сейчас»
+        assert events[3]["current_document"]["document_id"] == first
+        assert events[7]["current_document"]["document_id"] == second
+        # итог по документу: статус после прогона и признак «без изменений»
+        assert events[6]["last_document"]["document_id"] == first
+        assert events[6]["last_document"]["unchanged"] is False
+        assert events[10]["done"] == 2
+        assert events[10]["running"] is True  # ещё до финального события
+        assert events[11]["running"] is False  # финал прогонa
+        assert events[2]["running"] is True
+        assert events[2]["total"] == 2
+        # перед каждым документом — указатель «кто проверяется сейчас»
+        assert events[3]["current_document"]["document_id"] == first
+        assert events[7]["current_document"]["document_id"] == second
+        # итог по документу: статус после прогона и признак «без изменений»
+        assert events[6]["last_document"]["document_id"] == first
+        assert events[6]["last_document"]["unchanged"] is False
+        assert events[10]["done"] == 2
+        assert events[10]["running"] is True  # ещё до финального события
+        assert events[11]["running"] is False  # финал прогонa        assert seen == [first, second]
 
 
 def test_sync_lifecycle_streamed(live_server, monkeypatch):
