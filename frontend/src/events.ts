@@ -22,8 +22,18 @@ export interface ValidationEvent extends Published {
   error?: string | null;
 }
 
-/** Состояние массовой проверки (прогресс и завершение прогона). */
-export type BulkEvent = BulkValidationStatus & Published & { type: "bulk" };
+/** Состояние массовой проверки (прогресс и завершение прогона).
+ *  last_document — итог по только что пройденному документу; unchanged
+ *  означает идемпотентный прогон (документ не менялся — отчёт возвращён из кэша). */
+export type BulkEvent = BulkValidationStatus &
+  Published & {
+    type: "bulk";
+    last_document?: {
+      document_id: number;
+      status: string | null;
+      unchanged: boolean;
+    } | null;
+  };
 
 /** Запуск/завершение синхронизации (включая плановую по расписанию). */
 export type SyncEvent = SyncStatus & Published & { type: "sync" };

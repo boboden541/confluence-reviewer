@@ -24,6 +24,7 @@ import { Breadcrumbs } from "../Breadcrumbs";
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
 const SEMANTIC_DEBOUNCE_MS = 800; // не дёргаем ИИ на каждое нажатие
+const BADGE_HOLD_MS = 4000; // сколько после финала висят лозенги прогона
 
 // Ширина панели просмотра: тянется за ручку на левом краю, запоминается
 const DRAWER_DEFAULT_W = 640;
@@ -95,6 +96,13 @@ export default function DocumentsPage() {
   // идентичность), и замыкание начиналось бы заново, теряя запуск
   const sawBulkRunRef = useRef(false);
   const sawSyncRunRef = useRef(false);
+  // лозенги прогона («в очереди», «без изменений») гаснут через пару секунд
+  // после его финала: для мгновенных идемпотентных проверок это единственная
+  // видимая индикация, но вечно висеть на строках они не должны
+  const badgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+  }, []);
 
   // Выбранные для проверки документы (чекбоксы в таблице). Выделение
   // живёт до запуска проверки или смены фильтра/аналитика.
@@ -280,22 +288,29 @@ export default function DocumentsPage() {
       setBulk(e.running ? e : null);
       setBulkCurrent({ running: e.running, done: e.done, total: e.total });
       // текущий документ прогона и итог по завершённому
-      const cd = (e as { current_document?: { document_id: number } | null }).current_document ?? null;
+      const cd = e.current_document;
       setRunningDocId(e.running && cd ? cd.document_id : null);
-      const ld = (e as { last_document?: { document_id: number; status: string; unchanged?: boolean } | null }).last_document ?? null;
+      const ld = e.last_document ?? null;
       if (ld) {
         setBulkResults((prev) => ({
           ...prev,
-          [ld.document_id]: { status: ld.status, unchanged: Boolean(ld.unchanged) },
+          [ld.document_id]: { status: ld.status ?? "", unchanged: ld.unchanged },
         }));
       }
       if (e.running) {
+        // застали прогон с начала — итоги прошлого неактуальны
+        if (e.done === 0) setBulkResults({});
         sawBulkRunRef.current = true;
         return;
       }
       if (sawBulkRunRef.current) {
         sawBulkRunRef.current = false;
         void load(1, false);
+        if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+        badgeTimerRef.current = setTimeout(() => {
+          setBulkQueue(null);
+          setBulkResults({});
+        }, BADGE_HOLD_MS);
       }
     });
     // какой документ проверяется прямо сейчас — спиннер на его строке

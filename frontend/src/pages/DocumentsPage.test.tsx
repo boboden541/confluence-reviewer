@@ -1235,4 +1235,93 @@ describe("DocumentsPage", () => {
     ).length;
     expect(loads).toBe(initialLoads);
   });
+
+  it("повторный прогон: «без изменений» на строке и гашение лозенгов через паузу", async () => {
+    // идемпотентный прогон пролетает за миллисекунды — видимый след прогона
+    // это лозенг «без изменений», который живёт пару секунд после финала
+    vi.useFakeTimers();
+    try {
+      mockFetch({
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+          <Routes>
+            <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+
+      // текущий документ прогона — спиннер на его строке
+      emitServerEvent("bulk", {
+        type: "bulk", running: true, analyst_id: 5, total: 1, done: 0,
+        started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+        current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+      });
+      await vi.advanceTimersByTimeAsync(0); // дать React перерисоваться
+      expect(screen.getAllByTitle("Проверяется…").length).toBeGreaterThan(0);
+
+      emitServerEvent("validation", { type: "validation", document_id: 12, status: "running" });
+      emitServerEvent("validation", {
+        type: "validation", document_id: 12, status: "done", report_id: 5,
+      });
+      emitServerEvent("bulk", {
+        type: "bulk", running: true, analyst_id: 5, total: 1, done: 1,
+        started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+        current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+        last_document: { document_id: 12, status: "failed", unchanged: true },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("без изменений")).toBeInTheDocument();
+
+      // финал: список перечитан, лозенг ещё живёт
+      emitServerEvent("bulk", {
+        type: "bulk", running: false, analyst_id: 5, total: 1, done: 1,
+        started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:00:01", error: null,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("без изменений")).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("новый прогон сбрасывает лозенги прошлого", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: 5, total: 1, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:00:01", error: null,
+      last_document: { document_id: 12, status: "failed", unchanged: true },
+    });
+    expect(await screen.findByText("без изменений")).toBeInTheDocument();
+
+    // прогон застали с начала — итоги прошлого неактуальны
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 0,
+      started_at: "2026-08-26T11:00:00", finished_at: null, error: null,
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
+    });
+  });
 });

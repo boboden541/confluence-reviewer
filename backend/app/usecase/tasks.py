@@ -351,11 +351,12 @@ def start_bulk_validation(
             started_at=now_utc().isoformat(),
             finished_at=None,
             error=None,
+            current_document=None,  # без сброса событие старта несло документ прошлого прогона
         )
         _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
         try:
             for doc_id in document_ids:
-                validated_before = await asyncio.to_thread(_doc_snapshot, doc_id)
+                status_before, validated_before = await asyncio.to_thread(_doc_snapshot, doc_id)
                 # какой документ проверяется прямо сейчас (заголовок — для UI)
                 title = await asyncio.to_thread(_doc_title, doc_id)
                 _bulk_state["current_document"] = {"document_id": doc_id, "title": title}
@@ -406,11 +407,18 @@ def start_bulk_validation(
                     {
                         **bulk_status(),
                         **_actor_fields(actor_user),
-                        "last_document": {"document_id": doc_id, "status": status_after, "unchanged": validated_before == validated_after},
+                        # unchanged: идемпотентный прогон не меняет ни статус,
+                        # ни момент проверки — по нему UI показывает «без изменений»
+                        "last_document": {
+                            "document_id": doc_id,
+                            "status": status_after,
+                            "unchanged": (status_before, validated_before)
+                            == (status_after, validated_after),
+                        },
                     },
                 )
         finally:
-            _bulk_state.update(running=False, finished_at=now_utc().isoformat())
+            _bulk_state.update(running=False, finished_at=now_utc().isoformat(), current_document=None)
             _publish_event("bulk", bulk_status())
 
     try:

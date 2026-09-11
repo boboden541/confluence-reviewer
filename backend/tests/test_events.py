@@ -19,7 +19,7 @@ import uvicorn
 
 from app.database import Base, SessionLocal, engine
 from app.main import create_app
-from app.models import Analyst, ConfluenceDocument
+from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.api.events import format_event
 from app.usecase import tasks
 from app.usecase.validation import _UNSET
@@ -197,26 +197,53 @@ def test_bulk_events_for_valid_docs(live_server, monkeypatch):
         ]
         assert events[2]["running"] is True
         assert events[2]["total"] == 2
+        # на старте нет «текущего» документа — он не протащен из прошлого прогона
+        assert events[2]["current_document"] is None
         # перед каждым документом — указатель «кто проверяется сейчас»
         assert events[3]["current_document"]["document_id"] == first
         assert events[7]["current_document"]["document_id"] == second
-        # итог по документу: статус после прогона и признак «без изменений»
-        assert events[6]["last_document"]["document_id"] == first
-        assert events[6]["last_document"]["unchanged"] is False
+        # fake документ не менял: статус и момент проверки те же — «без изменений»
+        assert events[6]["last_document"] == {
+            "document_id": first, "status": "not_checked", "unchanged": True,
+        }
         assert events[10]["done"] == 2
         assert events[10]["running"] is True  # ещё до финального события
-        assert events[11]["running"] is False  # финал прогонa
-        assert events[2]["running"] is True
-        assert events[2]["total"] == 2
-        # перед каждым документом — указатель «кто проверяется сейчас»
-        assert events[3]["current_document"]["document_id"] == first
-        assert events[7]["current_document"]["document_id"] == second
-        # итог по документу: статус после прогона и признак «без изменений»
-        assert events[6]["last_document"]["document_id"] == first
-        assert events[6]["last_document"]["unchanged"] is False
-        assert events[10]["done"] == 2
-        assert events[10]["running"] is True  # ещё до финального события
-        assert events[11]["running"] is False  # финал прогонa        assert seen == [first, second]
+        assert events[11]["running"] is False  # финал прогона
+        assert events[11]["current_document"] is None
+        assert seen == [first, second]
+
+
+def test_bulk_unchanged_tracks_document_change(live_server, monkeypatch):
+    """«Без изменений» — только если прогон не тронул документ; перевалидация
+    (новый момент проверки) даёт unchanged=False — по нему UI отличает
+    мгновенный идемпотентный прогон от настоящего."""
+    first, second = seed_document(), seed_document()
+
+    async def fake_exec(document_id, trigger, force, template_version_id=None,
+                        ai_prompt=None, checks=None, criterion_ids=None, **_kwargs):
+        if document_id == second:  # «перевалидировали»: статус и момент проверки обновлены
+            with SessionLocal() as db:
+                doc = db.get(ConfluenceDocument, document_id)
+                doc.validation_status = ValidationStatus.PASSED
+                doc.last_validated_at = now_utc()
+                db.commit()
+        return SimpleNamespace(id=document_id)
+
+    monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
+
+    with httpx.stream("GET", f"{live_server}/api/events", timeout=10) as resp:
+        assert (
+            httpx.post(
+                f"{live_server}/api/documents/validate-batch",
+                json={"document_ids": [first, second]},
+            ).status_code
+            == 202
+        )
+        events = read_events(resp, 12)
+        assert events[6]["last_document"]["unchanged"] is True  # first не менялся
+        assert events[10]["last_document"] == {
+            "document_id": second, "status": "passed", "unchanged": False,
+        }
 
 
 def test_sync_lifecycle_streamed(live_server, monkeypatch):
