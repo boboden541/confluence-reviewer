@@ -19,7 +19,7 @@ import uvicorn
 
 from app.database import Base, SessionLocal, engine
 from app.main import create_app
-from app.models import Analyst, ConfluenceDocument
+from app.models import Analyst, ConfluenceDocument, ValidationStatus
 from app.api.events import format_event
 from app.usecase import tasks
 from app.usecase.validation import _UNSET
@@ -189,19 +189,61 @@ def test_bulk_events_for_valid_docs(live_server, monkeypatch):
             == 202
         )
         # снимки(2) + bulk старт + [валидация×2 + bulk прогресс]×2 + bulk финал
-        events = read_events(resp, 10)
+        events = read_events(resp, 12)
         assert [e["type"] for e in events] == [
             "sync", "bulk", "bulk",
-            "validation", "validation", "bulk",
-            "validation", "validation", "bulk", "bulk",
+            "bulk", "validation", "validation", "bulk",
+            "bulk", "validation", "validation", "bulk", "bulk",
         ]
         assert events[2]["running"] is True
         assert events[2]["total"] == 2
-        assert events[5]["done"] == 1
-        assert events[8]["running"] is True  # последний документ готов…
-        assert events[8]["done"] == 2
-        assert events[9]["running"] is False  # …и только затем прогон закрыт
+        # на старте нет «текущего» документа — он не протащен из прошлого прогона
+        assert events[2]["current_document"] is None
+        # перед каждым документом — указатель «кто проверяется сейчас»
+        assert events[3]["current_document"]["document_id"] == first
+        assert events[7]["current_document"]["document_id"] == second
+        # fake документ не менял: статус и момент проверки те же — «без изменений»
+        assert events[6]["last_document"] == {
+            "document_id": first, "status": "not_checked", "unchanged": True,
+        }
+        assert events[10]["done"] == 2
+        assert events[10]["running"] is True  # ещё до финального события
+        assert events[11]["running"] is False  # финал прогона
+        assert events[11]["current_document"] is None
         assert seen == [first, second]
+
+
+def test_bulk_unchanged_tracks_document_change(live_server, monkeypatch):
+    """«Без изменений» — только если прогон не тронул документ; перевалидация
+    (новый момент проверки) даёт unchanged=False — по нему UI отличает
+    мгновенный идемпотентный прогон от настоящего."""
+    first, second = seed_document(), seed_document()
+
+    async def fake_exec(document_id, trigger, force, template_version_id=None,
+                        ai_prompt=None, checks=None, criterion_ids=None, **_kwargs):
+        if document_id == second:  # «перевалидировали»: статус и момент проверки обновлены
+            with SessionLocal() as db:
+                doc = db.get(ConfluenceDocument, document_id)
+                doc.validation_status = ValidationStatus.PASSED
+                doc.last_validated_at = now_utc()
+                db.commit()
+        return SimpleNamespace(id=document_id)
+
+    monkeypatch.setattr(tasks, "_execute_validation", fake_exec)
+
+    with httpx.stream("GET", f"{live_server}/api/events", timeout=10) as resp:
+        assert (
+            httpx.post(
+                f"{live_server}/api/documents/validate-batch",
+                json={"document_ids": [first, second]},
+            ).status_code
+            == 202
+        )
+        events = read_events(resp, 12)
+        assert events[6]["last_document"]["unchanged"] is True  # first не менялся
+        assert events[10]["last_document"] == {
+            "document_id": second, "status": "passed", "unchanged": False,
+        }
 
 
 def test_sync_lifecycle_streamed(live_server, monkeypatch):
@@ -211,7 +253,7 @@ def test_sync_lifecycle_streamed(live_server, monkeypatch):
         db.commit()
         analyst_id = db.query(Analyst).first().id
 
-    async def fake_execute(analyst_id_arg):
+    async def fake_execute(analyst_id_arg, on_analyst=None):
         return [
             tasks.SyncResult(
                 analyst_id=analyst_id_arg, analyst_name="Синк", created=3, updated=2
@@ -223,11 +265,16 @@ def test_sync_lifecycle_streamed(live_server, monkeypatch):
     with httpx.stream("GET", f"{live_server}/api/events", timeout=10) as resp:
         assert httpx.post(f"{live_server}/api/analysts/{analyst_id}/sync").status_code == 202
 
-        events = read_events(resp, 4)
-        assert [e["type"] for e in events] == ["sync", "bulk", "sync", "sync"]
+        events = read_events(resp, 5)
+        assert [e["type"] for e in events] == ["sync", "bulk", "sync", "sync", "sync"]
+        # старт; указатель «кто синхронизируется»; финал с итогами
         assert events[2]["running"] is True
-        assert events[3]["running"] is False
-        assert events[3]["last_results"] == [
+        assert events[3]["running"] is True
+        assert events[3]["current"]["analyst_id"] == analyst_id
+        assert events[3]["current"]["analyst_name"] == "Синк"
+        assert events[4]["running"] is False
+        assert events[4]["current"] is None
+        assert events[4]["last_results"] == [
             {"analyst_id": analyst_id, "analyst_name": "Синк",
              "created": 3, "updated": 2, "error": None}
         ]

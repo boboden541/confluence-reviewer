@@ -1018,7 +1018,8 @@ describe("DocumentsPage", () => {
       expect(call).toBeDefined();
       const body = JSON.parse(String(call?.[1]?.body));
       expect(body.document_ids).toEqual([11, 12]);
-      expect(body.force).toBe(false);
+      // явный запуск — всегда повторная проверка, кэш не отменяет требование
+      expect(body.force).toBe(true);
       expect(body.ai_prompt).toBeNull(); // промт не меняли — идём со стандартным
     });
   });
@@ -1234,5 +1235,192 @@ describe("DocumentsPage", () => {
       String(url).includes("/api/analysts/5/documents"),
     ).length;
     expect(loads).toBe(initialLoads);
+  });
+
+  it("повторный прогон: «без изменений» на строке и гашение лозенгов через паузу", async () => {
+    // идемпотентный прогон пролетает за миллисекунды — видимый след прогона
+    // это лозенг «без изменений», который живёт пару секунд после финала
+    vi.useFakeTimers();
+    try {
+      mockFetch({
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+      });
+
+      render(
+        <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+          <Routes>
+            <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+
+      // текущий документ прогона — канонический лозенг и подсветка строки
+      emitServerEvent("bulk", {
+        type: "bulk", running: true, analyst_id: 5, total: 1, done: 0,
+        started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+        current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+      });
+      await vi.advanceTimersByTimeAsync(0); // дать React перерисоваться
+      expect(screen.getByText("проверяется")).toBeInTheDocument();
+      expect(screen.getByText("проверяется").closest("tr")).toHaveClass("processing");
+
+      emitServerEvent("validation", { type: "validation", document_id: 12, status: "running" });
+      emitServerEvent("validation", {
+        type: "validation", document_id: 12, status: "done", report_id: 5,
+      });
+      emitServerEvent("bulk", {
+        type: "bulk", running: true, analyst_id: 5, total: 1, done: 1,
+        started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+        current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+        last_document: { document_id: 12, status: "failed", unchanged: true },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("без изменений")).toBeInTheDocument();
+
+      // финал: список перечитан, лозенг ещё живёт, итог прогона — строкой
+      emitServerEvent("bulk", {
+        type: "bulk", running: false, analyst_id: 5, total: 1, done: 1,
+        started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:00:01", error: null,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText("без изменений")).toBeInTheDocument();
+      expect(screen.getByText("Проверка завершена: без изменений 1").closest(".alert")).toHaveClass("ok");
+
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("новый прогон сбрасывает лозенги прошлого", async () => {
+    mockFetch({
+      "/api/analysts/5": ANALYST,
+      "/api/analysts/5/documents": DOCUMENTS,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("[СТ] GDS-15 Загрузка кино")).toBeInTheDocument();
+
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: 5, total: 1, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:00:01", error: null,
+      last_document: { document_id: 12, status: "failed", unchanged: true },
+    });
+    expect(await screen.findByText("без изменений")).toBeInTheDocument();
+
+    // прогон застали с начала — итоги прошлого неактуальны
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 0,
+      started_at: "2026-08-26T11:00:00", finished_at: null, error: null,
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("без изменений")).not.toBeInTheDocument();
+    });
+  });
+
+  it("запущенный прогон виден в списке: «в очереди» → «проверяется» → свежий статус", async () => {
+    const fetchMock = mockFetch(
+      {
+        "/api/analysts/5": ANALYST,
+        "/api/analysts/5/documents": DOCUMENTS,
+        "/api/validation-config": VALIDATION_CONFIG,
+        "/api/sync/bulk-validation": BULK_IDLE,
+      },
+      ["/api/documents/validate-batch"],
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analysts/5/documents"]}>
+        <Routes>
+          <Route path="/analysts/:analystId/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // шаги 1–2: выбрали два документа и запустили массовую проверку
+    fireEvent.click(await screen.findByLabelText("Выбрать документ: [СТ] GDS-15 Загрузка кино"));
+    fireEvent.click(screen.getByLabelText("Выбрать документ: [СТ] Вторая доработка"));
+    fireEvent.click(screen.getByRole("button", { name: /Проверить выбранные \(2\)/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Запустить проверку — 2 док\./ }),
+    );
+
+    // шаг 3: сразу после запуска оба выбранных помечены «в очереди» —
+    // единственный статус строки: статус прошлой проверки скрыт
+    const queuedLozenges = await screen.findAllByText("в очереди");
+    expect(queuedLozenges).toHaveLength(2);
+    expect(screen.queryByText("не пройдено")).not.toBeInTheDocument();
+    expect(screen.queryByText("не проверено")).not.toBeInTheDocument();
+    // строки набора отличаются от общей массы: подсветка и у активной, и у ждущих
+    for (const lozenge of queuedLozenges) {
+      expect(lozenge.closest("tr")).toHaveClass("queued");
+    }
+
+    // шаг 4: первый пошел в проверку — канонический лозенг, подсветка строки,
+    // второй остаётся в очереди
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 0,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 11, title: "[СТ] GDS-15 Загрузка кино" },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("проверяется")).toBeInTheDocument();
+    });
+    expect(screen.getByText("проверяется").closest("tr")).toHaveClass("processing");
+    expect(screen.getByText("в очереди")).toBeInTheDocument();
+
+    // первый прошёл: указатель ушёл на второй, статус первого обновился
+    // сразу из bulk-события («пройдено»), не дожидаясь перезагрузки списка
+    emitServerEvent("validation", { type: "validation", document_id: 11, status: "running" });
+    emitServerEvent("validation", { type: "validation", document_id: 11, status: "done", report_id: 9 });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 11, title: "[СТ] GDS-15 Загрузка кино" },
+      last_document: { document_id: 11, status: "passed", unchanged: false },
+    });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 1,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("пройдено")).toBeInTheDocument();
+    });
+    expect(screen.getByText("проверяется")).toBeInTheDocument(); // теперь второй
+    expect(screen.queryByText("в очереди")).not.toBeInTheDocument();
+
+    // финал прогона: смешанный итог — строкой
+    emitServerEvent("validation", { type: "validation", document_id: 12, status: "running" });
+    emitServerEvent("validation", { type: "validation", document_id: 12, status: "done", report_id: 10 });
+    emitServerEvent("bulk", {
+      type: "bulk", running: true, analyst_id: 5, total: 2, done: 2,
+      started_at: "2026-08-26T10:00:00", finished_at: null, error: null,
+      current_document: { document_id: 12, title: "[СТ] Вторая доработка" },
+      // второй документ не менялся — отчёт из кэша, прогон его не перепроверял
+      last_document: { document_id: 12, status: "failed", unchanged: true },
+    });
+    emitServerEvent("bulk", {
+      type: "bulk", running: false, analyst_id: 5, total: 2, done: 2,
+      started_at: "2026-08-26T10:00:00", finished_at: "2026-08-26T10:01:00", error: null,
+    });
+    expect(await screen.findByText("Проверка завершена: проверено 1, без изменений 1")).toBeInTheDocument();
+
+    // события живут без перезагрузки: список перечитан лишь один раз — по финалу
+    const documentLoads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/api/analysts/5/documents"),
+    ).length;
+    expect(documentLoads).toBe(2);
   });
 });

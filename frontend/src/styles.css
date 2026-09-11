@@ -4174,3 +4174,42 @@ label.found-row.disabled {
   max-height: 240px;
   overflow: auto;
 }
+
+/* ── лоадеры фоновых задач ────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle, #ebecf0);
+  border-top-color: var(--blue, #0c66e4);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+tr.processing td {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}
+tr.processing:hover td {
+  background: #ddebff;
+}
+/* проверяемая строка: полоса у левого края и полужирное название —
+   она заметно выходит из общей массы списка */
+tr.processing td:first-child {
+  box-shadow: inset 3px 0 0 var(--blue, #0c66e4);
+}
+tr.processing .doc-link {
+  font-weight: 600;
+}
+/* ожидающие своего хода документы прогона: та же гамма, но тише активной
+   строки — весь набор запущенных документов читается одним взглядом */
+tr.queued td {
+  background: #f5f9ff;
+}
+tr.queued:hover td {
+  background: var(--blue-subtle-bg, #e9f2ff);
+}
+tr.queued td:first-child {
+  box-shadow: inset 3px 0 0 #a7c5f8;
+}

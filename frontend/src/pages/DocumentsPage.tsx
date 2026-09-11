@@ -14,6 +14,7 @@ import {
   type BulkValidationStatus,
   type DocumentListItem,
   type DocumentPage,
+  type ValidationStatus,
 } from "../api";
 import StatusBadge from "../StatusBadge";
 import DocumentReport from "../DocumentReport";
@@ -24,6 +25,7 @@ import { Breadcrumbs } from "../Breadcrumbs";
 const PAGE_SIZE = 20;
 const SEMANTIC_MIN = 3; // минимум символов для запроса к ИИ
 const SEMANTIC_DEBOUNCE_MS = 800; // не дёргаем ИИ на каждое нажатие
+const BADGE_HOLD_MS = 4000; // сколько после финала висят лозенги прогона
 
 // Ширина панели просмотра: тянется за ручку на левом краю, запоминается
 const DRAWER_DEFAULT_W = 640;
@@ -78,6 +80,12 @@ export default function DocumentsPage() {
   // чистит error, и сообщение о сбое синхронизации жило бы ровно один
   // запрос перезагрузки списка.
   const [syncing, setSyncing] = useState(false);
+  // текущий проверяемый документ и прогресс bulk (для спиннера на строке)
+  const [runningDocId, setRunningDocId] = useState<number | null>(null);
+  const [, setBulkCurrent] = useState<{ running: boolean; done: number; total: number }>({ running: false, done: 0, total: 0 });
+  // очередь запущенного прогона и итоги по документам (из bulk-событий)
+  const [bulkQueue, setBulkQueue] = useState<number[] | null>(null);
+  const [bulkResults, setBulkResults] = useState<Record<number, { status: ValidationStatus | null; unchanged: boolean }>>({});
   const [info, setInfo] = useState("");
   const [syncError, setSyncError] = useState("");
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -89,6 +97,15 @@ export default function DocumentsPage() {
   // идентичность), и замыкание начиналось бы заново, теряя запуск
   const sawBulkRunRef = useRef(false);
   const sawSyncRunRef = useRef(false);
+  // лозенги прогона («в очереди», «без изменений») гаснут через пару секунд
+  // после его финала: для мгновенных идемпотентных проверок это единственная
+  // видимая индикация, но вечно висеть на строках они не должны
+  const badgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // зеркало bulkResults для обработчика событий: замыкание эффекта устарело бы
+  const bulkResultsRef = useRef<Record<number, { status: ValidationStatus | null; unchanged: boolean }>>({});
+  useEffect(() => () => {
+    if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+  }, []);
 
   // Выбранные для проверки документы (чекбоксы в таблице). Выделение
   // живёт до запуска проверки или смены фильтра/аналитика.
@@ -272,14 +289,56 @@ export default function DocumentsPage() {
   useEffect(() => {
     const offBulk = on("bulk", (e) => {
       setBulk(e.running ? e : null);
+      setBulkCurrent({ running: e.running, done: e.done, total: e.total });
+      // текущий документ прогона и итог по завершённому
+      const cd = e.current_document;
+      setRunningDocId(e.running && cd ? cd.document_id : null);
+      const ld = e.last_document ?? null;
+      if (ld) {
+        const next = {
+          ...bulkResultsRef.current,
+          [ld.document_id]: { status: ld.status, unchanged: ld.unchanged },
+        };
+        bulkResultsRef.current = next;
+        setBulkResults(next);
+      }
       if (e.running) {
+        // застали прогон с начала — итоги прошлого неактуальны
+        if (e.done === 0) {
+          bulkResultsRef.current = {};
+          setBulkResults({});
+          setInfo(""); // прошлый итог не соседствует с новым прогоном
+        }
         sawBulkRunRef.current = true;
         return;
       }
       if (sawBulkRunRef.current) {
         sawBulkRunRef.current = false;
         void load(1, false);
+        // итог прогона — устойчивой строкой: мгновенный идемпотентный прогон
+        // (документы не менялись — отчёты из кэша) не оставляет анимации
+        const results = Object.values(bulkResultsRef.current);
+        if (results.length) {
+          const unchanged = results.filter((r) => r.unchanged).length;
+          const failed = results.filter((r) => !r.unchanged && r.status === "error").length;
+          const checked = results.length - unchanged - failed;
+          const parts = [
+            ...(checked ? [`проверено ${checked}`] : []),
+            ...(unchanged ? [`без изменений ${unchanged}`] : []),
+            ...(failed ? [`с ошибкой ${failed}`] : []),
+          ];
+          setInfo(`Проверка завершена: ${parts.join(", ")}`);
+        }
+        if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+        badgeTimerRef.current = setTimeout(() => {
+          setBulkQueue(null);
+          setBulkResults({});
+        }, BADGE_HOLD_MS);
       }
+    });
+    // какой документ проверяется прямо сейчас — спиннер на его строке
+    const offValidation = on("validation", (e) => {
+      setRunningDocId(e.status === "running" ? e.document_id : null);
     });
     const offSync = on("sync", (e) => {
       if (e.running) {
@@ -305,6 +364,7 @@ export default function DocumentsPage() {
     });
     return () => {
       offBulk();
+      offValidation();
       offSync();
     };
   }, [load, loadAnalyst, analystId]);
@@ -387,8 +447,10 @@ export default function DocumentsPage() {
   };
 
   // Проверка выбранных документов: сначала диалог настроек (шаблон + промт ИИ).
+  // Запуск требует повторной проверки — кэш идемпотентности не отменяет
+  // явное требование пользователя (force, как у «Актуализировать»)
   const openBulkDialog = () => {
-    setDialogForce(false);
+    setDialogForce(true);
     setDialogOpen(true);
   };
 
@@ -404,6 +466,11 @@ export default function DocumentsPage() {
   // выделение больше не нужно
   const handleLaunched = () => {
     setDialogOpen(false);
+    // таймер прошлого прогона не должен погасить лозенги только что
+    // запущенного (перезапуск сразу после финала предыдущего)
+    if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+    // очередь прогона — для статусов «в очереди/проверяется» на строках
+    setBulkQueue([...selected]);
     setSelected(new Set());
   };
 
@@ -602,8 +669,22 @@ export default function DocumentsPage() {
           </tr>
         </thead>
         <tbody>
-          {items.map((doc) => (
-            <tr key={doc.id}>
+          {items.map((doc) => {
+            // состояние строки в текущем прогоне: итог > проверяется > в очереди
+            const runState = bulkResults[doc.id]
+              ? "done"
+              : runningDocId === doc.id
+                ? "processing"
+                : bulkQueue?.includes(doc.id)
+                  ? "queued"
+                  : null;
+            return (
+            <tr
+              key={doc.id}
+              className={
+                runState === "processing" ? "processing" : runState === "queued" ? "queued" : undefined
+              }
+            >
               <td className="cb-cell">
                 <input
                   type="checkbox"
@@ -630,7 +711,24 @@ export default function DocumentsPage() {
                 )}
               </td>
               <td>
-                <StatusBadge status={doc.validation_status} />
+                {runState === "processing" ? (
+                  // проверяемый прямо сейчас — канонический статус прогона
+                  <StatusBadge status="in_progress" />
+                ) : runState === "queued" ? (
+                  // ожидает своего хода — вместо статуса прошлой проверки
+                  <span className="lozenge default">в очереди</span>
+                ) : runState === "done" ? (
+                  // свой ход прошёл: один итог — свежий статус из bulk-события
+                  bulkResults[doc.id].unchanged ? (
+                    <span className="lozenge default">без изменений</span>
+                  ) : (
+                    <StatusBadge
+                      status={bulkResults[doc.id].status ?? doc.validation_status}
+                    />
+                  )
+                ) : (
+                  <StatusBadge status={doc.validation_status} />
+                )}
               </td>
               <td className="cell-subtle">{formatDate(doc.created_in_confluence_at)}</td>
               <td className="cell-subtle">{formatDate(doc.last_modified_in_confluence_at)}</td>
@@ -641,24 +739,28 @@ export default function DocumentsPage() {
                 {doc.has_note ? "📝" : "—"}
               </td>
               <td className="actions-cell">
-                <button
-                  className="btn small subtle"
-                  disabled={bulk?.running || doc.validation_status === "in_progress"}
-                  onClick={() => openSingleDialog(doc)}
-                >
-                  {doc.validation_status === "not_checked" ? (
-                    <>
-                      <span aria-hidden="true">▶</span> Проверить
-                    </>
-                  ) : (
-                    <>
-                      <span aria-hidden="true">⟳</span> Актуализировать
-                    </>
-                  )}
-                </button>
+                {runState === "processing" || doc.validation_status === "in_progress" ? (
+                  <span className="spinner" title="Проверяется…" />
+                ) : (
+                  <button
+                    className="btn small subtle"
+                    onClick={() => openSingleDialog(doc)}
+                  >
+                    {doc.validation_status === "not_checked" ? (
+                      <>
+                        <span aria-hidden="true">▶</span> Проверить
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden="true">⟳</span> Актуализировать
+                      </>
+                    )}
+                  </button>
+                )}
               </td>
             </tr>
-          ))}
+            );
+          })}
           {!loading && loaded && items.length === 0 && (
             <tr>
               <td colSpan={8} className="table-empty">

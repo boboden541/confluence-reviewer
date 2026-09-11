@@ -315,6 +315,8 @@ export interface BulkValidationStatus {
   started_at: string | null;
   finished_at: string | null;
   error: string | null;
+  /** Какой документ проверяется прямо сейчас (вне прогона — null). */
+  current_document?: { document_id: number; title: string | null } | null;
 }
 
 // --- диалог настроек проверки (шаблон + промт ИИ) ---

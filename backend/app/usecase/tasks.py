@@ -10,11 +10,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app import repository
 from app.database import SessionLocal
-from app.models import TriggerType
+from app.models import Analyst, ConfluenceDocument, TriggerType
 from app.usecase.sync import SyncResult, sync_all, sync_analyst
 from app.usecase.validation import DocumentNotFound, run_validation
 from app.utils import now_utc
@@ -105,11 +106,14 @@ def _publish_event(event_type: str, payload: dict[str, Any]) -> None:
         queue.put_nowait(dict(event))
 
 
-async def _execute_sync(analyst_id: int | None) -> list[SyncResult]:
+async def _execute_sync(
+    analyst_id: int | None,
+    on_analyst: "Callable[[int, str, int, int], Awaitable[None]] | None" = None,
+) -> list[SyncResult]:
     """Реальная работа; отдельная функция — точка подмены в тестах."""
     if analyst_id is not None:
         return [await sync_analyst(analyst_id)]
-    return await sync_all()
+    return await sync_all(on_analyst=on_analyst)
 
 
 def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
@@ -122,8 +126,30 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
             running=True, started_at=now_utc().isoformat(), finished_at=None, error=None
         )
         _publish_event("sync", sync_status())
+
+        async def on_analyst(analyst_id: int, analyst_name: str, index: int, total: int) -> None:
+            # кто обрабатывается прямо сейчас — для спиннеров на сущностях
+            _sync_state["current"] = {
+                "analyst_id": analyst_id,
+                "analyst_name": analyst_name,
+                "index": index,
+                "total": total,
+            }
+            _publish_event("sync", sync_status())
+
         try:
-            results = await _execute_sync(analyst_id)
+            if analyst_id is not None:
+                # одиночная синхронизация: указать сущность сразу, до запросов
+                with SessionLocal() as db:
+                    analyst = db.get(Analyst, analyst_id)
+                _sync_state["current"] = {
+                    "analyst_id": analyst_id,
+                    "analyst_name": analyst.full_name if analyst else "?",
+                    "index": 1,
+                    "total": 1,
+                }
+                _publish_event("sync", sync_status())
+            results = await _execute_sync(analyst_id, on_analyst)
             _sync_state["last_results"] = [
                 {
                     "analyst_id": r.analyst_id,
@@ -140,6 +166,7 @@ def start_sync(analyst_id: int | None = None) -> tuple[bool, str]:
             logger.exception("Фоновая синхронизация упала")
             _sync_state["error"] = str(exc)
         finally:
+            _sync_state["current"] = None
             _sync_state.update(running=False, finished_at=now_utc().isoformat())
             _publish_event("sync", sync_status())
 
@@ -271,6 +298,25 @@ def bulk_status() -> dict[str, Any]:
     return dict(_bulk_state)
 
 
+def _doc_title(doc_id: int) -> str | None:
+    """Название документа для строки прогресса (короткая сессия)."""
+    with SessionLocal() as db:
+        doc = db.get(ConfluenceDocument, doc_id)
+        return doc.title if doc else None
+
+
+def _doc_snapshot(doc_id: int) -> tuple[str | None, Any]:
+    """Статус и момент последней валидации документа (короткая сессия)."""
+    with SessionLocal() as db:
+        doc = db.get(ConfluenceDocument, doc_id)
+        if doc is None:
+            return None, None
+        return (
+            doc.validation_status.value if doc.validation_status else None,
+            doc.last_validated_at,
+        )
+
+
 def start_bulk_validation(
     document_ids: list[int],
     analyst_id: int | None = None,
@@ -305,10 +351,16 @@ def start_bulk_validation(
             started_at=now_utc().isoformat(),
             finished_at=None,
             error=None,
+            current_document=None,  # без сброса событие старта несло документ прошлого прогона
         )
         _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
         try:
             for doc_id in document_ids:
+                status_before, validated_before = await asyncio.to_thread(_doc_snapshot, doc_id)
+                # какой документ проверяется прямо сейчас (заголовок — для UI)
+                title = await asyncio.to_thread(_doc_title, doc_id)
+                _bulk_state["current_document"] = {"document_id": doc_id, "title": title}
+                _publish_event("bulk", {**bulk_status(), "current_document": _bulk_state["current_document"]})
                 _validation_state[doc_id] = {
                     "status": "running",
                     "started_at": now_utc().isoformat(),
@@ -349,9 +401,24 @@ def start_bulk_validation(
                     {"document_id": doc_id, **_validation_state[doc_id], **_actor_fields(actor_user)},
                 )
                 _bulk_state["done"] += 1
-                _publish_event("bulk", {**bulk_status(), **_actor_fields(actor_user)})
+                status_after, validated_after = await asyncio.to_thread(_doc_snapshot, doc_id)
+                _publish_event(
+                    "bulk",
+                    {
+                        **bulk_status(),
+                        **_actor_fields(actor_user),
+                        # unchanged: идемпотентный прогон не меняет ни статус,
+                        # ни момент проверки — по нему UI показывает «без изменений»
+                        "last_document": {
+                            "document_id": doc_id,
+                            "status": status_after,
+                            "unchanged": (status_before, validated_before)
+                            == (status_after, validated_after),
+                        },
+                    },
+                )
         finally:
-            _bulk_state.update(running=False, finished_at=now_utc().isoformat())
+            _bulk_state.update(running=False, finished_at=now_utc().isoformat(), current_document=None)
             _publish_event("bulk", bulk_status())
 
     try:

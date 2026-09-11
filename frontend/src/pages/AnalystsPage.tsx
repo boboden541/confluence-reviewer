@@ -17,6 +17,11 @@ export default function AnalystsPage() {
   const [info, setInfo] = useState("");
   const [busyAnalyst, setBusyAnalyst] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+  // аналитик, синхронизирующийся прямо сейчас (из события sync)
+  const [syncingId, setSyncingId] = useState<number | null>(null);
+  // итоги по завершённым: «+2 новых, 5 обновлено» до перезагрузки страницы
+  const [syncedInfo, setSyncedInfo] = useState<Record<number, string>>({});
+  const [syncIndex, setSyncIndex] = useState<{ index: number; total: number } | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [creating, setCreating] = useState(false);
@@ -42,6 +47,11 @@ export default function AnalystsPage() {
   useEffect(() => {
     let sawRun = false;
     return on("sync", (e) => {
+      // кто синхронизируется прямо сейчас (поле current из события)
+      const current = (e as { current?: { analyst_id: number; index: number; total: number } | null })
+        .current ?? null;
+      setSyncingId(current ? current.analyst_id : null);
+      setSyncIndex(current ? { index: current.index ?? 0, total: current.total ?? 0 } : null);
       if (e.running) {
         sawRun = true;
         setSyncing(true);
@@ -51,6 +61,14 @@ export default function AnalystsPage() {
       if (!sawRun) return;
       sawRun = false;
       setBusyAnalyst(null);
+      // итоги по завершённым аналитикам — на их карточках
+      setSyncedInfo((prev) => {
+        const next = { ...prev };
+        for (const r of e.last_results ?? []) {
+          if (!r.error) next[r.analyst_id] = `✓ +${r.created} новых, ${r.updated} обновлено`;
+        }
+        return next;
+      });
       const failures = (e.last_results ?? []).filter((r) => r.error);
       const created = (e.last_results ?? []).reduce((acc, r) => acc + r.created, 0);
       const updated = (e.last_results ?? []).reduce((acc, r) => acc + r.updated, 0);
@@ -178,6 +196,11 @@ export default function AnalystsPage() {
           </div>
         </div>
         <div className="head-actions">
+          {syncIndex && (
+            <span className="lozenge inprogress">
+              ⟳ {syncIndex.index} из {syncIndex.total}
+            </span>
+          )}
           <button className="btn primary" onClick={syncAll} disabled={syncing}>
             {syncing ? "Синхронизация…" : "⟳ Синхронизировать всех"}
           </button>
@@ -309,12 +332,20 @@ export default function AnalystsPage() {
           {analysts.map((analyst) => (
             <tr key={analyst.id}>
               <td>
-                <Link to={`/analysts/${analyst.id}`}>{analyst.full_name}</Link>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {syncingId === analyst.id && <span className="spinner" aria-hidden="true" />}
+                  <Link to={`/analysts/${analyst.id}`}>{analyst.full_name}</Link>
+                  {syncingId === analyst.id && <span className="lozenge inprogress">синхронизируется</span>}
+                </span>
               </td>
               <td className="cell-subtle">{analyst.email}</td>
               <td className="cell-subtle">{analyst.confluence_username ?? "auto"}</td>
               <td className="num">{analyst.documents_count}</td>
-              <td className="cell-subtle">{formatDate(analyst.last_synced_at)}</td>
+              <td className="cell-subtle">
+                {syncingId === analyst.id
+                  ? "синхронизируется…"
+                  : syncedInfo[analyst.id] ?? formatDate(analyst.last_synced_at)}
+              </td>
               <td className={analyst.sync_error ? "cell-error" : "cell-subtle"}>
                 {analyst.sync_error ?? "—"}
               </td>
@@ -322,7 +353,7 @@ export default function AnalystsPage() {
                 <button
                   className="btn small subtle"
                   onClick={() => syncAnalyst(analyst.id)}
-                  disabled={syncing || busyAnalyst === analyst.id}
+                  disabled={syncing || busyAnalyst === analyst.id || syncingId === analyst.id}
                 >
                   {busyAnalyst === analyst.id ? "…" : (
                     <>
