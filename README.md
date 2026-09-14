@@ -36,11 +36,20 @@
 ## Быстрый старт
 
 ```bash
+make up   # при первом запуске создаст .env из .env.example и подскажет, что заполнить
+```
+
+Всё остальное — короткими командами (`make help` — список):
+`make smoke` — живость, `make logs` — логи, `make down` — остановить,
+`make restart` / `make rebuild`, `make test` — тесты backend+frontend.
+
+Без make — то же самое вручную:
+
+```bash
 cp .env.example .env
 # заполните .env: токен Confluence, ключ ИИ, пароли (см. таблицу ниже)
 
 docker compose up -d --build
-docker compose exec backend python -m pytest tests/ -q   # тесты внутри контейнера
 ```
 
 UI доступен на `http://localhost:8080` (логин/пароль — `APP_USERNAME`/`APP_PASSWORD` из `.env`).
