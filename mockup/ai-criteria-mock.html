@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Критерии ИИ-проверки · Confluence Reviewer</title>
+<style>
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtlest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --yellow-bg: #FFF7D6;
+    --yellow-text: #7A5D00;
+    --red-bg: #FFEBE6;
+    --red-text: #AE2E24;
+    --grey-bg: #F1F2F4;
+    --grey-text: #44546F;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+  /* ── шапка макета (не часть продукта) ─────────────────────── */
+  .mockbar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 10; }
+  .mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 8px; }
+  .mocktab { border: 1px solid transparent; background: transparent; color: var(--nav-icon); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: var(--radius); cursor: pointer; }
+  .mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+
+  .screen { display: none; max-width: 980px; margin: 24px auto 60px; padding: 0 16px; }
+  .screen.show { display: block; }
+  .phase-note { font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; margin-bottom: 16px; }
+
+  .card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 24px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--text-subtle); font-size: 13px; margin: 0 0 16px; }
+  .btn { display: inline-block; border: none; border-radius: var(--radius); font: inherit; font-size: 14px; font-weight: 500; padding: 8px 14px; cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:hover { background: var(--blue-hover); }
+  .btn.default { background: #F1F2F4; color: var(--text); border: 1px solid var(--border); }
+  .btn.subtle { background: transparent; color: var(--blue); padding: 4px 8px; }
+  .btn.big { font-size: 15px; padding: 10px 18px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=text], input[type=date], textarea {
+    width: 100%; border: 2px solid var(--border); border-radius: var(--radius);
+    font-family: var(--font); font-size: 14px; color: var(--text); padding: 8px 10px; background: #fff;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--blue); }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-subtle); margin: 14px 0 4px; }
+  textarea { min-height: 84px; resize: vertical; }
+
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: 1px; }
+  .badge.green { background: var(--green-bg); color: var(--green-text); }
+  .badge.grey { background: var(--grey-bg); color: var(--grey-text); }
+  .badge.blue { background: var(--blue-subtle-bg); color: var(--blue); }
+
+  .alert { border-radius: var(--radius); font-size: 13px; padding: 10px 14px; margin: 12px 0; }
+  .alert.warn { background: var(--yellow-bg); color: var(--yellow-text); border: 1px solid #F5E192; }
+  .alert.info { background: var(--blue-subtle-bg); color: var(--text); border: 1px solid #CCE0FF; }
+
+  /* ── экран 1: справочник критериев ─────────────────────────── */
+  .crit-list { display: flex; flex-direction: column; gap: 8px; }
+  .crit { border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; }
+  .crit .body { flex: 1; min-width: 0; }
+  .crit .name { font-weight: 600; font-size: 14px; }
+  .crit .prompt { font-size: 12.5px; color: var(--text-subtle); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crit .actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .crit.archived { opacity: .55; background: var(--row-hover); }
+  .archive-head { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; color: var(--text-subtlest); font-size: 13px; }
+  .archive-head::after { content: ""; flex: 1; border-top: 1px solid var(--border-subtle); }
+
+  /* ── экран 2: диалог запуска ───────────────────────────────── */
+  .dlg { max-width: 640px; margin: 0 auto; border-radius: var(--radius-page); box-shadow: 0 8px 28px rgba(9,30,66,.22); background: var(--surface); overflow: hidden; }
+  .dlg-head { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .dlg-body { padding: 20px; max-height: 60vh; overflow: auto; }
+  .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius); margin-bottom: 8px; }
+  .check-row input { margin-top: 3px; }
+  .check-row .t { font-weight: 600; font-size: 14px; }
+  .check-row .d { font-size: 12.5px; color: var(--text-subtle); }
+  .zone-label { font-size: 12px; font-weight: 600; color: var(--text-subtle); margin: 16px 0 6px; }
+  .tpl { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 2px solid var(--border-subtle); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; }
+  .tpl input { margin-top: 3px; }
+  .tpl.selected { border-color: var(--blue); background: var(--blue-subtle-bg); }
+  .tpl .name { font-weight: 600; font-size: 14px; }
+  .tpl .desc { font-size: 12.5px; color: var(--text-subtle); margin-top: 1px; }
+  .tpl.disabled { opacity: .55; cursor: default; }
+  .lozenge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 1px; }
+  .lozenge.new { background: var(--green-bg); color: var(--green-text); }
+  .lozenge.moved { background: var(--grey-bg); color: var(--grey-text); }
+  .zone-off { opacity: .55; pointer-events: none; }
+  .lockbar { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 6px; }
+  .lockbar .lbl { font-size: 12px; font-weight: 600; color: var(--text-subtle); }
+  textarea.locked { background: var(--row-hover); color: var(--text-subtle); font-size: 13px; line-height: 1.5; font-family: ui-monospace, Menlo, monospace; min-height: 280px; }
+  .dlg-foot { padding: 14px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; gap: 8px; background: #FAFBFC; }
+
+  /* ── экран 3: оценка на странице документа ─────────────────── */
+  .score-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
+  .score-row:last-of-type { border-bottom: none; }
+  .score-row .cn { flex: 0 0 240px; font-weight: 600; font-size: 14px; }
+  .score-row .cn .hint { display: block; font-weight: 400; font-size: 12px; color: var(--text-subtlest); margin-top: 2px; }
+  .seg { display: flex; gap: 6px; }
+  .seg button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border); background: #fff; font: inherit; font-size: 14px; color: var(--text-subtle); cursor: pointer; }
+  .seg button:hover { border-color: var(--blue); color: var(--blue); }
+  .seg button.sel { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 700; }
+  .seg button.skip { border-radius: 17px; width: 44px; font-size: 12px; }
+  .stale { font-size: 12.5px; color: var(--yellow-text); background: var(--yellow-bg); border-radius: var(--radius); padding: 6px 10px; margin-top: 6px; display: inline-block; }
+
+  /* ── экран 4: профиль ──────────────────────────────────────── */
+  .prof-head { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
+  .avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--blue-subtle-bg); color: var(--blue); font-size: 22px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .prof-actions { display: flex; gap: 10px; margin: 4px 0 20px; }
+  .crumbs { font-size: 13px; color: var(--text-subtle); margin-bottom: 12px; }
+  .crumbs a { color: var(--blue); text-decoration: none; }
+  .md-preview { border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px 14px; font-size: 14px; margin-top: 10px; background: var(--row-hover); }
+  .md-preview h3 { margin: 0 0 6px; font-size: 14px; }
+  .md-preview ul { margin: 6px 0; padding-left: 20px; }
+  .kbd { font-size: 11px; color: var(--text-subtlest); }
+
+  /* ── экран 5: статистика (горизонтальные бары, шкала 1–5) ──── */
+  .filters { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
+  .filters label { margin: 0 0 4px; }
+  .filters input[type=date] { width: 150px; }
+  .hero { display: flex; gap: 28px; align-items: center; padding: 16px 20px; background: var(--row-hover); border-radius: var(--radius); margin-bottom: 22px; }
+  .hero .num { font-size: 40px; font-weight: 700; line-height: 1; color: var(--text); }
+  .hero .cap { font-size: 12.5px; color: var(--text-subtle); margin-top: 4px; }
+  .hero .sep { width: 1px; height: 44px; background: var(--border); }
+
+  .chart { --row-h: 46px; }
+  .chart .axis-cap { font-size: 12px; color: var(--text-subtlest); margin: 4px 0 10px; }
+  .axis-row { position: relative; height: 20px; margin-bottom: 6px; border-bottom: 1px solid var(--border-subtle); }
+  .axis-row .track { position: absolute; left: 260px; right: 130px; top: 0; bottom: 0; }
+  .axis-row .track span { position: absolute; top: 0; transform: translateX(-50%); font-size: 11px; color: var(--text-subtlest); }
+  .axis-row .track span:last-child { transform: translateX(-100%); }
+  .gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-subtle); }
+  .brow { position: relative; height: var(--row-h); }
+  .brow .track { position: absolute; left: 260px; right: 130px; top: 0; bottom: 0; }
+  .brow .bar { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 14px; background: var(--blue); border-radius: 0 4px 4px 0; min-width: 3px; }
+  .brow .val { position: absolute; left: 100%; margin-left: 8px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .brow .n { font-weight: 400; color: var(--text-subtlest); font-size: 12px; }
+  .brow .cname { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 244px; font-size: 13.5px; font-weight: 600; text-align: right; padding-right: 16px; }
+  .brow .cname .st { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-subtlest); }
+  .brow.archived { opacity: .5; }
+  .brow.few .bar { opacity: .45; }
+  .brow.few .val::after { content: " · мало данных"; font-weight: 400; font-size: 11px; color: var(--text-subtlest); }
+  .legendline { margin-top: 14px; font-size: 12px; color: var(--text-subtlest); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--blue); vertical-align: -1px; }
+  .swatch.arch { opacity: .45; }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МАКЕТ · не прод</span>
+  <button class="mocktab active" data-s="s1" onclick="show('s1',this)">1 · Критерии</button>
+  <button class="mocktab" data-s="s2" onclick="show('s2',this)">2 · Запуск проверки</button>
+  <button class="mocktab" data-s="s3" onclick="show('s3',this)">3 · Оценка документа</button>
+  <button class="mocktab" data-s="s4" onclick="show('s4',this)">4 · Профиль аналитика</button>
+  <button class="mocktab" data-s="s5" onclick="show('s5',this)">5 · Статистика</button>
+</div>
+
+<!-- ══════════ ЭКРАН 1: справочник критериев ══════════ -->
+<section class="screen show" id="s1">
+  <div class="phase-note"><b>Фаза 1.</b> Новый раздел настроек «Критерии ИИ-проверок» — рядом с «Шаблоном требований» и «Подключением ИИ». Критерии глобальные: название + промт. Удаление — только в архив.</div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h1>Критерии ИИ-проверок</h1>
+        <p class="sub">Из чего собирается промт ИИ и по чему вы выставляете оценки. Активные критерии участвуют в новых проверках.</p>
+      </div>
+      <button class="btn primary" onclick="toggle('addForm')">＋ Добавить критерий</button>
+    </div>
+
+    <div class="crit-list">
+      <div class="crit">
+        <div class="body">
+          <div class="name">Полнота описания <span class="badge green">активен</span></div>
+          <div class="prompt">Проверь, что документ полностью описывает систему: все сценарии, роли, интеграции и данные упомянуты. Провал — если разработчику придётся додумывать…</div>
+        </div>
+        <div class="actions"><button class="btn subtle">Изменить</button><button class="btn subtle">В архив</button></div>
+      </div>
+      <div class="crit">
+        <div class="body">
+          <div class="name">Однозначность формулировок <span class="badge green">активен</span></div>
+          <div class="prompt">Найди формулировки, которые можно понять двумя способами: «по возможности», «в разумный срок», местоимения без антецедента…</div>
+        </div>
+        <div class="actions"><button class="btn subtle">Изменить</button><button class="btn subtle">В архив</button></div>
+      </div>
+      <div class="crit">
+        <div class="body">
+          <div class="name">Непротиворечивость требований <span class="badge green">активен</span></div>
+          <div class="prompt">Проверь, что требования не конфликтуют друг с другом по данным, срокам, ролям и состояниям. Каждое противоречие цитируй…</div>
+        </div>
+        <div class="actions"><button class="btn subtle">Изменить</button><button class="btn subtle">В архив</button></div>
+      </div>
+    </div>
+
+    <div class="archive-head">В архиве · 1 <span style="font-weight:400">(не участвует в новых проверках; оценки и статистика сохраняются)</span></div>
+    <div class="crit-list">
+      <div class="crit archived">
+        <div class="body">
+          <div class="name">Соответствие отраслевым стандартам <span class="badge grey">в архиве</span></div>
+          <div class="prompt">Проверь соответствие ГОСТ 34.602…</div>
+        </div>
+        <div class="actions"><button class="btn subtle">Восстановить</button></div>
+      </div>
+    </div>
+
+    <!-- форма добавления (появляется по кнопке) -->
+    <div id="addForm" style="display:none; margin-top:20px; border-top:1px solid var(--border-subtle); padding-top:16px;">
+      <h2>Новый критерий</h2>
+      <label>Название</label>
+      <input type="text" placeholder="Например: Качество примеров">
+      <label>Промт — что и как проверять; что считать провалом</label>
+      <textarea placeholder="Проверь, что каждое неочевидное требование подкреплено примером…"></textarea>
+      <div class="alert info">Код критерия (<span class="kbd">examples_quality</span>) сгенерируется автоматически — названия потом можно менять свободно.</div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn primary">Сохранить критерий</button>
+        <button class="btn default" onclick="toggle('addForm')">Отмена</button>
+      </div>
+    </div>
+
+    <!-- предупреждение при переименовании (демо-состояние формы «Изменить») -->
+    <div class="alert warn" style="margin-top:20px"><b>Демо предупреждения при переименовании:</b> «Название увидят и прошлые оценки в статистике — уточните, если переименование меняет смысл критерия». Промт меняется со сбросом актуальности: при следующем запуске документы будут перепроверены по этому критерию.</div>
+  </div>
+</section>
+
+<!-- ══════════ ЭКРАН 2: диалог запуска ══════════ -->
+<section class="screen" id="s2">
+  <div class="phase-note"><b>Фаза 1.</b> Диалог запуска сохраняет сегодняшнюю структуру — «Что проверить», выбор шаблона, промт. Новое: критерии наполнения с галочками и собранный из них промт под замком; снял замок — предупреждение, правка только на этот запуск.</div>
+  <div class="dlg">
+    <div class="dlg-head"><h2 style="margin:0">Проверка документов</h2><div class="sub" style="margin:2px 0 0">Будет проверено: <b>1</b> · [СТ] GDS-15 Загрузка кино</div></div>
+    <div class="dlg-body">
+      <div class="zone-label">Что проверить</div>
+      <label class="tpl selected"><input type="checkbox" checked onchange="zoneToggle(this,'zoneTpl')"><span><span class="name">Соответствие шаблону</span><div class="desc">Структура разделов документа сверяется с шаблоном требований</div></span></label>
+      <label class="tpl selected"><input type="checkbox" checked onchange="zoneToggle(this,'zoneAi')"><span><span class="name">Наполнение (ИИ)</span><div class="desc">Качество содержимого проверяет ИИ по критериям ниже</div></span></label>
+
+      <div id="zoneTpl">
+        <div class="zone-label">Шаблон требований</div>
+        <label class="tpl selected"><input type="radio" name="tpl" checked><span><span class="name">Требования [СТ] <span class="lozenge new">по умолчанию</span></span><div class="desc">12 разделов · версия 2 от 12.08.2026 — активная</div></span></label>
+        <label class="tpl disabled"><input type="radio" disabled><span><span class="name">Другие шаблоны <span class="lozenge moved">скоро</span></span><div class="desc">Список расширится, когда шаблонов станет несколько</div></span></label>
+      </div>
+
+      <div id="zoneAi">
+        <div class="zone-label">Критерии наполнения (ИИ)</div>
+        <div class="check-row"><input type="checkbox" id="c1" checked onchange="rebuildPrompt()"><div><div class="t">Полнота описания</div></div></div>
+        <div class="check-row"><input type="checkbox" id="c2" checked onchange="rebuildPrompt()"><div><div class="t">Однозначность формулировок</div></div></div>
+        <div class="check-row"><input type="checkbox" id="c3" checked onchange="rebuildPrompt()"><div><div class="t">Непротиворечивость требований</div></div></div>
+        <div class="kbd" style="margin:2px 0 0">Промт ниже собирается из отмеченных критериев и обновляется на лету. Сняли критерий — его не будет и в оценке на странице документа</div>
+
+        <div class="lockbar">
+          <span class="lbl">🔒 Промт ИИ — собран из отмеченных критериев</span>
+          <span style="display:flex; gap:6px;">
+            <button class="btn subtle" id="restoreBtn" style="display:none" onclick="restorePrompt()">⟲ Вернуть собранный промт</button>
+            <button class="btn default" id="lockBtn" onclick="unlockPrompt()">Изменить промт</button>
+          </span>
+        </div>
+      <textarea id="promptArea" class="locked" readonly>Ты — ведущий системный аналитик, ревьюер требований.
+
+Проверь документ по критериям:
+
+1. Полнота описания: все сценарии, роли, интеграции и данные упомянуты; провал — если разработчику придётся додумывать.
+2. Однозначность формулировок: найди формулировки, которые можно понять двумя способами.
+3. Непротиворечивость требований: конфликтам по данным, срокам, ролям и состояниям — нет.
+
+Замечания оформляй в Markdown с цитатами.</textarea>
+
+      <div class="alert warn" id="lockWarn" style="display:none">Промт изменён вручную: ИИ проверит документ <b>не по вашим критериям</b> — выставлять оценку после будет сложнее. Галочки критериев больше не влияют на промт. Изменение действует только на этот запуск и не сохраняется в критерии.</div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn default">Отмена</button>
+      <button class="btn primary">▶ Запустить проверку — 1 док.</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ЭКРАН 3: оценка на странице документа ══════════ -->
+<section class="screen" id="s3">
+  <div class="phase-note"><b>Фаза 2.</b> Низ страницы документа: оценка руководителя по активным критериям, шкала 1–5. «—» = не оценивать (записи не будет). Кружки кликабельны.</div>
+  <div class="card">
+    <div class="crumbs"><a href="#">Аналитики</a> / <a href="#">Иванов Иван</a> / [СТ] GDS-15 Загрузка кино · …отчёт проверки выше ↑</div>
+    <h1>Оценка руководителя</h1>
+    <p class="sub">Выставьте оценку по каждому критерию — она попадёт в статистику аналитика. Не оцениваете критерий — оставьте «—».</p>
+
+    <div class="score-row">
+      <div class="cn">Полнота описания</div>
+      <div class="seg" data-row="1">
+        <button onclick="pick(this)">1</button><button onclick="pick(this)">2</button><button onclick="pick(this)">3</button><button onclick="pick(this)">4</button><button class="sel" onclick="pick(this)">5</button><button class="skip" onclick="pick(this)">—</button>
+      </div>
+    </div>
+    <div class="score-row">
+      <div class="cn">Однозначность формулировок
+        <span class="stale">⚠ Документ перепроверен 27.08 после вашей оценки — возможно, стоит перепоставить</span>
+      </div>
+      <div class="seg">
+        <button onclick="pick(this)">1</button><button onclick="pick(this)">2</button><button class="sel" onclick="pick(this)">3</button><button onclick="pick(this)">4</button><button onclick="pick(this)">5</button><button class="skip" onclick="pick(this)">—</button>
+      </div>
+    </div>
+    <div class="score-row">
+      <div class="cn">Непротиворечивость требований<span class="hint">не оценено — записи в БД нет</span></div>
+      <div class="seg">
+        <button onclick="pick(this)">1</button><button onclick="pick(this)">2</button><button onclick="pick(this)">3</button><button onclick="pick(this)">4</button><button onclick="pick(this)">5</button><button class="sel skip" onclick="pick(this)">—</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px; display:flex; gap:8px; align-items:center;">
+      <button class="btn primary">Сохранить оценку</button>
+      <span class="kbd">Шкала: 1 — ужасно … 5 — идеально</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ЭКРАН 4: профиль аналитика ══════════ -->
+<section class="screen" id="s4">
+  <div class="phase-note"><b>Фаза 3.</b> Клик по аналитику в сайдбаре ведёт в профиль (досье): крупные кнопки «Документы» и «Статистика» + заметки в Markdown.</div>
+  <div class="card">
+    <div class="crumbs"><a href="#">Аналитики</a> / Иванов Иван — профиль</div>
+    <div class="prof-head">
+      <div class="avatar">ИИ</div>
+      <div>
+        <h1 style="margin:0">Иванов Иван</h1>
+        <div class="sub" style="margin:2px 0 0">ivanov@bfts.ru · 17 документов · последняя проверка 27.08.2026</div>
+      </div>
+    </div>
+    <div class="prof-actions">
+      <button class="btn primary big">📄 Документы (17)</button>
+      <button class="btn default big">📊 Статистика</button>
+    </div>
+
+    <h2>Заметки по аналитику</h2>
+    <p class="sub">Приватный черновик руководителя в Markdown — виден только вам. История версий не ведётся.</p>
+    <textarea style="min-height:180px">## Общее
+- Сильная сторона — интеграции, разбирался с СМЭВ быстрее всех
+- Повторно путает уровни требований: бизнес/системные — обсудить на встрече 05.09
+
+## План развития
+1. Прогнать выборочно документы по критерию «Однозначность»
+2. Дать шаблон BRD из нового эталона</textarea>
+    <div class="md-preview">
+      <b>Предпросмотр</b>
+      <h3>Общее</h3>
+      <ul>
+        <li>Сильная сторона — интеграции, разбирался с СМЭВ быстрее всех</li>
+        <li>Повторно путает уровни требований: бизнес/системные — обсудить на встрече 05.09</li>
+      </ul>
+      <h3>План развития</h3>
+      <ul><li>Прогнать выборочно документы по критерию «Однозначность»</li><li>Дать шаблон BRD из нового эталона</li></ul>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button class="btn primary">Сохранить заметки</button>
+      <button class="btn default">Удалить</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ЭКРАН 5: статистика ══════════ -->
+<section class="screen" id="s5">
+  <div class="phase-note"><b>Фаза 4.</b> Статистика из профиля: период по дате выставления оценок; средняя по каждому критерию, который когда-либо оценивался. Активные — ярко, архивные — бледные, при n&lt;3 оценка приглушена «мало данных».</div>
+  <div class="card">
+    <div class="crumbs"><a href="#">Аналитики</a> / <a href="#">Иванов Иван</a> / Статистика</div>
+    <h1>Статистика · Иванов Иван</h1>
+
+    <div class="filters">
+      <div><label>Оценки выставлены с</label><input type="date" value="2026-06-01"></div>
+      <div><label>по</label><input type="date" value="2026-08-28"></div>
+      <button class="btn primary">Применить</button>
+    </div>
+
+    <div class="hero">
+      <div><div class="num">4.1</div><div class="cap">общий балл · из 5</div></div>
+      <div class="sep"></div>
+      <div><div class="num">12</div><div class="cap">документов с оценкой</div></div>
+      <div class="sep"></div>
+      <div><div class="num">4</div><div class="cap">критерия оценено</div></div>
+    </div>
+
+    <div class="chart">
+      <div class="axis-cap">Средняя оценка по критерию · шкала 1–5 · критерии: <span class="swatch"></span> активный · <span class="swatch arch"></span> в архиве</div>
+
+      <!-- ось шкалы: подписи 1–5 один раз, над барами -->
+      <div class="axis-row">
+        <div class="track"><span style="left:20%">1</span><span style="left:40%">2</span><span style="left:60%">3</span><span style="left:80%">4</span><span style="left:100%">5</span></div>
+      </div>
+
+      <!-- значения подобраны для демо: ширина = средняя/5 -->
+      <div class="brow">
+        <div class="cname">Непротиворечивость требований<span class="st">10 оценок</span></div>
+        <div class="track">
+          <div class="gridline" style="left:20%"></div><div class="gridline" style="left:40%"></div><div class="gridline" style="left:60%"></div><div class="gridline" style="left:80%"></div><div class="gridline" style="left:calc(100% - 1px)"></div>
+          <div class="bar" style="width:92%"></div>
+          <div class="val">4.6 <span class="n">· n=10</span></div>
+        </div>
+      </div>
+      <div class="brow">
+        <div class="cname">Полнота описания<span class="st">12 оценок</span></div>
+        <div class="track">
+          <div class="gridline" style="left:20%"></div><div class="gridline" style="left:40%"></div><div class="gridline" style="left:60%"></div><div class="gridline" style="left:80%"></div><div class="gridline" style="left:calc(100% - 1px)"></div>
+          <div class="bar" style="width:86%"></div>
+          <div class="val">4.3 <span class="n">· n=12</span></div>
+        </div>
+      </div>
+      <div class="brow">
+        <div class="cname">Однозначность формулировок<span class="st">12 оценок</span></div>
+        <div class="track">
+          <div class="gridline" style="left:20%"></div><div class="gridline" style="left:40%"></div><div class="gridline" style="left:60%"></div><div class="gridline" style="left:80%"></div><div class="gridline" style="left:calc(100% - 1px)"></div>
+          <div class="bar" style="width:76%"></div>
+          <div class="val">3.8 <span class="n">· n=12</span></div>
+        </div>
+      </div>
+      <div class="brow few">
+        <div class="cname">Качество примеров<span class="st">2 оценки</span></div>
+        <div class="track">
+          <div class="gridline" style="left:20%"></div><div class="gridline" style="left:40%"></div><div class="gridline" style="left:60%"></div><div class="gridline" style="left:80%"></div><div class="gridline" style="left:calc(100% - 1px)"></div>
+          <div class="bar" style="width:56%"></div>
+          <div class="val">2.8 <span class="n">· n=2</span></div>
+        </div>
+      </div>
+      <div class="brow archived">
+        <div class="cname">Соответствие отраслевым стандартам<span class="st">в архиве · 6 оценок</span></div>
+        <div class="track">
+          <div class="gridline" style="left:20%"></div><div class="gridline" style="left:40%"></div><div class="gridline" style="left:60%"></div><div class="gridline" style="left:80%"></div><div class="gridline" style="left:calc(100% - 1px)"></div>
+          <div class="bar" style="width:80%"></div>
+          <div class="val">4.0 <span class="n">· n=6</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legendline">Оценки выставляет руководитель вручную (1 — ужасно … 5 — идеально) после просмотра итога проверки. Период фильтрует по дате выставления оценки. Критерий в архиве не участвует в новых проверках, но остаётся в статистике.</div>
+  </div>
+</section>
+
+<script>
+  function show(id, btn) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+    document.querySelectorAll('.mocktab').forEach(t => t.classList.toggle('active', t === btn));
+    window.scrollTo(0, 0);
+  }
+  function toggle(id) {
+    const el = document.getElementById(id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+  // ── живой сбор промта из отмеченных критериев ──
+  const P_HEAD = 'Ты — ведущий системный аналитик, ревьюер требований.\n\nПроверь документ по критериям:\n\n';
+  const P_TAIL = '\nЗамечания оформляй в Markdown с цитатами.';
+  const CRITERIA = [
+    ['c1', 'Полнота описания: все сценарии, роли, интеграции и данные упомянуты; провал — если разработчику придётся додумывать.'],
+    ['c2', 'Однозначность формулировок: найди формулировки, которые можно понять двумя способами.'],
+    ['c3', 'Непротиворечивость требований: конфликтам по данным, срокам, ролям и состояниям — нет.']
+  ];
+  function rebuildPrompt() {
+    const area = document.getElementById('promptArea');
+    if (!area.readOnly) return; // редактируется вручную — галочки промт больше не меняют
+    const on = CRITERIA.filter(([id]) => document.getElementById(id).checked);
+    const body = on.length
+      ? on.map(([, text], i) => (i + 1) + '. ' + text).join('\n')
+      : '(не отмечен ни один критерий — проверка наполнения не запустится)';
+    area.value = P_HEAD + body + P_TAIL;
+  }
+  function unlockPrompt() {
+    const area = document.getElementById('promptArea');
+    const warn = document.getElementById('lockWarn');
+    const btn = document.getElementById('lockBtn');
+    const rst = document.getElementById('restoreBtn');
+    area.readOnly = false;
+    area.classList.remove('locked');
+    warn.style.display = 'block';
+    btn.disabled = true;
+    btn.textContent = 'Замок снят';
+    rst.style.display = 'inline-block';
+  }
+  function restorePrompt() {
+    const area = document.getElementById('promptArea');
+    const warn = document.getElementById('lockWarn');
+    const btn = document.getElementById('lockBtn');
+    const rst = document.getElementById('restoreBtn');
+    area.readOnly = true;
+    area.classList.add('locked');
+    rebuildPrompt();
+    warn.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = 'Изменить промт';
+    rst.style.display = 'none';
+  }
+  function zoneToggle(cb, id) {
+    document.getElementById(id).classList.toggle('zone-off', !cb.checked);
+  }
+  function pick(b) {
+    b.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+  }
+  // экран по #хешу (для скриншотов и ссылок)
+  if (location.hash) {
+    const id = location.hash.slice(1);
+    const btn = document.querySelector(`.mocktab[data-s="${id}"]`);
+    if (btn) show(id, btn);
+  }
+  // демо-состояние ?demo=off: первый критерий отжат — промт пересобран без него
+  if (new URLSearchParams(location.search).get('demo') === 'off') {
+    document.getElementById('c1').checked = false;
+    rebuildPrompt();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Авторизация и роли · Confluence Reviewer</title>
+<style>
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtlest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --yellow-bg: #FFF7D6;
+    --yellow-text: #7A5D00;
+    --red-bg: #FFEBE6;
+    --red-text: #AE2E24;
+    --purple: #6E5DC6;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+  .mockbar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 20px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 30; }
+  .mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+  .mocktab { border: 0; background: transparent; color: var(--nav-icon); font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: var(--radius); cursor: pointer; }
+  .mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+
+  .screen { display: none; }
+  .screen.show { display: block; }
+  .phase-note { max-width: 1000px; margin: 16px auto 0; padding: 0 20px; }
+  .phase-note span { display: block; font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; }
+
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .page { max-width: 1000px; margin: 28px auto 60px; padding: 0 20px; }
+  .card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 24px; }
+
+  .btn { border: 0; font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 16px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:hover { background: var(--blue-hover); }
+  .btn-default { background: #F1F2F4; color: var(--text); }
+  .btn-default:hover { background: #DCDFE4; }
+  .btn-subtle { background: transparent; color: var(--text-subtle); }
+  .btn-subtle:hover { background: var(--row-hover); color: var(--text); }
+  .btn-danger { background: transparent; color: var(--red-text); }
+  .btn-danger:hover { background: var(--red-bg); }
+  .btn-success { background: transparent; color: var(--green-text); }
+  .btn-success:hover { background: var(--green-bg); }
+  .btn.small { padding: 5px 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  /* ═══ вход ═══ */
+  .login-wrap { max-width: 400px; margin: 40px auto; }
+  .login-logo { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 18px; }
+  .logo-mark { width: 36px; height: 36px; border-radius: 8px; background: var(--nav-bg); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+  .tabs { display: flex; border-bottom: 2px solid var(--border-subtle); margin-bottom: 18px; }
+  .tab { flex: 1; border: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text-subtlest); padding: 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab.active { color: var(--blue); font-weight: 600; border-bottom-color: var(--blue); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-subtle); margin-bottom: 4px; }
+  .field input, .field textarea { width: 100%; font: inherit; font-size: 13.5px; padding: 9px 11px; border: 2px solid var(--border); border-radius: 5px; }
+  .field input:focus { outline: none; border-color: var(--blue); }
+  .field .hint { font-size: 11.5px; color: var(--text-subtlest); margin-top: 4px; line-height: 1.45; }
+  .field .hint a { color: var(--blue); text-decoration: none; }
+  .btn-block { width: 100%; justify-content: center; padding: 10px; font-size: 14px; }
+
+  /* статусные экраны */
+  .status-card { max-width: 460px; margin: 40px auto; text-align: center; padding: 32px 28px; }
+  .status-ico { font-size: 40px; margin-bottom: 12px; }
+  .status-card h2 { margin: 0 0 8px; font-size: 18px; }
+  .status-card p { margin: 0 0 6px; font-size: 13.5px; color: var(--text-subtle); line-height: 1.5; }
+  .status-meta { background: var(--row-hover); border-radius: 8px; padding: 10px 14px; margin: 14px 0; font-size: 12.5px; color: var(--text-subtle); text-align: left; }
+  .status-meta b { color: var(--text); }
+
+  /* ═══ каркас с шапкой пользователя ═══ */
+  .app { display: flex; min-height: 60vh; }
+  .sidebar { width: 260px; flex: none; background: var(--surface); border-right: 1px solid var(--border-subtle); padding: 12px 10px; display: flex; flex-direction: column; }
+  .space-head { display: flex; gap: 8px; align-items: center; padding: 4px 8px 12px; }
+  .space-icon { width: 28px; height: 28px; flex: none; border-radius: 6px; background: var(--nav-bg); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+  .space-name { font-weight: 600; font-size: 14px; }
+  .nav-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtlest); padding: 10px 8px 4px; }
+  .nav-row { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text-subtle); padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
+  .nav-row:hover { background: var(--row-hover); color: var(--text); }
+  .nav-row.active { background: var(--blue-subtle-bg); color: var(--blue); font-weight: 600; }
+  .user-box { margin-top: auto; border-top: 1px solid var(--border-subtle); padding: 10px 8px 2px; display: flex; gap: 9px; align-items: center; }
+  .u-avatar { width: 30px; height: 30px; flex: none; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+  .u-name { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+  .u-role { font-size: 10.5px; color: var(--text-subtlest); }
+  .role-pill { display: inline-block; font-size: 9.5px; padding: 0 6px; border-radius: 8px; font-weight: 700; letter-spacing: .04em; }
+  .role-god { background: var(--yellow-bg); color: var(--yellow-text); }
+  .role-lead { background: var(--blue-subtle-bg); color: var(--blue); }
+  .u-logout { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--text-subtlest); font-size: 15px; padding: 4px; border-radius: 4px; }
+  .u-logout:hover { background: var(--red-bg); color: var(--red-text); }
+
+  .content { flex: 1; min-width: 0; padding: 16px 24px 40px; }
+
+  /* ═══ заявки (God) ═══ */
+  .req-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+  .req-row:last-child { border-bottom: 0; }
+  .req-main { flex: 1; min-width: 0; }
+  .req-name { font-size: 14px; font-weight: 600; }
+  .req-sub { font-size: 12px; color: var(--text-subtlest); margin-top: 1px; }
+  .req-when { font-size: 11.5px; color: var(--text-subtlest); white-space: nowrap; }
+  .badge { display: inline-block; font-size: 10.5px; padding: 2px 9px; border-radius: 10px; font-weight: 600; }
+  .badge-pending { background: var(--yellow-bg); color: var(--yellow-text); }
+  .badge-approved { background: var(--green-bg); color: var(--green-text); }
+  .badge-rejected { background: var(--red-bg); color: var(--red-text); }
+
+  /* ═══ реестр-попап ═══ */
+  .overlay { position: fixed; inset: 0; background: rgba(9, 30, 66, .44); display: none; place-items: center; z-index: 50; padding: 20px; }
+  .overlay.show { display: grid; }
+  .modal { background: var(--surface); border-radius: 10px; box-shadow: 0 20px 32px rgba(9,30,66,.2); width: 640px; max-width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
+  .modal-head { padding: 16px 20px 0; display: flex; align-items: center; gap: 10px; }
+  .modal-head h2 { font-size: 16px; margin: 0; flex: 1; }
+  .modal-close { border: 0; background: transparent; font-size: 16px; color: var(--text-subtlest); cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+  .modal-close:hover { background: var(--row-hover); }
+  .modal-body { padding: 12px 20px; overflow: auto; }
+  .modal-foot { padding: 12px 20px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border-subtle); }
+  .reg-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; }
+  .reg-row:hover { background: var(--row-hover); }
+  .reg-main { flex: 1; min-width: 0; }
+  .reg-name { font-size: 13.5px; font-weight: 600; }
+  .reg-sub { font-size: 11.5px; color: var(--text-subtlest); }
+  .reg-owner { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-subtle); background: var(--bg); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .owner-dot { width: 8px; height: 8px; border-radius: 3px; display: inline-block; }
+
+  /* ═══ шаблоны/критерии: мои + заблокированные действия ═══ */
+  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .tpl-card { background: var(--surface); border-radius: 8px; box-shadow: var(--shadow); padding: 14px 16px; }
+  .tpl-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tpl-sub { font-size: 12px; color: var(--text-subtlest); margin-top: 3px; }
+  .tpl-actions { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+  .chip { font-size: 11px; padding: 2px 9px; border-radius: 10px; background: var(--blue-subtle-bg); color: #0055CC; font-weight: 500; }
+  .lock-note { font-size: 11.5px; color: var(--text-subtlest); font-style: italic; }
+
+  /* ═══ матрица прав ═══ */
+  table.perms { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
+  table.perms th { text-align: left; padding: 10px 14px; background: var(--row-hover); font-size: 12px; color: var(--text-subtle); border-bottom: 1px solid var(--border-subtle); }
+  table.perms td { padding: 9px 14px; border-bottom: 1px solid var(--border-subtle); }
+  table.perms tr:last-child td { border-bottom: 0; }
+  .yes { color: var(--green-text); font-weight: 600; }
+  .no { color: var(--red-text); font-weight: 600; }
+  .own { color: var(--blue); font-weight: 600; }
+
+  /* ИИ-настройки */
+  .ai-warn { background: var(--red-bg); color: var(--red-text); border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  .ai-ok { background: var(--green-bg); color: var(--green-text); border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+
+  /* активность */
+  .act-row { display: flex; gap: 10px; padding: 8px 16px; font-size: 12.5px; align-items: center; }
+  .act-row + .act-row { border-top: 1px dashed var(--border-subtle); }
+  .act-main { flex: 1; min-width: 0; }
+  .act-title { font-weight: 600; }
+  .act-sub { color: var(--text-subtlest); font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МАКЕТ</span>
+  <button class="mocktab active" data-s="s-login">1. Вход (две вкладки)</button>
+  <button class="mocktab" data-s="s-pending">2. Заявка на рассмотрении</button>
+  <button class="mocktab" data-s="s-rejected">3. Отказ + повторная подача</button>
+  <button class="mocktab" data-s="s-requests">4. Заявки (God)</button>
+  <button class="mocktab" data-s="s-userbox">5. Шапка пользователя</button>
+  <button class="mocktab" data-s="s-ai">6. Мой доступ к ИИ</button>
+  <button class="mocktab" data-s="s-templates">7. Мои шаблоны + реестр</button>
+  <button class="mocktab" data-s="s-home">8. Главная лида</button>
+  <button class="mocktab" data-s="s-perms">9. Матрица (справочно)</button>
+  <button class="mocktab" data-s="s-roles">10. Роли и права (God)</button>
+  <button class="mocktab" data-s="s-analyst-lead">11. Лид аналитика</button>
+</div>
+
+<!-- ═══ 1. ВХОД ═══ -->
+<div class="screen show" id="s-login">
+  <div class="phase-note"><span>Одна страница входа: God входит логином и паролем (как сейчас), лиды — токеном Confluence. Токен проверяется в Confluence: из него достаются ФИО, почта и логин. Дальше три пути: новая заявка → «на рассмотрении» · подтверждён → вход в систему · отклонён → экран 3.</span></div>
+
+  <div class="login-wrap">
+    <div class="login-logo">
+      <span class="logo-mark">РТ</span>
+      <div style="text-align:left"><div style="font-weight:700;font-size:16px">Ревью требований</div>
+      <div style="font-size:12px;color:var(--text-subtlest)">вход в сервис</div></div>
+    </div>
+    <div class="card">
+      <div class="tabs">
+        <button class="tab" onclick="mockSwitchLogin(this, 'pwd')">Логин и пароль</button>
+        <button class="tab active" onclick="mockSwitchLogin(this, 'token')">Токен Confluence</button>
+      </div>
+      <div id="login-pwd" style="display:none">
+        <div class="field">
+          <label>Логин</label>
+          <input type="text" placeholder="Логин сервиса">
+        </div>
+        <div class="field">
+          <label>Пароль</label>
+          <input type="password" placeholder="Пароль">
+        </div>
+        <button class="btn btn-primary btn-block">Войти</button>
+      </div>
+      <div id="login-token">
+        <div class="field">
+          <label>Персональный токен Confluence</label>
+          <input type="password" placeholder="Вставьте свой токен">
+          <div class="hint">Токен создаётся в Confluence: <a>Профиль → Настройки → Личные токены доступа</a>. Мы прочитаем из него ваше имя, почту и логин — и создадим заявку на доступ.</div>
+        </div>
+        <button class="btn btn-primary btn-block">Продолжить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2. ЗАЯВКА НА РАССМОТРЕНИИ ═══ -->
+<div class="screen" id="s-pending">
+  <div class="phase-note"><span>Что видит новый человек сразу после вставки токена: заявка создана, ждёт решения God. Обновляет страницу — видит этот же статус, пока заявка не разобрана.</span></div>
+
+  <div class="card status-card">
+    <div class="status-ico">⏳</div>
+    <h2>Заявка отправлена</h2>
+    <p>Мы проверили ваш токен в Confluence и передали заявку администратору сервиса. Обычно решение занимает меньше дня.</p>
+    <div class="status-meta">
+      <b>Мария Смирнова</b><br>
+      maria.smirnova@company.ru · логин <b>m.smirnova</b>
+    </div>
+    <p>Как только заявку одобрят — просто войдите тем же токеном.</p>
+    <button class="btn btn-default" onclick="show('s-login')">Вернуться ко входу</button>
+  </div>
+</div>
+
+<!-- ═══ 3. ОТКАЗ + ПОВТОРНАЯ ПОДАЧА ═══ -->
+<div class="screen" id="s-rejected">
+  <div class="phase-note"><span>Отклонённая заявка — не тупик: человек может подать заявку повторно тем же токеном (например, после разговора с администратором она будет рассмотрена снова). История решений сохраняется.</span></div>
+
+  <div class="card status-card">
+    <div class="status-ico">🚫</div>
+    <h2>Заявка отклонена</h2>
+    <div class="status-meta">
+      <b>Пётр Скворцов</b><br>
+      skvortsov@company.ru · подана 08.09 · отклонена 09.09
+    </div>
+    <p>Если считаете, что доступ вам нужен, — свяжитесь с администратором сервиса и подайте заявку повторно.</p>
+    <div style="display:flex; gap:8px; justify-content:center">
+      <button class="btn btn-default" onclick="show('s-login')">Вернуться ко входу</button>
+      <button class="btn btn-primary">Подать заявку повторно</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 4. ЗАЯВКИ (GOD) ═══ -->
+<div class="screen" id="s-requests">
+  <div class="phase-note"><span>Страница модерации — только для God: новые заявки сверху (Принять / Отклонить), ниже — история решений. У отклонённых остаётся кнопка «Вернуть» (снова сделать активным), потому что повторная подача разрешена.</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <h1>Заявки на доступ</h1>
+      <span class="badge badge-pending">2 новых</span>
+    </div>
+    <div class="card" style="padding:0;margin-bottom:16px">
+      <div class="req-row">
+        <span class="u-avatar" style="background:var(--blue)">МС</span>
+        <span class="req-main">
+          <span class="req-name">Мария Смирнова <span class="badge badge-pending">ожидает</span></span>
+          <span class="req-sub">maria.smirnova@company.ru · логин m.smirnova</span>
+        </span>
+        <span class="req-when">сегодня, 10:24</span>
+        <select style="font:inherit;font-size:12.5px;padding:6px 8px;border:2px solid var(--border);border-radius:5px" title="Роль при одобрении">
+          <option>Роль: Lead</option><option>Роль: Наблюдатель</option><option>Роль: Ревьюер</option>
+        </select>
+        <button class="btn btn-success small">✓ Принять</button>
+        <button class="btn btn-danger small">✕ Отклонить</button>
+      </div>
+      <div class="req-row">
+        <span class="u-avatar" style="background:#8993A4">ПС</span>
+        <span class="req-main">
+          <span class="req-name">Пётр Скворцов <span class="badge badge-pending">ожидает</span></span>
+          <span class="req-sub">skvortsov@company.ru · логин p.skvortsov</span>
+        </span>
+        <span class="req-when">вчера, 18:02</span>
+        <select style="font:inherit;font-size:12.5px;padding:6px 8px;border:2px solid var(--border);border-radius:5px" title="Роль при одобрении">
+          <option>Роль: Lead</option><option>Роль: Наблюдатель</option><option>Роль: Ревьюер</option>
+        </select>
+        <button class="btn btn-success small">✓ Принять</button>
+        <button class="btn btn-danger small">✕ Отклонить</button>
+      </div>
+    </div>
+
+    <div class="nav-label" style="padding-left:2px">История решений</div>
+    <div class="card" style="padding:0">
+      <div class="req-row">
+        <span class="u-avatar" style="background:var(--green-text)">АК</span>
+        <span class="req-main">
+          <span class="req-name">Анна Ковалёва <span class="badge badge-approved">доступ открыт</span></span>
+          <span class="req-sub">kovaleva@company.ru · одобрена 05.09</span>
+        </span>
+      </div>
+      <div class="req-row">
+        <span class="u-avatar" style="background:var(--red-text)">ПС</span>
+        <span class="req-main">
+          <span class="req-name">Пётр Скворцов <span class="badge badge-rejected">отклонена 09.09</span></span>
+          <span class="req-sub">может подать повторно</span>
+        </span>
+        <button class="btn btn-subtle small">↺ Вернуть в новые</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 5. ШАПКА ПОЛЬЗОВАТЕЛЯ ═══ -->
+<div class="screen" id="s-userbox">
+  <div class="phase-note"><span>Пользователь живёт внизу сайдбара: ФИО, роль (God / Lead), выход. Наименее заметное место, которое всегда под рукой — как в Confluence.</span></div>
+
+  <div class="app" style="border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden; max-width:760px; margin:16px auto">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Обзор</div>
+      <button class="nav-row">🏠 Главная</button>
+      <div class="nav-label">Структура</div>
+      <button class="nav-row">🗂 Кластеры</button>
+      <button class="nav-row">👥 Все аналитики</button>
+      <div class="nav-label">Моё</div>
+      <button class="nav-row">🧩 Шаблоны</button>
+      <button class="nav-row">✅ Критерии ИИ</button>
+      <button class="nav-row active">⚡ Мой доступ к ИИ</button>
+      <div class="nav-label">Администрирование</div>
+      <button class="nav-row" title="Только просмотр">🛡 Роли и права</button>
+
+      <div class="user-box">
+        <span class="u-avatar" style="background:var(--purple)">МС</span>
+        <span>
+          <span class="u-name">Мария Смирнова</span><br>
+          <span class="u-role"><span class="role-pill role-lead">LEAD</span></span>
+        </span>
+        <button class="u-logout" title="Выйти">⎋</button>
+      </div>
+    </aside>
+    <main class="content" style="display:grid;place-items:center;color:var(--text-subtlest);font-size:13px">
+      содержимое страницы…
+    </main>
+  </div>
+  <div class="phase-note" style="max-width:760px"><span>У God в этом же блоке — роль GOD и раздел «Заявки на доступ» виден только ему. Пункт «Мой доступ к ИИ» переименован: настройки персональные.</span></div>
+</div>
+
+<!-- ═══ 6. МОЙ ДОСТУП К ИИ ═══ -->
+<div class="screen" id="s-ai">
+  <div class="phase-note"><span>Дизайн текущей страницы «Подключение ИИ» (шаги 01/02/03), но настройки — персональные: ваши проверки идут через ваш доступ. Пока не сохранён полный набор — проверки заблокированы (баннер). Только God: ниже — шаг «Настройка по умолчанию» для тех, кто не настроил своё.</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <div class="page-head" style="display:flex;gap:16px;align-items:center;margin-bottom:6px">
+      <span style="width:44px;height:44px;border-radius:10px;background:var(--nav-bg);display:grid;place-items:center;color:#fff;font-size:19px">⚡</span>
+      <div style="flex:1">
+        <h1 style="margin:0">Мой доступ к ИИ</h1>
+        <div style="font-size:12.5px;color:var(--text-subtlest)">персональные настройки · изменено: 08.09.2026, 14:02</div>
+      </div>
+      <button class="btn btn-primary">Сохранить</button>
+      <button class="btn btn-default">Проверить связь</button>
+    </div>
+
+    <div class="ai-warn" style="margin-top:14px">🔒 Проверки заблокированы: сохраните свой доступ к ИИ (все три шага ниже) — кнопки проверок разблокируются.</div>
+
+    <div class="settings-form card" style="margin-top:14px">
+      <!-- 01 · протокол -->
+      <div style="margin-bottom:22px">
+        <div style="display:flex;gap:10px;align-items:baseline">
+          <span style="font-size:20px;font-weight:700;color:var(--text-subtlest);opacity:.45">01</span>
+          <b style="font-size:15px">Протокол API</b>
+        </div>
+        <p style="margin:6px 0 12px;font-size:13px;color:var(--text-subtle)">Определяет формат запросов к провайдеру. Если не уверены — оставьте как есть.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+          <label style="display:flex;gap:12px;align-items:center;border:2px solid var(--blue);border-radius:8px;padding:12px 14px;cursor:pointer;background:var(--blue-subtle-bg)">
+            <input type="radio" name="proto" checked>
+            <span style="width:32px;height:32px;border-radius:8px;background:var(--nav-bg);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px">O</span>
+            <span><b style="font-size:13.5px">OpenAI-совместимый</b><div style="font-size:12px;color:var(--text-subtle)">chat/completions: GLM, DeepSeek, vLLM</div></span>
+          </label>
+          <label style="display:flex;gap:12px;align-items:center;border:2px solid var(--border);border-radius:8px;padding:12px 14px;cursor:pointer">
+            <input type="radio" name="proto">
+            <span style="width:32px;height:32px;border-radius:8px;background:var(--border);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px">A</span>
+            <span><b style="font-size:13.5px">Anthropic</b><div style="font-size:12px;color:var(--text-subtle)">messages API: Claude</div></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 02 · провайдер и модель -->
+      <div style="margin-bottom:22px;border-top:1px solid var(--border-subtle);padding-top:20px">
+        <div style="display:flex;gap:10px;align-items:baseline">
+          <span style="font-size:20px;font-weight:700;color:var(--text-subtlest);opacity:.45">02</span>
+          <b style="font-size:15px">Провайдер и модель</b>
+        </div>
+        <p style="margin:6px 0 12px;font-size:13px;color:var(--text-subtle)">Выберите пресет — поля заполнятся сами, значения можно поправить руками.</p>
+        <div class="field">
+          <label>Пресет провайдера</label>
+          <select style="width:100%;max-width:340px;font:inherit;font-size:13.5px;padding:9px 11px;border:2px solid var(--border);border-radius:5px">
+            <option>GLM · Zhipu (bigmodel.cn)</option><option>DeepSeek</option><option>Kimi · Moonshot</option><option>Локальный vLLM</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="field">
+            <label>Базовый URL</label>
+            <input type="text" value="https://open.bigmodel.cn/api/paas/v4">
+          </div>
+          <div class="field">
+            <label>Модель</label>
+            <input type="text" value="glm-4.6">
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 · токен -->
+      <div style="border-top:1px solid var(--border-subtle);padding-top:20px">
+        <div style="display:flex;gap:10px;align-items:baseline">
+          <span style="font-size:20px;font-weight:700;color:var(--text-subtlest);opacity:.45">03</span>
+          <b style="font-size:15px">API-токен</b>
+        </div>
+        <p style="margin:6px 0 12px;font-size:13px;color:var(--text-subtle)">Хранится в базе и отдаётся только маской. Оставьте поле пустым — ничего не изменится.</p>
+        <div class="field" style="max-width:340px">
+          <label>Новый токен</label>
+          <input type="password" placeholder="введите, чтобы заменить">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-subtle)">
+          Сохранён: <code style="background:var(--bg);padding:2px 8px;border-radius:4px">sk-••••3f9a</code>
+          <button class="btn btn-danger small">Удалить токен</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ai-ok" style="margin-top:14px">✅ Связь есть · glm-4.6 ответила за 1.2 c · проверено сегодня, 10:24</div>
+    <div class="phase-note" style="max-width:100%;margin:14px 0 0;padding:0"><span style="background:var(--yellow-bg);border-color:#F5E3A8;color:var(--yellow-text)">Только God: ниже этой формы — шаг 04 «Настройка по умолчанию» (те же 01–03). Применяется к пользователям, ещё не настроившим своё; сейчас эту роль играет .env сервиса.</span></div>
+  </div>
+</div>
+
+<!-- ═══ 7. МОИ ШАБЛОНЫ + ОБЩИЙ РЕЕСТР ═══ -->
+<div class="screen" id="s-templates">
+  <div class="phase-note"><span>Шаблоны и критерии — персональные («Мои шаблоны»): лид создаёт с нуля, редактирует и архивирует СВОИ. Чужие не видны в работе, но доступны в общем реестре: кнопка «Из общего реестра» → поиск → «Добавить себе копию». У God в реестре все, включая его собственные. Критерии — та же схема.</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <h1 style="margin-right:auto">🧩 Мои шаблоны</h1>
+      <button class="btn btn-primary" style="background:var(--surface);color:var(--blue);border:2px solid var(--blue)" onclick="show('m-registry')">🌐 Из общего реестра</button>
+      <button class="btn btn-primary">＋ Новый шаблон</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-subtlest);margin-bottom:14px">Проверки запускаются по вашим шаблонам. Удалить нельзя — только в архив.</div>
+
+    <div class="tpl-grid">
+      <div class="tpl-card">
+        <div class="tpl-name">СТ · Системные требования <span class="chip">по умолчанию</span></div>
+        <div class="tpl-sub">v3 · 14 разделов · создан 01.09</div>
+        <div class="tpl-actions">
+          <button class="btn btn-default small">Редактировать</button>
+          <button class="btn btn-danger small">В архив</button>
+        </div>
+      </div>
+      <div class="tpl-card">
+        <div class="tpl-name">Интеграционные доработки</div>
+        <div class="tpl-sub">v1 · 8 разделов · скопирован из реестра (автор: God)</div>
+        <div class="tpl-actions">
+          <button class="btn btn-default small">Редактировать</button>
+          <button class="btn btn-danger small">В архив</button>
+        </div>
+      </div>
+      <div class="tpl-card" style="border:2px dashed var(--border);box-shadow:none;display:grid;place-items:center;min-height:90px;color:var(--text-subtle);cursor:pointer">
+        ＋ Новый шаблон
+      </div>
+    </div>
+
+    <div style="margin-top:22px">
+      <div class="nav-label" style="padding-left:2px">Архив (3)</div>
+      <div class="tpl-grid">
+        <div class="tpl-card" style="opacity:.75">
+          <div class="tpl-name">Старый шаблон портала</div>
+          <div class="tpl-sub">в архиве с 02.09</div>
+          <div class="tpl-actions"><button class="btn btn-default small">↺ Восстановить</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- попап общего реестра -->
+  <div class="overlay show" id="m-registry">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>🌐 Общий реестр шаблонов</h2>
+        <button class="modal-close" onclick="document.getElementById('m-registry').classList.remove('show')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <input type="text" class="searchbox" placeholder="Поиск по названию — нечёткий" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:2px solid var(--border);border-radius:5px">
+        </div>
+        <div class="reg-row">
+          <span class="reg-main">
+            <span class="reg-name">СТ · Требования к доработкам <span class="chip" style="margin-left:6px">14 разделов</span></span>
+            <span class="reg-sub">v7 · обновлён вчера · используется 3 пользователями</span>
+          </span>
+          <span class="reg-owner"><span class="owner-dot" style="background:var(--yellow-text)"></span>God</span>
+          <button class="btn btn-primary small">＋ Добавить копию</button>
+        </div>
+        <div class="reg-row">
+          <span class="reg-main">
+            <span class="reg-name">Описание сервисов <span class="chip" style="margin-left:6px">9 разделов</span></span>
+            <span class="reg-sub">v2 · обновлён 05.09</span>
+          </span>
+          <span class="reg-owner"><span class="owner-dot" style="background:var(--blue)"></span>Анна Ковалёва</span>
+          <button class="btn btn-primary small">＋ Добавить копию</button>
+        </div>
+        <div class="reg-row">
+          <span class="reg-main">
+            <span class="reg-name">Отчёт по инциденту <span class="chip" style="margin-left:6px">6 разделов</span></span>
+            <span class="reg-sub">v1 · создан 03.09</span>
+          </span>
+          <span class="reg-owner"><span class="owner-dot" style="background:var(--purple)">МС</span>Мария Смирнова</span>
+          <button class="btn btn-primary small">＋ Добавить копию</button>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span style="font-size:12px;color:var(--text-subtlest);margin-right:auto">Копия полностью ваша: правки не затрагивают оригинал</span>
+        <button class="btn btn-default" onclick="document.getElementById('m-registry').classList.remove('show')">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 8. ГЛАВНАЯ ЛИДА ═══ -->
+<div class="screen" id="s-home">
+  <div class="phase-note"><span>Вёрстка главной — та же, что сейчас у всех: очередь внимания слева, «Сейчас / Живая лента / Недавние» справа, внизу структура и разделы. Персональное: приветствие по имени, панель «🏃 Моя активность» (мои запуски и исходы), «Недавние» — свои. У God дополнительно панель «📥 Заявки на доступ» со счётчиком новых.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Обзор</div>
+      <button class="nav-row active">🏠 Главная</button>
+      <div class="nav-label">Структура</div>
+      <button class="nav-row">🗂 Кластеры</button>
+      <button class="nav-row">👥 Все аналитики</button>
+      <div class="nav-label">Моё</div>
+      <button class="nav-row">🧩 Шаблоны</button>
+      <button class="nav-row">✅ Критерии ИИ</button>
+      <button class="nav-row">⚡ Мой доступ к ИИ</button>
+      <div class="nav-label">Администрирование</div>
+      <button class="nav-row" title="Только просмотр">🛡 Роли и права</button>
+      <div class="user-box">
+        <span class="u-avatar" style="background:var(--purple)">МС</span>
+        <span><span class="u-name">Мария Смирнова</span><br><span class="role-pill role-lead">LEAD</span></span>
+        <button class="u-logout" title="Выйти">⎋</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <nav class="crumbs" style="display:flex;gap:6px;font-size:13px;color:var(--text-subtlest);margin-bottom:10px">
+        <span style="color:var(--blue);font-weight:600">🏠 Главная</span>
+      </nav>
+
+      <div class="hello" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+        <h1 style="margin:0">Добрый день, Мария!</h1>
+        <span style="font-size:13px;color:var(--text-subtlest)">четверг, 10 сентября</span>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="badge badge-pending">⚡ ИИ не настроен — проверки заблокированы</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:stretch">
+        <!-- левая колонка: общая очередь + структура -->
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div class="card grow" style="padding:0;flex:1;display:flex;flex-direction:column">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center">🎯 Требует внимания <span class="badge badge-pending">12 · общая</span></div>
+            <div style="padding:6px 8px 10px">
+              <div class="q-head" style="width:100%;display:flex;align-items:center;gap:8px;border:0;background:transparent;font:inherit;padding:8px;border-radius:6px;cursor:pointer;text-align:left">
+                <span class="q-ico" style="width:26px;height:26px;flex:none;border-radius:7px;display:grid;place-items:center;font-size:13px;background:var(--red-bg)">❌</span>
+                <span style="font-size:13.5px;font-weight:600">Провалены проверки</span><span class="badge badge-pending">3</span>
+                <span style="margin-left:auto;color:var(--text-subtlest);font-size:11px">▾</span>
+              </div>
+              <div style="border-left:2px solid var(--border-subtle);margin:0 8px 8px 20px">
+                <div class="q-item" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--red-text)"></span><span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:600">Системные требования СМЭ</span><span style="display:block;font-size:12px;color:var(--text-subtlest)">Алиев Р.А. · GDS · ИИ-проверка: 2 замечания</span></span><span style="font-size:11.5px;color:var(--text-subtlest)">12:41</span></div>
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 10px"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--red-text)"></span><span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:600">Доработка витрины билетов</span><span style="display:block;font-size:12px;color:var(--text-subtlest)">Белышева Ж. · Финтех · не хватает раздела</span></span><span style="font-size:11.5px;color:var(--text-subtlest)">11:02</span></div>
+              </div>
+              <div style="width:100%;display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px"><span class="q-ico" style="width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:13px;background:var(--blue-subtle-bg)">⭐</span><span style="font-size:13.5px;font-weight:600">Ждут оценки руководителя</span><span class="badge badge-pending">4</span><span style="margin-left:auto;color:var(--text-subtlest);font-size:11px">▸</span></div>
+              <div style="width:100%;display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px"><span class="q-ico" style="width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:13px;background:#F3F0FF">👤</span><span style="font-size:13.5px;font-weight:600">Аналитики без команды</span><span class="badge badge-pending">2</span><span style="margin-left:auto;color:var(--text-subtlest);font-size:11px">▸</span></div>
+            </div>
+          </div>
+          <div class="card" style="padding:0">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px;display:flex;gap:8px">🗂 Структура <span style="font-size:11.5px;color:var(--text-subtlest);font-weight:400;background:var(--bg);border-radius:10px;padding:1px 8px">2 кластера · 4 команды · 12 аналитиков</span></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;padding:12px 16px 14px">
+              <div style="border:1px solid var(--border-subtle);border-top:3px solid var(--blue);border-radius:8px;padding:8px 12px"><b style="font-size:13px">Билетный бизнес</b><div style="font-size:11.5px;color:var(--text-subtlest);margin:2px 0 4px">3 команды · 3 аналитика</div><span class="chip" style="margin-right:4px">GDS</span><span class="chip" style="margin-right:4px">Финтех</span><span class="chip">Конверсия</span></div>
+              <div style="border:1px solid var(--border-subtle);border-top:3px solid var(--purple);border-radius:8px;padding:8px 12px"><b style="font-size:13px">Медиа</b><div style="font-size:11.5px;color:var(--text-subtlest);margin:2px 0 4px">1 команда · 1 аналитик</div><span class="chip">Развитие SEO</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- правая колонка -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card" style="padding:0">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px">⏳ Сейчас происходит</div>
+            <div class="act-row"><span>⟳</span><span class="act-main">Синхронизация Confluence</span><b>12:00</b></div>
+            <div class="act-row"><span>🧪</span><span class="act-main">Массовая проверка GDS</span><b>3 из 7</b></div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px">🏃 Моя активность</div>
+            <div class="act-row"><span>🧪</span><span class="act-main"><span class="act-title">Проверка «Личный кабинет»</span><br><span class="act-sub">не пройдена · сегодня 11:38</span></span></div>
+            <div class="act-row"><span>🧪</span><span class="act-main"><span class="act-title">Проверка «Гайд по API»</span><br><span class="act-sub">пройдена · сегодня 10:12</span></span></div>
+            <div class="act-row"><span>💬</span><span class="act-main"><span class="act-title">Комментарий на страницу</span><br><span class="act-sub">«Личный кабинет» · вчера</span></span></div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px">📡 Живая лента</div>
+            <div class="act-row"><span>❌</span><span class="act-main"><span class="act-title">Проверка не пройдена — «СМЭ»</span><br><span class="act-sub">Алиев Р.А. · 2 замечания</span></span><span style="font-size:11px;color:var(--text-subtlest)">12:41</span></div>
+            <div class="act-row"><span>⟳</span><span class="act-main"><span class="act-title">Синхронизация: +2 новых, 5 обновлено</span><br><span class="act-sub">по всем кластерам</span></span><span style="font-size:11px;color:var(--text-subtlest)">12:00</span></div>
+          </div>
+
+          <div class="card" style="padding:0">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);font-weight:600;font-size:14px">🕘 Недавние</div>
+            <div class="act-row"><span>📄</span><span class="act-title">Личный кабинет покупателя</span></div>
+            <div class="act-row"><span>👤</span><span class="act-title">Профиль: Иванов И.И.</span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="phase-note"><span style="background:var(--yellow-bg);border-color:#F5E3A8;color:var(--yellow-text)">Вид God: та же страница, плюс панель «📥 Заявки на доступ (2)» над «Моей активностью» и пункты «Заявки», «Роли и права» в сайдбаре. Чип «ИИ не настроен» показывается, пока пользователь не сохранит свой доступ.</span></div>
+</div>
+
+<!-- ═══ 10. РОЛИ И ПРАВА (GOD) ═══ -->
+<div class="screen" id="s-roles">
+  <div class="phase-note"><span>Только God. Роли — столбцы матрицы: God и Lead системные (не редактируются), плюс свои роли: «＋ Новая роль» добавляет столбец с названием, дальше — галочки по каждому праву. Пользователю назначается роль при одобрении заявки и её можно сменить позже.</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h1>🛡 Роли и права</h1>
+      <button class="btn btn-primary" style="margin-left:auto">＋ Новая роль</button>
+    </div>
+    <table class="perms">
+      <tr>
+        <th>Право</th>
+        <th style="width:130px">God <span class="lock-note">(системная, неизменяемая)</span></th>
+        <th style="width:130px">Lead <span class="lock-note">по умолчанию · <button class="btn btn-danger small" style="padding:0 6px">✕</button></span></th>
+        <th style="width:130px">Наблюдатель <span class="lock-note">своя · <button class="btn btn-danger small" style="padding:0 6px">✕</button></span></th>
+      </tr>
+      <tr><td>Запуск проверок и синхронизаций</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+      <tr><td>Комментарии, заметки, оценки</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Свои шаблоны: создание/правка/архив</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+      <tr><td>Свои критерии ИИ: создание/правка/архив</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Кластеры: создание/редактирование</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Команды: создание/редактирование/состав</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Аналитики: создание/редактирование/привязка</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Назначать лида аналитику</td><td class="yes">✓</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+      <tr><td>Удаление: кластеры, команды, аналитики</td><td class="yes">✓</td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+      <tr><td>Настройка ИИ «по умолчанию»</td><td class="yes">✓</td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+      <tr><td>Модерация заявок и управление ролями</td><td class="yes">✓</td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+    </table>
+    <div style="font-size:12px;color:var(--text-subtlest);margin-top:8px">God — единственная системная роль: все права, не редактируется. Остальные роли (включая Lead) — редактируемые: галочки переключаются, роль можно переименовать или удалить (нельзя удалить, пока она назначена пользователям). Роль назначается заявке при одобрении и меняется позже в списке пользователей.</div>
+  </div>
+</div>
+
+<!-- ═══ 11. ЛИД АНАЛИТИКА ═══ -->
+<div class="screen" id="s-analyst-lead">
+  <div class="phase-note"><span>В профиле аналитика — блок «Лид»: текущий куратор и кнопка назначения (поиск среди пользователей с ролью lead). Лид на главной видит панель «Мои аналитики» — по тем, кем курирует. Назначать может God и Lead (по матрице).</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <nav class="crumbs" style="display:flex;gap:6px;font-size:13px;color:var(--text-subtlest);margin-bottom:10px">
+      <a href="#" onclick="show('s-home');return false" style="color:var(--blue)">🏠 Главная</a><span style="color:var(--border)">/</span>
+      <a href="#" style="color:var(--text-subtle);text-decoration:none">Кластеры</a><span style="color:var(--border)">/</span>
+      <a href="#" style="color:var(--text-subtle);text-decoration:none">Билетный бизнес</a><span style="color:var(--border)">/</span>
+      <a href="#" style="color:var(--text-subtle);text-decoration:none">GDS</a><span style="color:var(--border)">/</span>
+      <b style="color:var(--text)">Алиев Рустам</b>
+    </nav>
+
+    <div class="card" style="display:flex;gap:16px;align-items:flex-start">
+      <span class="u-avatar" style="background:var(--blue);width:56px;height:56px;font-size:19px">АР</span>
+      <div style="flex:1">
+        <h1>Алиев Рустам Азадович</h1>
+        <div style="font-size:13px;color:var(--text-subtle)">aliev@company.ru · GDS · 14 документов</div>
+        <div style="margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--row-hover);border-radius:8px;padding:10px 14px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-subtlest)">Лид</span>
+          <span class="u-avatar" style="background:var(--purple);width:24px;height:24px;font-size:9px">МС</span>
+          <b style="font-size:13.5px">Мария Смирнова</b>
+          <span style="font-size:11.5px;color:var(--text-subtlest)">· mariа@company.ru</span>
+          <button class="btn btn-default small" style="margin-left:auto" onclick="show('m-lead-pick')">Сменить лида</button>
+        </div>
+      </div>
+    </div>
+    <div class="phase-note" style="max-width:100%;margin:14px 0 0;padding:0"><span>Остальное содержимое профиля (заметки, документы, статистика) — без изменений.</span></div>
+  </div>
+
+  <div class="overlay" id="m-lead-pick">
+    <div class="modal">
+      <div class="modal-head"><h2>Назначить лида для Алиева Рустама</h2><button class="modal-close" onclick="document.getElementById('m-lead-pick').classList.remove('show')">✕</button></div>
+      <div class="modal-body">
+        <div class="field"><input type="text" placeholder="Поиск среди пользователей с ролью lead…" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:2px solid var(--border);border-radius:5px"></div>
+        <div class="reg-row">
+          <span class="u-avatar" style="background:var(--purple)">МС</span>
+          <span class="reg-main"><span class="reg-name">Мария Смирнова</span><br><span class="reg-sub">maria.smirnova@company.ru · текущий лид</span></span>
+          <button class="btn btn-default small" disabled>Назначен</button>
+        </div>
+        <div class="reg-row">
+          <span class="u-avatar" style="background:var(--green-text)">АК</span>
+          <span class="reg-main"><span class="reg-name">Анна Ковалёва</span><br><span class="reg-sub">kovaleva@company.ru · ведёт 2 аналитиков</span></span>
+          <button class="btn btn-primary small">Назначить</button>
+        </div>
+        <div class="reg-row">
+          <span class="u-avatar" style="background:var(--yellow-text)">ББ</span>
+          <span class="reg-main"><span class="reg-name">Борис Богданов</span><br><span class="reg-sub">bogdanov@company.ru</span></span>
+          <button class="btn btn-primary small">Назначить</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-subtlest);margin-top:8px">В списке только пользователи с ролью lead. Один аналитик — один лид; снять лида можно кнопкой «Сменить» → «Никто».</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 9. МАТРИЦА ПРАВ ═══ -->
+<div class="screen" id="s-perms">
+  <div class="phase-note"><span style="background:var(--bg);border-color:var(--border);color:var(--text-subtle)">Справочный экран макета (не продукт): продуктовая настройка ролей — экран 10. Сводная матрица для согласования. «Своё» = объекты, созданные пользователем (шаблоны, критерии, настройки ИИ). Всё, что не запрещено явно, — разрешено обоим.</span></div>
+
+  <div class="page" style="margin-top:16px">
+    <table class="perms">
+      <tr><th>Действие</th><th style="width:130px">Lead</th><th style="width:130px">God</th></tr>
+      <tr><td>Вход по токену Confluence / логин+пароль</td><td class="own">токен</td><td class="own">логин+пароль</td></tr>
+      <tr><td>Запуск проверок, комментарии, заметки, оценки</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Синхронизация (кнопкой и по расписанию)</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Шаблоны: создание и редактирование своих</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Шаблоны: архивация/восстановление своих</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Копирование из общего реестра</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Критерии ИИ: свои — создание/правка/архив</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Кластеры: создание и редактирование</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Команды: создание, редактирование, состав</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Аналитики: создание, редактирование, привязка</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Удаление: кластеры, команды, аналитики</td><td class="no">✕</td><td class="yes">✓</td></tr>
+      <tr><td>Мой доступ к ИИ (персональные настройки)</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Настройка ИИ «по умолчанию»</td><td class="no">✕</td><td class="yes">✓</td></tr>
+      <tr><td>Заявки на доступ: принять / отклонить</td><td class="no">✕</td><td class="yes">✓</td></tr>
+      <tr><td>Видеть чужие шаблоны и критерии в работе</td><td class="no">✕</td><td class="own">только свои*</td></tr>
+      <tr><td>Назначать лида аналитику</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Создание ролей и настройка их прав</td><td class="no">✕</td><td class="yes">✓</td></tr>
+    </table>
+    <div style="font-size:12px;color:var(--text-subtlest);margin-top:8px">* God работает со своими шаблонами/критериями как все; чужие видит только через общий реестр (копированием). Существующие шаблоны и критерии после миграции перейдут God.</div>
+  </div>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+    document.querySelectorAll('.mocktab').forEach(t => t.classList.toggle('active', t.dataset.s === id));
+    window.scrollTo(0, 0);
+  }
+  function mockSwitchLogin(btn, which) {
+    btn.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('login-pwd').style.display = which === 'pwd' ? 'block' : 'none';
+    document.getElementById('login-token').style.display = which === 'token' ? 'block' : 'none';
+  }
+  document.querySelectorAll('.mocktab[data-s]').forEach(t => t.addEventListener('click', () => show(t.dataset.s)));
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); }));
+</script>
+</body>
+</html>

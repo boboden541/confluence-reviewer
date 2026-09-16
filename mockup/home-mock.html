@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Главная страница · Confluence Reviewer</title>
+<style>
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtlest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --yellow-bg: #FFF7D6;
+    --yellow-text: #7A5D00;
+    --red-bg: #FFEBE6;
+    --red-text: #AE2E24;
+    --purple: #6E5DC6;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --shadow-hover: 0 8px 16px rgba(9, 30, 66, 0.14), 0 0 1px rgba(9, 30, 66, 0.10);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --c1: #6E5DC6; --c1-bg: #F3F0FF;
+    --c2: #0C66E4; --c2-bg: #E9F2FF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+  .mockbar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 30; }
+  .mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 8px; }
+  .mocktab { border: 0; background: transparent; color: var(--nav-icon); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: var(--radius); cursor: pointer; }
+  .mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+  .mocknote { font-size: 12px; color: var(--nav-icon); opacity: .8; margin-left: auto; }
+
+  .screen { display: none; }
+  .screen.show { display: block; }
+  .phase-note { max-width: 1200px; margin: 16px auto 0; padding: 0 20px; }
+  .phase-note span { display: block; font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; }
+
+  .app { display: flex; min-height: calc(100vh - 45px); }
+  /* сайдбар как в сервисе (сокращённый для макета) */
+  .sidebar { width: 260px; flex: none; background: var(--surface); border-right: 1px solid var(--border-subtle); padding: 12px 10px; }
+  .space-head { display: flex; gap: 8px; align-items: center; padding: 4px 8px 12px; cursor: pointer; border-radius: 6px; }
+  .space-head:hover { background: var(--row-hover); }
+  .space-head .lbl { font-size: 11px; color: var(--text-subtlest); display: block; }
+  .space-icon { width: 28px; height: 28px; flex: none; border-radius: 6px; background: var(--nav-bg); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+  .nav-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtlest); padding: 10px 8px 4px; }
+  .nav-row { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text-subtle); padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
+  .nav-row:hover { background: var(--row-hover); color: var(--text); }
+  .nav-row.active { background: var(--blue-subtle-bg); color: var(--blue); font-weight: 600; }
+
+  .content { flex: 1; min-width: 0; padding: 16px 28px 60px; }
+  .page { max-width: 1200px; margin: 0 auto; }
+
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-subtlest); margin-bottom: 10px; flex-wrap: wrap; }
+  .crumbs a { color: var(--text-subtle); text-decoration: none; border-radius: 4px; padding: 2px 4px; }
+  .crumbs a:hover { background: var(--row-hover); color: var(--blue); }
+  .crumbs .sep { color: var(--border); }
+  .crumbs .home-crumb { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--blue); }
+
+  /* приветствие + статус-чипы */
+  .hello { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-size: 22px; margin: 0; }
+  .hello-date { color: var(--text-subtlest); font-size: 13px; }
+  .hello-chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip-status { font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+  .chip-ok { background: var(--green-bg); color: var(--green-text); }
+  .chip-busy { background: var(--blue-subtle-bg); color: var(--blue); }
+  .chip-warn { background: var(--yellow-bg); color: var(--yellow-text); }
+
+  /* сетка главной: две колонки; внутри колонки — флексы с тем же гэпом 16px,
+     «наполнители» (очередь, лента) растягиваются — низы колонок всегда вровень */
+  .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  @media (max-width: 1000px) { .home-grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); }
+  .panel.grow { flex: 1; display: flex; flex-direction: column; }
+  .panel.grow .panel-body { flex: 1; }
+  .panel-head { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 8px; }
+  .panel-head h2 { font-size: 14px; margin: 0; flex: 1; }
+  .panel-head .count { font-size: 11.5px; color: var(--text-subtlest); background: var(--bg); border-radius: 10px; padding: 1px 8px; }
+  .panel-body { padding: 6px 8px 10px; }
+
+  /* очередь внимания */
+  .q-section { margin: 4px 8px; }
+  .q-head { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; font: inherit; padding: 8px 8px; border-radius: 6px; cursor: pointer; }
+  .q-head:hover { background: var(--row-hover); }
+  .q-ico { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; font-size: 13px; }
+  .q-title { font-size: 13.5px; font-weight: 600; }
+  .q-count { font-size: 11.5px; color: var(--text-subtlest); background: var(--bg); border-radius: 10px; padding: 1px 8px; }
+  .q-arrow { margin-left: auto; color: var(--text-subtlest); font-size: 11px; transition: transform .15s; }
+  .q-arrow.open { transform: rotate(90deg); }
+  .q-items { display: none; border-left: 2px solid var(--border-subtle); margin: 0 8px 8px 20px; }
+  .q-items.open { display: block; }
+  .q-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; text-decoration: none; color: var(--text); }
+  .q-item:hover { background: var(--row-hover); }
+  .q-item .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+  .q-main { flex: 1; min-width: 0; }
+  .q-name { font-size: 13.5px; font-weight: 600; }
+  .q-meta { font-size: 12px; color: var(--text-subtlest); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q-time { font-size: 11.5px; color: var(--text-subtlest); white-space: nowrap; }
+  .q-empty { padding: 16px; text-align: center; color: var(--text-subtle); font-size: 13.5px; }
+  .q-empty .big { font-size: 26px; display: block; margin-bottom: 6px; }
+
+  /* правая колонка */
+  .now-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 13px; }
+  .now-row + .now-row { border-top: 1px dashed var(--border-subtle); }
+  .now-row .what { flex: 1; color: var(--text-subtle); }
+  .now-row b { color: var(--text); }
+  .feed-item { display: flex; gap: 10px; padding: 9px 16px; cursor: pointer; }
+  .feed-item:hover { background: var(--row-hover); }
+  .feed-ico { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; font-size: 13px; }
+  .feed-main { flex: 1; min-width: 0; font-size: 12.5px; }
+  .feed-text b { font-weight: 600; }
+  .feed-sub { color: var(--text-subtlest); font-size: 11.5px; margin-top: 1px; }
+  .feed-time { font-size: 11px; color: var(--text-subtlest); white-space: nowrap; }
+  .recent-item { display: flex; align-items: center; gap: 8px; padding: 7px 16px; font-size: 12.5px; color: var(--text-subtle); text-decoration: none; }
+  .recent-item:hover { background: var(--row-hover); color: var(--text); }
+  .recent-item .doc-ico { opacity: .7; }
+
+  /* свёрнутая структура + сервисные карточки */
+  .bottom { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+  .mini-map { display: flex; gap: 10px; flex-wrap: wrap; padding: 12px 16px 14px; }
+  .mini-cluster { border: 1px solid var(--border-subtle); border-top: 3px solid; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  .mini-cluster:hover { box-shadow: var(--shadow); }
+  .mini-cluster .nm { font-size: 13px; font-weight: 700; }
+  .mini-cluster .ct { font-size: 11.5px; color: var(--text-subtlest); margin-top: 2px; }
+  .mini-chip { display: inline-block; font-size: 10.5px; padding: 1px 8px; border-radius: 9px; margin: 3px 3px 0 0; font-weight: 500; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .svc { display: flex; gap: 12px; align-items: center; padding: 14px 16px; text-decoration: none; color: var(--text); border-radius: var(--radius-page); box-shadow: var(--shadow); background: var(--surface); transition: transform .12s, box-shadow .12s; }
+  .svc:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .svc-ico { width: 38px; height: 38px; flex: none; border-radius: 9px; display: grid; place-items: center; font-size: 18px; background: var(--bg); }
+  .svc-name { font-size: 13.5px; font-weight: 600; }
+  .svc-sub { font-size: 12px; color: var(--text-subtlest); margin-top: 2px; }
+
+  /* экран навигации */
+  .navdemo { max-width: 900px; margin: 20px auto; }
+  .rule-card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 14px; }
+  .rule-card h3 { margin: 0 0 8px; font-size: 15px; }
+  .crumb-line { display: flex; align-items: center; gap: 6px; background: var(--row-hover); border-radius: 6px; padding: 8px 12px; font-size: 13px; margin: 6px 0; flex-wrap: wrap; }
+  .crumb-line .sep { color: var(--border); }
+  .crumb-line a { color: var(--blue); text-decoration: none; font-weight: 500; }
+  .crumb-line .cur { font-weight: 600; }
+  .crumb-line .type { color: var(--text-subtlest); font-style: italic; }
+  table.rules { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.rules th { text-align: left; color: var(--text-subtlest); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); }
+  table.rules td { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  table.rules td:first-child { color: var(--text-subtle); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МАКЕТ</span>
+  <button class="mocktab active" data-s="s-home">Главная</button>
+  <button class="mocktab" data-s="s-nav">Единые крошки (правила)</button>
+  <span class="mocknote">данные — иллюстративные</span>
+</div>
+
+<!-- ═══════════ ЭКРАН 1: ГЛАВНАЯ ═══════════ -->
+<div class="screen show" id="s-home">
+  <div class="phase-note"><span>Концепт «пульт руководителя»: очередь внимания (слева) отвечает «что требует внимания», правая колонка — «что происходит сейчас» и быстрые входы, внизу — свёрнутая структура и разделы. Крошки всех страниц начинаются с «Главная» (см. второй экран).</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <!-- логотип = клик на главную (как иконка пространства в Confluence) -->
+      <div class="space-head" title="На главную">
+        <span class="space-icon">РТ</span>
+        <span><span class="lbl">Пространство</span><b style="font-size:14px">Ревью требований</b></span>
+      </div>
+      <div class="nav-label">Разделы</div>
+      <button class="nav-row active"><span>🏠</span> Главная</button>
+      <button class="nav-row"><span>🗂</span> Кластеры</button>
+      <button class="nav-row"><span>👥</span> Все аналитики</button>
+      <div class="nav-label">Настройка</div>
+      <button class="nav-row"><span>🧩</span> Шаблоны требований</button>
+      <button class="nav-row"><span>✅</span> Критерии ИИ</button>
+      <button class="nav-row"><span>⚡</span> Подключение ИИ</button>
+    </aside>
+
+    <main class="content">
+      <div class="page">
+        <div class="crumbs">
+          <span class="home-crumb">🏠 Главная</span>
+        </div>
+
+        <div class="hello">
+          <h1>Добрый день!</h1>
+          <span class="hello-date">четверг, 10 сентября</span>
+          <div class="hello-chips">
+            <span class="chip-status chip-ok">⟳ Синхронизация: сегодня 12:00</span>
+            <span class="chip-status chip-busy">⏳ Массовая проверка: 3 из 7</span>
+            <span class="chip-status chip-warn">⚡ ИИ: GLM-4.6</span>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <!-- ЛЕВАЯ КОЛОНКА: очередь внимания + структура -->
+          <div class="col">
+          <!-- ОЧЕРЕДЬ ВНИМАНИЯ -->
+          <div class="panel grow">
+            <div class="panel-head">
+              <h2>🎯 Требует внимания</h2>
+              <span class="count">12</span>
+            </div>
+            <div class="panel-body">
+
+              <div class="q-section">
+                <button class="q-head" onclick="toggleSec(this)">
+                  <span class="q-ico" style="background:var(--red-bg);color:var(--red-text)">❌</span>
+                  <span class="q-title">Провалены проверки</span>
+                  <span class="q-count">3</span>
+                  <span class="q-arrow open">▸</span>
+                </button>
+                <div class="q-items open">
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--red-text)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Системные требования СМЭ</span>
+                      <span class="q-meta">Алиев Р.А. · GDS · ИИ-проверка: 2 замечания (полнота, однозначность)</span>
+                    </span>
+                    <span class="q-time">12:41</span>
+                  </a>
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--red-text)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Доработка витрины билетов</span>
+                      <span class="q-meta">Белышева Ж. · Финтех · не хватает раздела «Критерии приёмки»</span>
+                    </span>
+                    <span class="q-time">11:02</span>
+                  </a>
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--yellow-text)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Интеграция с платёжным шлюзом</span>
+                      <span class="q-meta">Никулин В. · Конверсия · техническая ошибка ИИ-проверки — повторить</span>
+                    </span>
+                    <span class="q-time">вчера</span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="q-section">
+                <button class="q-head" onclick="toggleSec(this)">
+                  <span class="q-ico" style="background:var(--yellow-bg);color:var(--yellow-text)">⟳</span>
+                  <span class="q-title">Устарели после правок в Confluence</span>
+                  <span class="q-count">2</span>
+                  <span class="q-arrow">▸</span>
+                </button>
+                <div class="q-items">
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--yellow-text)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Личный кабинет покупателя</span>
+                      <span class="q-meta">Никулин В. · Конверсия · страница изменена сегодня, проверка 05.09</span>
+                    </span>
+                    <span class="q-time">14:20</span>
+                  </a>
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--yellow-text)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Регламент публикации метатегов</span>
+                      <span class="q-meta">Иванов И.И. · Развитие SEO · страница изменена вчера, проверка 01.09</span>
+                    </span>
+                    <span class="q-time">вчера</span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="q-section">
+                <button class="q-head" onclick="toggleSec(this)">
+                  <span class="q-ico" style="background:var(--blue-subtle-bg);color:var(--blue)">⭐</span>
+                  <span class="q-title">Ждут оценки руководителя</span>
+                  <span class="q-count">4</span>
+                  <span class="q-arrow">▸</span>
+                </button>
+                <div class="q-items">
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--blue)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Гайд по внутреннему API</span>
+                      <span class="q-meta">Иванов И.И. · Развитие SEO · прогон 12:40 прошёл — оценок нет</span>
+                    </span>
+                    <span class="q-time">12:40</span>
+                  </a>
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--blue)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Требования к загрузке данных GDS</span>
+                      <span class="q-meta">Алиев Р.А. · GDS · оценки устарели: новый прогон новее оценок</span>
+                    </span>
+                    <span class="q-time">вчера</span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="q-section">
+                <button class="q-head" onclick="toggleSec(this)">
+                  <span class="q-ico" style="background:var(--purple);color:#fff">👤</span>
+                  <span class="q-title">Аналитики без команды</span>
+                  <span class="q-count">2</span>
+                  <span class="q-arrow">▸</span>
+                </button>
+                <div class="q-items">
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:#8993A4"></span>
+                    <span class="q-main">
+                      <span class="q-name">Сидоров Пётр</span>
+                      <span class="q-meta">5 документов · не распределён по структуре</span>
+                    </span>
+                    <span class="q-time">→ в команду</span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="q-section">
+                <button class="q-head" onclick="toggleSec(this)">
+                  <span class="q-ico" style="background:var(--bg);color:var(--text-subtle)">⚙️</span>
+                  <span class="q-title">Проблемы справочников</span>
+                  <span class="q-count">1</span>
+                  <span class="q-arrow">▸</span>
+                </button>
+                <div class="q-items">
+                  <a class="q-item" href="#">
+                    <span class="dot" style="background:var(--text-subtlest)"></span>
+                    <span class="q-main">
+                      <span class="q-name">Шаблон «Описания сервисов» без активной версии</span>
+                      <span class="q-meta">не участвует в выборе при проверке — добавьте версию</span>
+                    </span>
+                    <span class="q-time">→ шаблоны</span>
+                  </a>
+                </div>
+              </div>
+
+              <div class="q-empty">🎉 Больше ничего — всё под контролем</div>
+            </div>
+          </div>
+
+          <!-- СВЁРНУТАЯ СТРУКТУРА (под очередью, слева) -->
+          <div class="panel">
+            <div class="panel-head">
+              <h2>🗂 Структура</h2>
+              <span class="count">2 кластера · 4 команды · 12 аналитиков</span>
+            </div>
+            <div class="mini-map">
+              <div class="mini-cluster" style="border-top-color:var(--c2)">
+                <div class="nm">Билетный бизнес</div>
+                <div class="ct">3 команды · 3 аналитика</div>
+                <span class="mini-chip" style="background:var(--c2-bg);color:var(--c2)">GDS</span>
+                <span class="mini-chip" style="background:var(--c2-bg);color:var(--c2)">Финтех</span>
+                <span class="mini-chip" style="background:var(--c2-bg);color:var(--c2)">Конверсия</span>
+              </div>
+              <div class="mini-cluster" style="border-top-color:var(--c1)">
+                <div class="nm">Медиа</div>
+                <div class="ct">1 команда · 1 аналитик</div>
+                <span class="mini-chip" style="background:var(--c1-bg);color:var(--c1)">Развитие SEO</span>
+              </div>
+              <div class="mini-cluster" style="border-top-color:#D0D5DD">
+                <div class="nm" style="color:var(--text-subtle)">Без команды</div>
+                <div class="ct">2 аналитика</div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <!-- ПРАВАЯ КОЛОНКА -->
+          <div class="col">
+            <div class="panel">
+              <div class="panel-head"><h2>⏳ Сейчас происходит</h2></div>
+              <div class="now-row"><span>⟳</span><span class="what">Синхронизация Confluence</span><b>простой · 12:00</b></div>
+              <div class="now-row"><span>🧪</span><span class="what">Массовая проверка GDS</span><b>3 из 7</b></div>
+              <div class="now-row"><span>🗓</span><span class="what">Плановая синхронизация</span><b>в 18:00</b></div>
+            </div>
+
+            <div class="panel grow">
+              <div class="panel-head">
+                <h2>📡 Живая лента</h2>
+                <span class="count">подключено</span>
+              </div>
+              <div class="feed-item">
+                <span class="feed-ico" style="background:var(--red-bg)">❌</span>
+                <span class="feed-main">
+                  <span class="feed-text"><b>Проверка не пройдена</b> — «Системные требования СМЭ»</span>
+                  <span class="feed-sub">Алиев Р.А. · 2 замечания → открыть отчёт</span>
+                </span>
+                <span class="feed-time">12:41</span>
+              </div>
+              <div class="feed-item">
+                <span class="feed-ico" style="background:var(--blue-subtle-bg)">🧪</span>
+                <span class="feed-main">
+                  <span class="feed-text"><b>Массовая проверка GDS</b> — готов 3 из 7</span>
+                  <span class="feed-sub">«Гайд по API» прошёл ✅</span>
+                </span>
+                <span class="feed-time">12:40</span>
+              </div>
+              <div class="feed-item">
+                <span class="feed-ico" style="background:var(--green-bg)">⟳</span>
+                <span class="feed-main">
+                  <span class="feed-text"><b>Синхронизация</b> — +2 новых, 5 обновлено</span>
+                  <span class="feed-sub">по всем кластерам</span>
+                </span>
+                <span class="feed-time">12:00</span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><h2>🕘 Недавние</h2></div>
+              <a class="recent-item" href="#"><span class="doc-ico">📄</span> Системные требования СМЭ</a>
+              <a class="recent-item" href="#"><span class="doc-ico">📄</span> Доработка витрины билетов</a>
+              <a class="recent-item" href="#"><span class="doc-ico">👤</span> Профиль: Алиев Рустам</a>
+              <a class="recent-item" href="#"><span class="doc-ico">🗂</span> Кластер: Билетный бизнес</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- СЕРВИСНЫЕ РАЗДЕЛЫ: ровная полоса на всю ширину -->
+        <div class="bottom" style="margin-top:16px">
+          <div class="tiles">
+            <a class="svc" href="#"><span class="svc-ico">🧩</span><span><span class="svc-name">Шаблоны требований</span><span class="svc-sub" style="display:block">4 активных · 1 в архиве</span></span></a>
+            <a class="svc" href="#"><span class="svc-ico">✅</span><span><span class="svc-name">Критерии ИИ</span><span class="svc-sub" style="display:block">5 активных · 1 архивный</span></span></a>
+            <a class="svc" href="#"><span class="svc-ico">⚡</span><span><span class="svc-name">Подключение ИИ</span><span class="svc-sub" style="display:block">GLM-4.6 · проверено 12:40</span></span></a>
+            <a class="svc" href="#"><span class="svc-ico">👥</span><span><span class="svc-name">Все аналитики</span><span class="svc-sub" style="display:block">12 карточек · 2 без команды</span></span></a>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════ ЭКРАН 2: ЕДИНЫЕ КРОШКИ ═══════════ -->
+<div class="screen" id="s-nav">
+  <div class="phase-note"><span>Главное следствие: «Главная» — единственный корень навигации. Крошки показывают место в структуре (а не историю кликов), на страницах-видах родитель — объект, а не список.</span></div>
+
+  <div class="navdemo">
+    <div class="rule-card">
+      <h3>Правила</h3>
+      <table class="rules">
+        <tr><th>Страница</th><th>Хлебные крошки</th></tr>
+        <tr><td>/</td><td><span class="crumb-line"><span class="home-crumb" style="color:var(--blue)">🏠 Главная</span></span></td></tr>
+        <tr><td>карта кластеров</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><span class="cur">Кластеры</span></span></td></tr>
+        <tr><td>кластер</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span><span class="cur">Билетный бизнес</span></span></td></tr>
+        <tr><td>команда</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span><a>Билетный бизнес</a><span class="sep">/</span><span class="cur">Команда GDS</span></span></td></tr>
+        <tr><td>профиль аналитика</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span><a>Билетный бизнес</a><span class="sep">/</span><a>Команда GDS</a><span class="sep">/</span><span class="cur">Алиев Рустам</span></span></td></tr>
+        <tr><td>документы аналитика (вид)</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span>…<span class="sep">/</span><a>Алиев Рустам</a><span class="sep">/</span><span class="type">вид: документы</span></span></td></tr>
+        <tr><td>отчёт документа</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span>…<span class="sep">/</span><span class="cur">Отчёт: «Системные требования СМЭ»</span></span></td></tr>
+        <tr><td>разделы настройки</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Настройка</a><span class="sep">/</span><span class="cur">Шаблоны требований</span></span></td></tr>
+        <tr><td>аналитик без команды</td><td><span class="crumb-line"><a>🏠 Главная</a><span class="sep">/</span><a>Кластеры</a><span class="sep">/</span><span class="cur">Без команды</span><span class="sep">/</span><span class="cur">Сидоров Пётр</span></span></td></tr>
+      </table>
+    </div>
+
+    <div class="rule-card">
+      <h3>Мелочи, которые убирают путаницу</h3>
+      <table class="rules">
+        <tr><td>1</td><td>Логотип «РТ» в сайдбаре кликабелен и ведёт на «Главную» — как иконка пространства в Confluence.</td></tr>
+        <tr><td>2</td><td>«Главная» активна в сайдбаре отдельным пунктом — текущее место видно всегда.</td></tr>
+        <tr><td>3</td><td>Тип объекта в крошке («Команда GDS», «Отчёт: …») — чтобы «Билетный бизнес» не путался с командой-тёзкой.</td></tr>
+        <tr><td>4</td><td>Приходя из «очереди внимания» или ленты на глубокую страницу, крошки показывают структурный путь — всегда понятно, где ты.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+    document.querySelectorAll('.mocktab').forEach(t => t.classList.toggle('active', t.dataset.s === id));
+    window.scrollTo(0, 0);
+  }
+  function toggleSec(btn) {
+    const items = btn.parentElement.querySelector('.q-items');
+    const arrow = btn.querySelector('.q-arrow');
+    items.classList.toggle('open');
+    arrow.classList.toggle('open');
+  }
+  document.querySelectorAll('.mocktab[data-s]').forEach(t => t.addEventListener('click', () => show(t.dataset.s)));
+  document.querySelectorAll('.overlay')?.forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); }));
+</script>
+</body>
+</html>

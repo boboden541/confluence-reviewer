@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Кластеры и команды · Confluence Reviewer</title>
+<style>
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtlest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --shadow-hover: 0 8px 16px rgba(9, 30, 66, 0.14), 0 0 1px rgba(9, 30, 66, 0.10);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* палитра кластеров: цвет назначается при создании по кругу */
+    --c1: #6E5DC6; --c1-bg: #F3F0FF; --c1-line: #DFD8F7;
+    --c2: #0C66E4; --c2-bg: #E9F2FF; --c2-line: #CCE0FF;
+    --c3: #216E4E; --c3-bg: #DCFFF1; --c3-line: #B3F1D3;
+    --c4: #A54800; --c4-bg: #FFF7D6; --c4-line: #F5E3A8;
+    --c5: #AE2E24; --c5-bg: #FFEBE6; --c5-line: #FFD2CC;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+  /* ── шапка макета (не часть продукта) ─────────────────────── */
+  .mockbar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 30; }
+  .mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 8px; }
+  .mocktab { border: 1px solid transparent; background: transparent; color: var(--nav-icon); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: var(--radius); cursor: pointer; }
+  .mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+  .mocknote { font-size: 12px; color: var(--nav-icon); opacity: .8; margin-left: auto; }
+
+  .screen { display: none; }
+  .screen.show { display: block; }
+  .phase-note { max-width: 1100px; margin: 16px auto 0; padding: 0 20px; }
+  .phase-note span { display: block; font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; }
+
+  /* ── каркас приложения: сайдбар + контент ─────────────────── */
+  .app { display: flex; min-height: calc(100vh - 45px); }
+
+  /* ── сайдбар (TO BE): дерево кластер → команда → аналитик ─── */
+  .sidebar { width: 300px; flex: none; background: var(--surface); border-right: 1px solid var(--border-subtle); padding: 12px 10px 24px; }
+  .space-head { display: flex; gap: 8px; align-items: center; padding: 4px 8px 12px; }
+  .space-icon { width: 28px; height: 28px; flex: none; border-radius: 6px; background: var(--nav-bg); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+  .space-name { font-weight: 600; font-size: 14px; }
+  .nav-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtlest); padding: 10px 8px 4px; }
+
+  .tree { position: relative; }
+  .t-cluster { margin-top: 6px; }
+  .t-row { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; font: inherit; color: var(--text); text-align: left; padding: 5px 8px; border-radius: 5px; cursor: pointer; }
+  .t-row:hover { background: var(--row-hover); }
+  .t-row.active { background: var(--blue-subtle-bg); color: var(--blue); font-weight: 600; }
+  .t-disc { width: 16px; height: 16px; flex: none; border: 0; background: transparent; color: var(--text-subtlest); cursor: pointer; font-size: 10px; display: grid; place-items: center; transition: transform .15s; }
+  .t-disc.open { transform: rotate(90deg); }
+  .t-dot { width: 10px; height: 10px; flex: none; border-radius: 3px; }
+  .t-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-count { margin-left: auto; font-size: 11px; color: var(--text-subtlest); background: var(--bg); border-radius: 9px; padding: 1px 7px; }
+
+  .t-kids { position: relative; margin: 2px 0 4px 14px; padding-left: 12px; display: none; }
+  .t-kids.open { display: block; }
+  /* соединительные линии дерева */
+  .t-kids::before { content: ""; position: absolute; left: 0; top: 0; bottom: 12px; width: 1.5px; background: var(--border); border-radius: 2px; }
+  .t-kids > * { position: relative; }
+  .t-kids > *::before { content: ""; position: absolute; left: -12px; top: 50%; width: 10px; height: 1.5px; background: var(--border); }
+
+  .t-team { margin-top: 2px; }
+  .t-team > .t-row .t-name { font-weight: 500; }
+  .t-avatar { width: 22px; height: 22px; flex: none; border-radius: 50%; color: #fff; font-size: 9.5px; font-weight: 700; display: grid; place-items: center; }
+  .t-analyst .t-name { font-weight: 400; font-size: 13px; color: var(--text-subtle); }
+  .t-analyst > .t-row.active .t-name { color: var(--blue); font-weight: 600; }
+  .t-domain-chip { display: inline-block; font-size: 10px; color: var(--text-subtlest); border: 1px solid var(--border-subtle); background: var(--bg); padding: 0 5px; border-radius: 8px; margin-left: 4px; }
+
+  .t-empty { padding: 6px 8px; font-size: 12.5px; color: var(--text-subtlest); font-style: italic; }
+
+  .nav-row { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text-subtle); padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
+  .nav-row:hover { background: var(--row-hover); color: var(--text); }
+  .nav-row.active { background: var(--blue-subtle-bg); color: var(--blue); font-weight: 600; }
+  .nav-icon { width: 20px; text-align: center; opacity: .8; }
+
+  /* ── контент ──────────────────────────────────────────────── */
+  .content { flex: 1; min-width: 0; padding: 20px 28px 60px; }
+  .page { max-width: 1100px; margin: 0 auto; }
+
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-subtlest); margin-bottom: 10px; flex-wrap: wrap; }
+  .crumbs a { color: var(--text-subtle); text-decoration: none; border-radius: 4px; padding: 2px 4px; }
+  .crumbs a:hover { background: var(--row-hover); color: var(--blue); }
+  .crumbs .sep { color: var(--border); }
+
+  .head-card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 20px 24px; margin-bottom: 16px; display: flex; gap: 16px; align-items: flex-start; }
+  .glyph { width: 44px; height: 44px; flex: none; border-radius: 10px; display: grid; place-items: center; color: #fff; font-size: 19px; font-weight: 700; }
+  .head-main { flex: 1; min-width: 0; }
+  h1 { font-size: 20px; margin: 0 0 2px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .desc { font-size: 13.5px; color: var(--text-subtle); max-width: 640px; }
+  .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn { border: 0; font: inherit; font-size: 13.5px; font-weight: 500; padding: 7px 14px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:hover { background: var(--blue-hover); }
+  .btn-default { background: #F1F2F4; color: var(--text); }
+  .btn-default:hover { background: #DCDFE4; }
+  .btn-subtle { background: transparent; color: var(--text-subtle); padding: 7px 10px; }
+  .btn-subtle:hover { background: var(--row-hover); color: var(--text); }
+  .btn-danger-ghost { background: transparent; color: #AE2E24; padding: 7px 10px; }
+  .btn-danger-ghost:hover { background: #FFEBE6; }
+
+  /* статистика-полоска под заголовком */
+  .statline { display: flex; gap: 22px; margin-top: 10px; flex-wrap: wrap; }
+  .stat { font-size: 12px; color: var(--text-subtlest); }
+  .stat b { display: block; font-size: 18px; color: var(--text); font-weight: 600; }
+
+  /* ── карта кластеров (главная) ────────────────────────────── */
+  .cluster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .cluster-card { position: relative; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); padding: 0; overflow: hidden; cursor: pointer; transition: transform .12s, box-shadow .12s; border-top: 4px solid transparent; }
+  .cluster-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .cluster-card .cc-head { padding: 14px 16px 10px; display: flex; gap: 12px; align-items: center; }
+  .cluster-card .cc-name { font-size: 15.5px; font-weight: 700; }
+  .cluster-card .cc-desc { font-size: 12.5px; color: var(--text-subtle); margin-top: 2px; }
+  .cluster-card .cc-stats { display: flex; gap: 14px; padding: 0 16px 10px; }
+  .cluster-card .cc-stat { font-size: 11px; color: var(--text-subtlest); }
+  .cluster-card .cc-stat b { display: block; font-size: 16px; color: var(--text); }
+  /* мини-схема команд внутри карточки кластера */
+  .cc-map { padding: 10px 16px 14px; border-top: 1px dashed var(--border-subtle); display: flex; flex-wrap: wrap; gap: 6px; }
+  .cc-node { font-size: 11.5px; padding: 3px 9px; border-radius: 12px; border: 1px solid; font-weight: 500; }
+  .cc-node em { font-style: normal; opacity: .65; margin-left: 5px; }
+  .cc-new { display: grid; place-items: center; min-height: 150px; border: 2px dashed var(--border); border-radius: 10px; color: var(--text-subtle); font-size: 13.5px; cursor: pointer; background: transparent; transition: .12s; }
+  .cc-new:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-subtle-bg); }
+
+  /* ── команды кластера: «колонны» с линией от шапки ────────── */
+  .org { position: relative; padding-top: 26px; }
+  .org::before { content: ""; position: absolute; top: 0; left: 40px; right: 40px; height: 2px; background: var(--border); border-radius: 2px; }
+  .org-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+  .team-col { position: relative; }
+  .team-col::before { content: ""; position: absolute; top: -26px; left: 50%; width: 2px; height: 26px; background: var(--border); }
+  .team-card { background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; cursor: pointer; transition: transform .12s, box-shadow .12s; height: 100%; display: flex; flex-direction: column; }
+  .team-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .tc-head { padding: 12px 14px 10px; border-left: 4px solid transparent; display: flex; align-items: center; gap: 10px; }
+  .tc-name { font-weight: 700; font-size: 14.5px; }
+  .tc-desc { font-size: 12px; color: var(--text-subtle); margin-top: 1px; }
+  .tc-domains { padding: 0 14px 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .tc-people { padding: 10px 14px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tc-person { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-subtle); background: var(--bg); border-radius: 14px; padding: 3px 10px 3px 3px; }
+  .tc-more { font-size: 11.5px; color: var(--text-subtlest); }
+  .tc-new { display: grid; place-items: center; min-height: 120px; border: 2px dashed var(--border); border-radius: 10px; color: var(--text-subtle); font-size: 13px; cursor: pointer; background: transparent; }
+  .tc-new:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-subtle-bg); }
+
+  /* ── карточки аналитиков на экране команды ────────────────── */
+  .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .person-card { background: var(--surface); border-radius: 8px; box-shadow: var(--shadow); padding: 14px; display: flex; gap: 12px; cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .person-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .p-avatar { width: 38px; height: 38px; flex: none; border-radius: 50%; color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+  .p-name { font-weight: 600; font-size: 14px; }
+  .p-email { font-size: 12px; color: var(--text-subtlest); }
+  .p-domains { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { font-size: 11.5px; padding: 2px 9px; border-radius: 11px; background: var(--blue-subtle-bg); color: #0055CC; font-weight: 500; }
+  .p-docs { margin-left: auto; font-size: 11.5px; color: var(--text-subtlest); white-space: nowrap; }
+  .p-nodomains { font-size: 11.5px; color: var(--text-subtlest); font-style: italic; }
+
+  /* ── модалки ──────────────────────────────────────────────── */
+  .overlay { position: fixed; inset: 0; background: rgba(9, 30, 66, .44); display: none; place-items: center; z-index: 50; padding: 20px; }
+  .overlay.show { display: grid; }
+  .modal { background: var(--surface); border-radius: 10px; box-shadow: 0 20px 32px rgba(9,30,66,.2); width: 520px; max-width: 100%; max-height: 90vh; overflow: auto; }
+  .modal-head { padding: 16px 20px 0; display: flex; align-items: center; }
+  .modal-head h2 { font-size: 17px; margin: 0; flex: 1; }
+  .modal-close { border: 0; background: transparent; font-size: 16px; color: var(--text-subtlest); cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+  .modal-close:hover { background: var(--row-hover); }
+  .modal-body { padding: 12px 20px 4px; }
+  .modal-foot { padding: 14px 20px 18px; display: flex; justify-content: flex-end; gap: 8px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-subtle); margin-bottom: 4px; }
+  .field input, .field textarea, .field .searchbox { width: 100%; font: inherit; font-size: 13.5px; color: var(--text); padding: 8px 10px; border: 2px solid var(--border); border-radius: 5px; background: var(--surface); }
+  .field textarea { resize: vertical; min-height: 56px; }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--blue); }
+  .field .hint { font-size: 11.5px; color: var(--text-subtlest); margin-top: 4px; }
+  .swatches { display: flex; gap: 8px; }
+  .swatch { width: 32px; height: 32px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; position: relative; }
+  .swatch.active { border-color: var(--text); }
+  .swatch.active::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 700; }
+
+  /* поиск аналитика в модалке добавления */
+  .found { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  .found:hover { background: var(--row-hover); }
+  .found .f-add { margin-left: auto; }
+
+  /* ── профиль аналитика: breadcrumbs + карточка ────────────── */
+  .profile-card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 24px; }
+  .path { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .path-node { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; text-decoration: none; }
+  .path-node:hover { filter: brightness(.96); }
+  .path-arrow { color: var(--text-subtlest); font-size: 12px; }
+  .path-node.current { background: var(--bg); color: var(--text); border-color: var(--border); cursor: default; }
+
+  .dom-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border: 2px dashed var(--border); border-radius: 8px; margin-top: 8px; }
+  .chip-x { border: 0; background: transparent; cursor: pointer; margin-left: 5px; opacity: .55; font-size: 12px; padding: 0; }
+  .chip-x:hover { opacity: 1; }
+  .dom-add { border: 0; background: transparent; font: inherit; font-size: 12.5px; color: var(--blue); cursor: pointer; padding: 2px 6px; border-radius: 10px; }
+  .dom-add:hover { background: var(--blue-subtle-bg); }
+
+  .section-title { font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-subtlest); margin: 26px 0 12px; display: flex; align-items: center; gap: 10px; }
+  .section-title::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МАКЕТ</span>
+  <button class="mocktab active" data-s="s-main">Главная · карта кластеров</button>
+  <button class="mocktab" data-s="s-cluster">Экран кластера</button>
+  <button class="mocktab" data-s="s-team">Экран команды</button>
+  <button class="mocktab" data-s="s-profile">Профиль аналитика</button>
+  <button class="mocktab" onclick="show('m-cluster-new')">Модалка: новый кластер</button>
+  <button class="mocktab" onclick="show('m-analyst-add')">Модалка: добавить аналитика</button>
+  <span class="mocknote">данные — из примера постановки</span>
+</div>
+
+<!-- ═══════════════ ЭКРАН 1: ГЛАВНАЯ (карта кластеров) ═══════════════ -->
+<div class="screen show" id="s-main">
+  <div class="phase-note"><span>TO BE главной страницы: слева — дерево «кластер → команда → аналитик» (всё кликабельно), справа — не список, а карта кластеров: цвет, счётчики, мини-схема команд. Кликом по кластеру/команде/аналитику открываются следующие экраны.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+
+      <div class="nav-label">Структура</div>
+      <div class="tree">
+
+        <!-- Кластер: Медиа -->
+        <div class="t-cluster">
+          <div class="t-row" onclick="show('s-cluster')">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c1)"></span>
+            <span class="t-name">Медиа</span>
+            <span class="t-count">1</span>
+          </div>
+          <div class="t-kids open">
+            <div class="t-team">
+              <div class="t-row" onclick="show('s-team')">
+                <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">Развитие SEO</span>
+                <span class="t-count">1</span>
+              </div>
+              <div class="t-kids open">
+                <div class="t-analyst">
+                  <div class="t-row" onclick="show('s-profile')">
+                    <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                    <span class="t-avatar" style="background:var(--c1)">ИИ</span>
+                    <span class="t-name">Иванов И.И.</span>
+                  </div>
+                  <!-- ветки документов аналитика — как в текущем сайдбаре -->
+                  <div class="t-kids open">
+                    <div class="t-analyst"><div class="t-row" style="padding-left:16px"><span class="t-dot" style="background:#DFE1E6;width:6px;height:6px;border-radius:50%"></span><span class="t-name">GDS-42 Изменение витрины</span></div></div>
+                    <div class="t-analyst"><div class="t-row" style="padding-left:16px"><span class="t-dot" style="background:#DFE1E6;width:6px;height:6px;border-radius:50%"></span><span class="t-name">SEO-аудит главной</span></div></div>
+                    <div class="t-analyst"><div class="t-row"><span class="t-name" style="padding-left:38px;font-size:11.5px;color:var(--text-subtlest)">Показать остальные · 15</span></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Кластер: Билетный бизнес -->
+        <div class="t-cluster">
+          <div class="t-row" onclick="show('s-cluster')">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c2)"></span>
+            <span class="t-name">Билетный бизнес</span>
+            <span class="t-count">3</span>
+          </div>
+          <div class="t-kids open">
+
+            <div class="t-team">
+              <div class="t-row" onclick="show('s-team')">
+                <button class="t-disc" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">GDS</span>
+                <span class="t-count">1</span>
+              </div>
+              <div class="t-kids">
+                <div class="t-analyst"><div class="t-row" onclick="show('s-profile')">
+                  <span class="t-avatar" style="background:var(--c2)">АР</span>
+                  <span class="t-name">Алиев Р.А.</span>
+                  <span class="t-domain-chip">+2 дом.</span>
+                </div></div>
+              </div>
+            </div>
+
+            <div class="t-team">
+              <div class="t-row" onclick="show('s-team')">
+                <button class="t-disc" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">Финтех</span>
+                <span class="t-count">1</span>
+              </div>
+              <div class="t-kids">
+                <div class="t-analyst"><div class="t-row" onclick="show('s-profile')">
+                  <span class="t-avatar" style="background:var(--c2)">БЖ</span>
+                  <span class="t-name">Белышева Ж.</span>
+                </div></div>
+              </div>
+            </div>
+
+            <div class="t-team">
+              <div class="t-row" onclick="show('s-team')">
+                <button class="t-disc" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">Конверсия</span>
+                <span class="t-count">1</span>
+              </div>
+              <div class="t-kids">
+                <div class="t-analyst"><div class="t-row" onclick="show('s-profile')">
+                  <span class="t-avatar" style="background:var(--c2)">ВН</span>
+                  <span class="t-name">Никулин В.</span>
+                </div></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Без команды: существующие аналитики до распределения -->
+        <div class="t-cluster">
+          <div class="t-row">
+            <button class="t-disc" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--border)"></span>
+            <span class="t-name" style="color:var(--text-subtle)">Без команды</span>
+            <span class="t-count">2</span>
+          </div>
+          <div class="t-kids">
+            <div class="t-analyst"><div class="t-row" onclick="show('s-profile')">
+              <span class="t-avatar" style="background:#8993A4">СП</span>
+              <span class="t-name">Сидоров Пётр</span>
+            </div></div>
+            <div class="t-analyst"><div class="t-row" onclick="show('s-profile')">
+              <span class="t-avatar" style="background:#8993A4">КО</span>
+              <span class="t-name">Кузнецова Ольга</span>
+            </div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-label">Списки</div>
+      <button class="nav-row"><span class="nav-icon">👥</span> Все аналитики</button>
+
+      <div class="nav-label">Настройка</div>
+      <button class="nav-row"><span class="nav-icon">▦</span> Шаблоны требований</button>
+      <button class="nav-row"><span class="nav-icon">☰</span> Критерии ИИ</button>
+      <button class="nav-row"><span class="nav-icon">⚡</span> Подключение ИИ</button>
+    </aside>
+
+    <main class="content">
+      <div class="page">
+        <h1 style="margin-bottom:14px">Кластеры</h1>
+
+        <div class="cluster-grid">
+          <!-- Кластер Медиа -->
+          <div class="cluster-card" style="border-top-color:var(--c1)" onclick="show('s-cluster')">
+            <div class="cc-head">
+              <div class="glyph" style="background:var(--c1)">М</div>
+              <div>
+                <div class="cc-name">Медиа</div>
+                <div class="cc-desc">Контент и продвижение медиа-экосистемы</div>
+              </div>
+            </div>
+            <div class="cc-stats">
+              <div class="cc-stat"><b>1</b>команда</div>
+              <div class="cc-stat"><b>1</b>аналитик</div>
+              <div class="cc-stat"><b>17</b>документов</div>
+            </div>
+            <div class="cc-map">
+              <span class="cc-node" style="color:var(--c1);border-color:var(--c1-line);background:var(--c1-bg)">Развитие SEO<em>1</em></span>
+            </div>
+          </div>
+
+          <!-- Кластер Билетный бизнес -->
+          <div class="cluster-card" style="border-top-color:var(--c2)" onclick="show('s-cluster')">
+            <div class="cc-head">
+              <div class="glyph" style="background:var(--c2)">Б</div>
+              <div>
+                <div class="cc-name">Билетный бизнес</div>
+                <div class="cc-desc">Продажи билетов: витрина, данные, платежи</div>
+              </div>
+            </div>
+            <div class="cc-stats">
+              <div class="cc-stat"><b>3</b>команды</div>
+              <div class="cc-stat"><b>3</b>аналитика</div>
+              <div class="cc-stat"><b>42</b>документа</div>
+            </div>
+            <div class="cc-map">
+              <span class="cc-node" style="color:var(--c2);border-color:var(--c2-line);background:var(--c2-bg)">GDS<em>1</em></span>
+              <span class="cc-node" style="color:var(--c2);border-color:var(--c2-line);background:var(--c2-bg)">Финтех<em>1</em></span>
+              <span class="cc-node" style="color:var(--c2);border-color:var(--c2-line);background:var(--c2-bg)">Конверсия<em>1</em></span>
+            </div>
+          </div>
+
+          <!-- создание кластера -->
+          <button class="cc-new" onclick="show('m-cluster-new')">＋ Новый кластер</button>
+        </div>
+
+        <div class="section-title">Без команды</div>
+        <div class="people-grid">
+          <div class="person-card" onclick="show('s-profile')">
+            <div class="p-avatar" style="background:#8993A4">СП</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center"><span class="p-name">Сидоров Пётр</span><span class="p-docs">5 документов</span></div>
+              <div class="p-email">sidorov@company.ru</div>
+              <div class="p-domains"><span class="p-nodomains">не распределён — перенесите в команду</span></div>
+            </div>
+          </div>
+          <div class="person-card" onclick="show('s-profile')">
+            <div class="p-avatar" style="background:#8993A4">КО</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center"><span class="p-name">Кузнецова Ольга</span><span class="p-docs">2 документа</span></div>
+              <div class="p-email">kuznetsova@company.ru</div>
+              <div class="p-domains"><span class="p-nodomains">не распределена — перенесите в команду</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════ ЭКРАН 2: КЛАСТЕР ═══════════════ -->
+<div class="screen" id="s-cluster">
+  <div class="phase-note"><span>Экран кластера: breadcrumbs, шапка с цветом и статистикой, редактирование/удаление. Команды — не таблица, а «колонны», визуально свисающие со схемы кластера. Здесь же создание команды.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Структура</div>
+      <div class="tree">
+        <div class="t-cluster">
+          <div class="t-row">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c1)"></span>
+            <span class="t-name">Медиа</span><span class="t-count">1</span>
+          </div>
+          <div class="t-kids open">
+            <div class="t-team">
+              <div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">Развитие SEO</span><span class="t-count">1</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="t-cluster">
+          <div class="t-row">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c2)"></span>
+            <span class="t-name">Билетный бизнес</span><span class="t-count">3</span>
+          </div>
+          <div class="t-kids open">
+            <div class="t-team"><div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">GDS</span><span class="t-count">1</span></div></div>
+            <div class="t-team"><div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">Финтех</span><span class="t-count">1</span></div></div>
+            <div class="t-team"><div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">Конверсия</span><span class="t-count">1</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav-label">Справочники</div>
+      <button class="nav-row"><span class="nav-icon">▦</span> Шаблоны требований</button>
+      <button class="nav-row"><span class="nav-icon">☰</span> Критерии ИИ</button>
+      <button class="nav-row"><span class="nav-icon">⚡</span> Подключение ИИ</button>
+    </aside>
+
+    <main class="content">
+      <div class="page">
+        <div class="crumbs">
+          <a href="#" onclick="show('s-main');return false">Кластеры</a>
+          <span class="sep">/</span>
+          <b style="color:var(--text)">Билетный бизнес</b>
+        </div>
+
+        <div class="head-card" style="border-top:4px solid var(--c2); border-top-left-radius:0; border-top-right-radius:0;">
+          <div class="glyph" style="background:var(--c2)">Б</div>
+          <div class="head-main">
+            <h1>Билетный бизнес</h1>
+            <div class="desc">Продажи билетов: витрина, данные, платежи. Всё, что связано с покупкой и возвратом.</div>
+            <div class="statline">
+              <div class="stat"><b>3</b>команды</div>
+              <div class="stat"><b>3</b>аналитика</div>
+              <div class="stat"><b>42</b>документа</div>
+              <div class="stat"><b>86%</b>прошли проверку</div>
+            </div>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-default" onclick="show('m-cluster-new')">✎ Редактировать</button>
+            <button class="btn btn-danger-ghost">Удалить</button>
+            <button class="btn btn-primary" onclick="show('m-team-new')">＋ Добавить команду</button>
+          </div>
+        </div>
+
+        <div class="org">
+          <div class="org-grid">
+            <div class="team-col">
+              <div class="team-card" onclick="show('s-team')">
+                <div class="tc-head" style="border-left-color:var(--c2); background:var(--c2-bg)">
+                  <div><div class="tc-name">GDS</div><div class="tc-desc">Системы бронирования и обмен данными</div></div>
+                </div>
+                <div class="tc-people">
+                  <span class="tc-person"><span class="t-avatar" style="background:var(--c2);width:20px;height:20px;font-size:8.5px">АР</span>Алиев Р.А.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="team-col">
+              <div class="team-card" onclick="show('s-team')">
+                <div class="tc-head" style="border-left-color:var(--c2); background:var(--c2-bg)">
+                  <div><div class="tc-name">Финтех</div><div class="tc-desc">Платежи, подарочные карты, букинг</div></div>
+                </div>
+                <div class="tc-people">
+                  <span class="tc-person"><span class="t-avatar" style="background:var(--c2);width:20px;height:20px;font-size:8.5px">БЖ</span>Белышева Ж.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="team-col">
+              <div class="team-card" onclick="show('s-team')">
+                <div class="tc-head" style="border-left-color:var(--c2); background:var(--c2-bg)">
+                  <div><div class="tc-name">Конверсия</div><div class="tc-desc">Воронка покупки на витрине</div></div>
+                </div>
+                <div class="tc-people">
+                  <span class="tc-person"><span class="t-avatar" style="background:var(--c2);width:20px;height:20px;font-size:8.5px">ВН</span>Никулин В.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="team-col">
+              <button class="tc-new" onclick="show('m-team-new')">＋ Новая команда</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════ ЭКРАН 3: КОМАНДА ═══════════════ -->
+<div class="screen" id="s-team">
+  <div class="phase-note"><span>Экран команды: шапка с breadcrumb-путём, агрегированные домены команды (собраны из доменов аналитиков), карточки аналитиков с их доменами. Кнопка «Добавить аналитика» — поиск по ФИО/email + домены нового участника.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Структура</div>
+      <div class="tree">
+        <div class="t-cluster">
+          <div class="t-row"><span class="t-dot" style="background:var(--c1)"></span><span class="t-name">Медиа</span><span class="t-count">1</span></div>
+        </div>
+        <div class="t-cluster">
+          <div class="t-row">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c2)"></span>
+            <span class="t-name">Билетный бизнес</span><span class="t-count">3</span>
+          </div>
+          <div class="t-kids open">
+            <div class="t-team">
+              <div class="t-row">
+                <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">GDS</span><span class="t-count">1</span>
+              </div>
+              <div class="t-kids open">
+                <div class="t-analyst"><div class="t-row active"><span class="t-avatar" style="background:var(--c2)">АР</span><span class="t-name">Алиев Р.А.</span></div></div>
+              </div>
+            </div>
+            <div class="t-team"><div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">Финтех</span><span class="t-count">1</span></div></div>
+            <div class="t-team"><div class="t-row" onclick="show('s-team')"><span class="t-name" style="padding-left:22px">Конверсия</span><span class="t-count">1</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav-label">Справочники</div>
+      <button class="nav-row"><span class="nav-icon">▦</span> Шаблоны требований</button>
+      <button class="nav-row"><span class="nav-icon">☰</span> Критерии ИИ</button>
+      <button class="nav-row"><span class="nav-icon">⚡</span> Подключение ИИ</button>
+    </aside>
+
+    <main class="content">
+      <div class="page">
+        <div class="crumbs">
+          <a href="#" onclick="show('s-main');return false">Кластеры</a><span class="sep">/</span>
+          <a href="#" onclick="show('s-cluster');return false">Билетный бизнес</a><span class="sep">/</span>
+          <b style="color:var(--text)">GDS</b>
+        </div>
+
+        <div class="head-card" style="border-top:4px solid var(--c2); border-top-left-radius:0; border-top-right-radius:0;">
+          <div class="glyph" style="background:var(--c2)">G</div>
+          <div class="head-main">
+            <h1>GDS</h1>
+            <div class="desc">Системы бронирования и обмен данными с глобальными дистрибьюторами.</div>
+            <div class="statline">
+              <div class="stat"><b>1</b>аналитик</div>
+              <div class="stat"><b>14</b>документов</div>
+              <div class="stat"><b>2</b>домена</div>
+            </div>
+            <div class="tc-domains" style="padding:10px 0 0">
+              <span class="chip">вывод на витрину</span>
+              <span class="chip">загрузка данных</span>
+              <span class="tc-more">— домены участников</span>
+            </div>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-default" onclick="show('m-team-new')">✎ Редактировать</button>
+            <button class="btn btn-danger-ghost">Удалить</button>
+            <button class="btn btn-primary" onclick="show('m-analyst-add')">＋ Добавить аналитика</button>
+          </div>
+        </div>
+
+        <div class="section-title">Состав команды</div>
+        <div class="people-grid">
+          <div class="person-card" onclick="show('s-profile')">
+            <div class="p-avatar" style="background:var(--c2)">АР</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center"><span class="p-name">Алиев Рустам Азадович</span><span class="p-docs">14 документов</span></div>
+              <div class="p-email">aliev@company.ru</div>
+              <div class="p-domains">
+                <span class="chip">вывод на витрину <button class="chip-x" onclick="event.stopPropagation()">×</button></span>
+                <span class="chip">загрузка данных <button class="chip-x" onclick="event.stopPropagation()">×</button></span>
+              </div>
+            </div>
+          </div>
+
+          <button class="tc-new" onclick="show('m-analyst-add')">＋ Добавить аналитика</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════ ЭКРАН 4: ПРОФИЛЬ АНАЛИТИКА ═══════════════ -->
+<div class="screen" id="s-profile">
+  <div class="phase-note"><span>Профиль аналитика (текущий экран, дополнен): сверху — кликабельные хлебные крошки «Кластер → Команда» (переход в любую точку структуры), в карточке — причастность и редактируемые домены-теги. Остальное содержимое профиля (документы, заметка, оценки) — без изменений.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Структура</div>
+      <div class="tree">
+        <div class="t-cluster">
+          <div class="t-row"><span class="t-dot" style="background:var(--c1)"></span><span class="t-name">Медиа</span><span class="t-count">1</span></div>
+        </div>
+        <div class="t-cluster">
+          <div class="t-row">
+            <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.closest('.t-cluster').querySelector('.t-kids').classList.toggle('open')">▶</button>
+            <span class="t-dot" style="background:var(--c2)"></span>
+            <span class="t-name">Билетный бизнес</span><span class="t-count">3</span>
+          </div>
+          <div class="t-kids open">
+            <div class="t-team">
+              <div class="t-row">
+                <button class="t-disc open" onclick="event.stopPropagation(); this.classList.toggle('open'); this.parentElement.parentElement.querySelector('.t-kids').classList.toggle('open')">▶</button>
+                <span class="t-name">GDS</span><span class="t-count">1</span>
+              </div>
+              <div class="t-kids open">
+                <div class="t-analyst"><div class="t-row active"><span class="t-avatar" style="background:var(--c2)">АР</span><span class="t-name">Алиев Р.А.</span></div></div>
+              </div>
+            </div>
+            <div class="t-team"><div class="t-row"><span class="t-name" style="padding-left:22px">Финтех</span><span class="t-count">1</span></div></div>
+            <div class="t-team"><div class="t-row"><span class="t-name" style="padding-left:22px">Конверсия</span><span class="t-count">1</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav-label">Справочники</div>
+      <button class="nav-row"><span class="nav-icon">▦</span> Шаблоны требований</button>
+      <button class="nav-row"><span class="nav-icon">☰</span> Критерии ИИ</button>
+      <button class="nav-row"><span class="nav-icon">⚡</span> Подключение ИИ</button>
+    </aside>
+
+    <main class="content">
+      <div class="page">
+        <div class="crumbs">
+          <a href="#" onclick="show('s-main');return false">Кластеры</a><span class="sep">/</span>
+          <a href="#" onclick="show('s-cluster');return false">Билетный бизнес</a><span class="sep">/</span>
+          <a href="#" onclick="show('s-team');return false">GDS</a><span class="sep">/</span>
+          <b style="color:var(--text)">Алиев Рустам Азадович</b>
+        </div>
+
+        <div class="profile-card">
+          <!-- визуальный путь: кластер → команда → аналитик -->
+          <div class="path">
+            <a class="path-node" style="background:var(--c2-bg);color:var(--c2)" onclick="show('s-cluster')"><span class="t-dot" style="background:var(--c2)"></span>Билетный бизнес</a>
+            <span class="path-arrow">→</span>
+            <a class="path-node" style="background:var(--c2-bg);color:var(--c2)" onclick="show('s-team')"><span class="t-dot" style="background:var(--c2)"></span>GDS</a>
+            <span class="path-arrow">→</span>
+            <span class="path-node current"><span class="t-avatar" style="background:var(--c2);width:20px;height:20px;font-size:8.5px">АР</span>Алиев Рустам Азадович</span>
+          </div>
+
+          <div style="display:flex;gap:16px;align-items:flex-start">
+            <div class="p-avatar" style="width:56px;height:56px;font-size:19px;background:var(--c2)">АР</div>
+            <div style="flex:1">
+              <h1 style="margin:0">Алиев Рустам Азадович</h1>
+              <div class="desc">aliev@company.ru · Confluence: r.aliev · документов: 14 · синхронизирован 01.09.2026 09:12</div>
+              <div class="head-actions" style="margin-top:10px">
+                <button class="btn btn-primary">📄 Документы (14)</button>
+                <button class="btn btn-default">📊 Статистика оценок</button>
+              </div>
+              <div class="section-title" style="margin-top:18px">Домены (бизнес-функционал)</div>
+              <div class="dom-edit">
+                <span class="chip">вывод на витрину <button class="chip-x">×</button></span>
+                <span class="chip">загрузка данных <button class="chip-x">×</button></span>
+                <button class="dom-add">＋ добавить домен</button>
+              </div>
+              <div class="hint" style="font-size:11.5px;color:var(--text-subtlest);margin-top:6px">Свободные теги: домены команды на экране команды собираются из доменов её участников.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Заметки руководителя</div>
+        <div class="profile-card">
+          <div class="field"><textarea placeholder="Сильные стороны, зоны роста, договорённости по документам аналитика…">За квартал вывел в прод загрузку данных GDS. Следить за качеством описаний интеграций.</textarea></div>
+          <div class="note-preview" style="background:var(--bg);border-radius:6px;padding:10px 12px;font-size:13px;color:var(--text-subtle)">
+            <div class="muted" style="font-size:11.5px;margin-bottom:4px">Предпросмотр:</div>
+            За квартал вывел в прод загрузку данных GDS. Следить за качеством описаний интеграций.
+          </div>
+          <div class="head-actions" style="margin-top:10px">
+            <button class="btn btn-primary" style="font-size:12.5px;padding:6px 12px">Сохранить заметку</button>
+            <button class="btn btn-danger-ghost" style="font-size:12.5px;padding:6px 12px">Удалить заметку</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════ МОДАЛКА: новый кластер / редактирование ═══════════════ -->
+<div class="overlay" id="m-cluster-new">
+  <div class="modal">
+    <div class="modal-head"><h2>Новый кластер</h2><button class="modal-close" onclick="hide('m-cluster-new')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Название *</label>
+        <input type="text" placeholder="Например: Каналы продаж">
+      </div>
+      <div class="field">
+        <label>Описание</label>
+        <textarea placeholder="Для чего этот кластер, что в него входит"></textarea>
+      </div>
+      <div class="field">
+        <label>Цвет</label>
+        <div class="swatches">
+          <span class="swatch active" style="background:var(--c1)"></span>
+          <span class="swatch" style="background:var(--c2)"></span>
+          <span class="swatch" style="background:var(--c3)"></span>
+          <span class="swatch" style="background:var(--c4)"></span>
+          <span class="swatch" style="background:var(--c5)"></span>
+        </div>
+        <div class="hint">Цвет кодирует кластер в дереве и на картах. Новый кластер получает следующий свободный цвет автоматически.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-default" onclick="hide('m-cluster-new')">Отмена</button>
+      <button class="btn btn-primary">Создать кластер</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ МОДАЛКА: новая команда ═══════════════ -->
+<div class="overlay" id="m-team-new">
+  <div class="modal">
+    <div class="modal-head"><h2>Новая команда в кластере «Билетный бизнес»</h2><button class="modal-close" onclick="hide('m-team-new')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Название *</label>
+        <input type="text" placeholder="Например: Возвраты">
+        <div class="hint">Уникально в рамках кластера.</div>
+      </div>
+      <div class="field">
+        <label>Описание</label>
+        <textarea placeholder="Чем команда занимается"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-default" onclick="hide('m-team-new')">Отмена</button>
+      <button class="btn btn-primary">Создать команду</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ МОДАЛКА: добавить аналитика в команду ═══════════════ -->
+<div class="overlay" id="m-analyst-add">
+  <div class="modal">
+    <div class="modal-head"><h2>Добавить аналитика в команду «GDS»</h2><button class="modal-close" onclick="hide('m-analyst-add')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Поиск по ФИО или email</label>
+        <input type="text" class="searchbox" placeholder="Начните вводить…">
+      </div>
+      <div class="field">
+        <div class="found">
+          <span class="t-avatar" style="background:#8993A4">СП</span>
+          <div><div style="font-size:13.5px;font-weight:600">Сидоров Пётр</div><div style="font-size:12px;color:var(--text-subtlest)">sidorov@company.ru · сейчас без команды</div></div>
+          <button class="btn btn-primary f-add">В команду</button>
+        </div>
+        <div class="found">
+          <span class="t-avatar" style="background:#8993A4">КО</span>
+          <div><div style="font-size:13.5px;font-weight:600">Кузнецова Ольга</div><div style="font-size:12px;color:var(--text-subtlest)">kuznetsova@company.ru · сейчас без команды</div></div>
+          <button class="btn btn-default f-add" disabled style="opacity:.5">В команде</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Домены нового участника</label>
+        <div class="dom-edit">
+          <span class="chip">вывод на витрину <button class="chip-x">×</button></span>
+          <button class="dom-add">＋ добавить домен</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="hint">Аналитик состоит в одной команде: при переводе из другой команды его домены сохраняются, привязка меняется. Существующие документы, заметки и оценки аналитика не затрагиваются.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-default" onclick="hide('m-analyst-add')">Отмена</button>
+      <button class="btn btn-primary">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+    const el = document.getElementById(id);
+    if (el.classList.contains('overlay')) { el.classList.add('show'); return; }
+    el.classList.add('show');
+    document.querySelectorAll('.mocktab').forEach(t => t.classList.toggle('active', t.dataset.s === id));
+    window.scrollTo(0, 0);
+  }
+  function hide(id) { document.getElementById(id).classList.remove('show'); }
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); }));
+  document.querySelectorAll('.mocktab[data-s]').forEach(t => t.addEventListener('click', () => show(t.dataset.s)));
+</script>
+</body>
+</html>

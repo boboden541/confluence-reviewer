@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Несколько шаблонов требований · Confluence Reviewer</title>
+<style>
+  :root {
+    --nav-bg: #071D49;
+    --nav-icon: #BCD0F7;
+    --blue: #0C66E4;
+    --blue-hover: #0055CC;
+    --blue-subtle-bg: #E9F2FF;
+    --text: #172B4D;
+    --text-subtle: #44546F;
+    --text-subtlest: #626F86;
+    --bg: #F1F2F4;
+    --surface: #FFFFFF;
+    --border: #D0D5DD;
+    --border-subtle: #EBECF0;
+    --row-hover: #F8F9FA;
+    --green-bg: #DCFFF1;
+    --green-text: #216E4E;
+    --yellow-bg: #FFF7D6;
+    --yellow-text: #7A5D00;
+    --red-bg: #FFEBE6;
+    --red-text: #AE2E24;
+    --grey-bg: #F1F2F4;
+    --grey-text: #44546F;
+    --radius: 4px;
+    --radius-page: 8px;
+    --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+  /* ── шапка макета (не часть продукта) ─────────────────────── */
+  .mockbar { background: var(--nav-bg); color: var(--nav-icon); padding: 10px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 10; }
+  .mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 8px; }
+  .mocktab { border: 1px solid transparent; background: transparent; color: var(--nav-icon); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: var(--radius); cursor: pointer; }
+  .mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+
+  .screen { display: none; max-width: 980px; margin: 24px auto 60px; padding: 0 16px; }
+  .screen.show { display: block; }
+  .phase-note { font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; margin-bottom: 16px; }
+
+  .card { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 24px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--text-subtle); font-size: 13px; margin: 0 0 16px; }
+  .btn { display: inline-block; border: none; border-radius: var(--radius); font: inherit; font-size: 14px; font-weight: 500; padding: 8px 14px; cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:hover { background: var(--blue-hover); }
+  .btn.default { background: #F1F2F4; color: var(--text); border: 1px solid var(--border); }
+  .btn.subtle { background: transparent; color: var(--blue); padding: 4px 8px; }
+  .btn.big { font-size: 15px; padding: 10px 18px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=text], textarea {
+    width: 100%; border: 2px solid var(--border); border-radius: var(--radius);
+    font-family: var(--font); font-size: 14px; color: var(--text); padding: 8px 10px; background: #fff;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--blue); }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-subtle); margin: 14px 0 4px; }
+
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: 1px; }
+  .badge.green { background: var(--green-bg); color: var(--green-text); }
+  .badge.grey { background: var(--grey-bg); color: var(--grey-text); }
+  .lozenge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: 1px; }
+  .lozenge.new { background: var(--green-bg); color: var(--green-text); }
+  .lozenge.moved { background: var(--grey-bg); color: var(--grey-text); }
+  .lozenge.blue { background: var(--blue-subtle-bg); color: var(--blue); }
+
+  .breadcrumbs { font-size: 13px; color: var(--text-subtle); margin-bottom: 10px; }
+  .breadcrumbs a { color: var(--blue); text-decoration: none; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .page-meta { color: var(--text-subtle); font-size: 13px; margin-top: 2px; }
+  .head-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+  /* ── экран 1: список шаблонов — карточки, горизонтальный скролл ── */
+  .tpl-scroll-wrap { position: relative; }
+  .tpl-cards { display: flex; gap: 12px; overflow-x: auto; padding: 4px 4px 14px; scroll-snap-type: x proximity; }
+  .tpl-cards::-webkit-scrollbar { height: 6px; }
+  .tpl-cards::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .tpl-card { flex: 0 0 250px; scroll-snap-align: start; background: var(--surface); border: 2px solid var(--border-subtle); border-radius: var(--radius-page); box-shadow: var(--shadow); padding: 16px; cursor: pointer; position: relative; display: flex; flex-direction: column; }
+  .tpl-card:hover { border-color: var(--border); }
+  .tpl-card.selected { border-color: var(--blue); background: var(--blue-subtle-bg); }
+  .tpl-card .glyph { width: 36px; height: 36px; border-radius: var(--radius); background: var(--blue-subtle-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 10px; }
+  .tpl-card .name { font-weight: 600; font-size: 15px; line-height: 1.3; min-height: 40px; }
+  .tpl-card .meta { font-size: 12.5px; color: var(--text-subtle); margin-top: 6px; line-height: 1.5; }
+  .tpl-card .row { display: flex; gap: 6px; margin-top: auto; padding-top: 12px; flex-wrap: wrap; }
+  .tpl-card.archived { opacity: .6; background: var(--row-hover); }
+  .tpl-card.archived .glyph { background: var(--grey-bg); color: var(--grey-text); }
+  .tpl-new { flex: 0 0 170px; scroll-snap-align: start; border: 2px dashed var(--border); border-radius: var(--radius-page); background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: var(--text-subtle); font: inherit; font-size: 14px; font-weight: 500; text-align: center; }
+  .tpl-new:hover { border-color: var(--blue); color: var(--blue); }
+  .tpl-new .plus { font-size: 30px; font-weight: 300; line-height: 1; }
+  .scroll-hint { font-size: 12.5px; color: var(--text-subtlest); margin-top: 2px; }
+  .archive-head { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; color: var(--text-subtlest); font-size: 13px; }
+  .archive-head::after { content: ""; flex: 1; border-top: 1px solid var(--border-subtle); }
+
+  /* ── экраны 2–3: редактор шаблона ──────────────────────────── */
+  .marker-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .marker-row .marker-input { width: 160px; }
+  .marker-row .muted { font-size: 13px; color: var(--text-subtle); }
+  .demo-title { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .chip { font-size: 12.5px; border-radius: 10px; padding: 2px 10px; }
+  .chip.ok { background: var(--green-bg); color: var(--green-text); }
+  .chip.bad { background: var(--red-bg); color: var(--red-text); }
+  .template-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .template-layout { grid-template-columns: 1fr; } }
+  .section-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius); margin-bottom: 6px; background: #fff; }
+  .section-row .handle { color: var(--text-subtlest); cursor: grab; }
+  .section-row .lvl { font-size: 12px; color: var(--text-subtle); border: 1px solid var(--border); border-radius: var(--radius); padding: 3px 6px; background: #fff; }
+  .section-row input { flex: 1; }
+  .section-row .x { border: none; background: transparent; color: var(--text-subtlest); cursor: pointer; font-size: 14px; }
+  .indent-2 { margin-left: 28px; }
+  .indent-3 { margin-left: 56px; }
+  .req-star { color: var(--red-text); font-weight: 700; }
+  .opt-mark { color: var(--text-subtlest); }
+  .preview-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 12px; font-size: 13.5px; line-height: 1.7; margin-top: 6px; }
+  .muted { color: var(--text-subtle); font-size: 13px; }
+  .versions { list-style: none; padding: 0; margin: 0; font-size: 13px; color: var(--text-subtle); line-height: 1.9; }
+  .versions .active { color: var(--text); font-weight: 600; }
+  .add-row { margin-top: 10px; }
+  .name-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 760px) { .name-row { grid-template-columns: 1fr; } }
+
+  /* ── экран 4: диалог проверки — лента карточек ─────────────── */
+  .dlg { max-width: 640px; margin: 0 auto; border-radius: var(--radius-page); box-shadow: 0 8px 28px rgba(9,30,66,.22); background: var(--surface); overflow: hidden; }
+  .dlg-head { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .dlg-body { padding: 20px; max-height: 62vh; overflow: auto; }
+  .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius); margin-bottom: 8px; }
+  .check-row input { margin-top: 3px; }
+  .check-row .t { font-weight: 600; font-size: 14px; }
+  .check-row .d { font-size: 12.5px; color: var(--text-subtle); }
+  .zone-label { font-size: 12px; font-weight: 600; color: var(--text-subtle); margin: 16px 0 6px; }
+  .zone-off { opacity: .55; pointer-events: none; }
+  .dlg-tpl-strip { position: relative; }
+  .dlg-tpl-strip::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; background: linear-gradient(90deg, transparent, var(--surface)); pointer-events: none; }
+  .dlg-tpl-cards { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+  .dlg-tpl-cards::-webkit-scrollbar { height: 5px; }
+  .dlg-tpl-cards::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .dlg-tpl { flex: 0 0 190px; border: 2px solid var(--border-subtle); border-radius: var(--radius); padding: 10px 12px; cursor: pointer; background: #fff; }
+  .dlg-tpl:hover { border-color: var(--border); }
+  .dlg-tpl.selected { border-color: var(--blue); background: var(--blue-subtle-bg); }
+  .dlg-tpl .name { font-weight: 600; font-size: 13.5px; line-height: 1.3; }
+  .dlg-tpl .meta { font-size: 12px; color: var(--text-subtle); margin-top: 3px; }
+  .lockbar { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 6px; }
+  .lockbar .lbl { font-size: 12px; font-weight: 600; color: var(--text-subtle); }
+  textarea.locked { background: var(--row-hover); color: var(--text-subtle); font-size: 13px; line-height: 1.5; font-family: ui-monospace, Menlo, monospace; min-height: 120px; }
+  .dlg-foot { padding: 14px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; gap: 8px; background: #FAFBFC; }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МОКАП · ФТ «Несколько шаблонов»</span>
+  <button class="mocktab active" data-s="s1" onclick="show('s1', this)">1 · Список шаблонов</button>
+  <button class="mocktab" data-s="s2" onclick="show('s2', this)">2 · Редактор</button>
+  <button class="mocktab" data-s="s3" onclick="show('s3', this)">3 · Создание</button>
+  <button class="mocktab" data-s="s4" onclick="show('s4', this)">4 · Диалог проверки</button>
+</div>
+
+<!-- ══ ЭКРАН 1: список шаблонов ════════════════════════════════ -->
+<section class="screen show" id="s1">
+  <div class="phase-note">
+    Раздел «Шаблоны требований»: карточки в горизонтальной ленте со скроллом (митигация риска №1),
+    последняя карточка — «+ Создать шаблон». Один шаблон помечен «по умолчанию» — он предвыбран
+    в диалоге проверки. Ненужный шаблон архивируется: карточка остаётся (приглушённая, отдельным
+    блоком), история отчётов не страдает. Кликом подсвечен шаблон, который откроется по нажатию.
+  </div>
+
+  <nav class="breadcrumbs"><a href="#">Ревью требований</a> / Шаблоны требований</nav>
+  <div class="page-head">
+    <div>
+      <h1><span style="margin-right:6px">🧩</span>Шаблоны требований</h1>
+      <div class="page-meta">3 шаблона · активная версия каждого применяется к проверкам, которые её выбрали</div>
+    </div>
+  </div>
+
+  <div class="tpl-scroll-wrap">
+    <div class="tpl-cards" id="listCards">
+      <div class="tpl-card selected" onclick="pickCard(this, 'listCards')">
+        <div class="glyph">🧩</div>
+        <div class="name">Шаблон требований <span class="lozenge new">по умолчанию</span></div>
+        <div class="meta">
+          12 разделов · версия №7 · 26.08.2026<br>
+          маркер названия: «СТ»
+        </div>
+        <div class="row">
+          <button class="btn subtle">Открыть</button>
+          <button class="btn subtle">В архив</button>
+        </div>
+      </div>
+
+      <div class="tpl-card" onclick="pickCard(this, 'listCards')">
+        <div class="glyph">🧩</div>
+        <div class="name">Шаблон интеграционных доработок</div>
+        <div class="meta">
+          9 разделов · версия №2 · 25.08.2026<br>
+          маркер названия: «ИНТ»
+        </div>
+        <div class="row">
+          <button class="btn subtle">Открыть</button>
+          <button class="btn subtle">По умолчанию</button>
+          <button class="btn subtle">В архив</button>
+        </div>
+      </div>
+
+      <div class="tpl-card" onclick="pickCard(this, 'listCards')">
+        <div class="glyph">🧩</div>
+        <div class="name">Шаблон маркетинговых страниц</div>
+        <div class="meta">
+          7 разделов · версия №1 · 24.08.2026<br>
+          маркер названия: «МКТ»
+        </div>
+        <div class="row">
+          <button class="btn subtle">Открыть</button>
+          <button class="btn subtle">По умолчанию</button>
+          <button class="btn subtle">В архив</button>
+        </div>
+      </div>
+
+      <button class="tpl-new" title="Создать шаблон">
+        <span class="plus">+</span>
+        Создать<br>шаблон
+      </button>
+    </div>
+  </div>
+  <div class="scroll-hint">→ лента листается горизонтально, когда шаблонов много; создание — карточка «+» в конце</div>
+
+  <div class="archive-head">Архив</div>
+  <div class="tpl-cards">
+    <div class="tpl-card archived">
+      <div class="glyph">🧩</div>
+      <div class="name">Старый шаблон 2025 <span class="lozenge moved">в архиве</span></div>
+      <div class="meta">
+        11 разделов · версия №14 · 03.03.2026<br>
+        не участвует в выборе при проверке
+      </div>
+      <div class="row">
+        <button class="btn subtle">Открыть</button>
+        <button class="btn subtle">Вернуть из архива</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ЭКРАН 2: редактор шаблона ══════════════════════════════ -->
+<section class="screen" id="s2">
+  <div class="phase-note">
+    Экран существующего шаблона — текущий редактор, дополненный полем названия (сейчас name
+    редактируется только в файле на сервере). Крошка ведёт назад к списку. Каждое сохранение —
+    новая версия этого шаблона; история версий — внутри шаблона. «В архив» — здесь же.
+  </div>
+
+  <nav class="breadcrumbs"><a href="#">Ревью требований</a> / <a href="#">Шаблоны требований</a> / Шаблон требований</nav>
+  <div class="page-head">
+    <div>
+      <h1><span style="margin-right:6px">🧩</span>Шаблон требований <span class="lozenge new">по умолчанию</span></h1>
+      <div class="page-meta">версия №7 от 26.08.2026 · 12 разделов</div>
+    </div>
+    <div class="head-actions">
+      <button class="btn default">В архив</button>
+      <button class="btn primary">Сохранить шаблон</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Название шаблона</h2>
+    <div class="name-row">
+      <div>
+        <label>Название (видно в диалоге проверки)</label>
+        <input type="text" value="Шаблон требований">
+      </div>
+      <div>
+        <label>Описание (необязательно)</label>
+        <input type="text" value="Системные требования доработок БФТ">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Название документа</h2>
+    <div class="marker-row">
+      <span class="muted">Название должно содержать маркер</span>
+      <input class="marker-input" type="text" value="СТ">
+      <span class="muted">— регистр не важен, ищется отдельным словом</span>
+    </div>
+    <div class="demo-title">
+      <span class="muted">Примеры:</span>
+      <span class="chip ok">[СТ] GDS-15 Загрузка кино</span>
+      <span class="chip bad">GDS-15 Загрузка кино</span>
+    </div>
+  </div>
+
+  <div class="template-layout">
+    <div class="card">
+      <h2>Структура разделов</h2>
+      <p class="muted">Тяните за ⋮⋮ — верх/низ строки: вставить рядом, середина: вложить уровнем ниже. <span class="req-star">✱</span> — обязателен, ✕ — удалить вместе с подразделами. Проверяется наличие раздела, а не порядок.</p>
+
+      <div class="section-row"><span class="handle">⋮⋮</span><span class="lvl">Ур. 1</span><input type="text" value="1 Общая информация о доработке"><span class="req-star">✱</span><button class="x">✕</button></div>
+      <div class="section-row indent-2"><span class="handle">⋮⋮</span><span class="lvl">Ур. 2</span><input type="text" value="1.1 Описание доработки"><span class="req-star">✱</span><button class="x">✕</button></div>
+      <div class="section-row indent-2"><span class="handle">⋮⋮</span><span class="lvl">Ур. 2</span><input type="text" value="1.2 Ссылки на ТЗ и смежные документы"><span class="opt-mark">○</span><button class="x">✕</button></div>
+      <div class="section-row"><span class="handle">⋮⋮</span><span class="lvl">Ур. 1</span><input type="text" value="2 Требования к доработке"><span class="req-star">✱</span><button class="x">✕</button></div>
+      <div class="section-row indent-2"><span class="handle">⋮⋮</span><span class="lvl">Ур. 2</span><input type="text" value="2.1 Функциональные требования"><span class="req-star">✱</span><button class="x">✕</button></div>
+      <div class="section-row indent-3"><span class="handle">⋮⋮</span><span class="lvl">Ур. 3</span><input type="text" value="2.1.1 Сценарии использования"><span class="req-star">✱</span><button class="x">✕</button></div>
+
+      <div class="add-row"><button class="btn default">+ Добавить раздел</button></div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Как будет проверяться</h2>
+        <div class="muted">Название документа:</div>
+        <div class="preview-box">должно содержать: <b>«СТ»</b></div>
+        <div class="muted" style="margin-top:10px">Структура разделов (1 → 1.1 → 1.1.1):</div>
+        <div class="preview-box">
+          <div><b>1.</b> <span class="req-star">✱</span> Общая информация о доработке</div>
+          <div style="margin-left:14px"><b>1.1</b> <span class="req-star">✱</span> Описание доработки</div>
+          <div style="margin-left:14px"><b>1.2</b> <span class="opt-mark">○</span> Ссылки на ТЗ и смежные документы</div>
+          <div><b>2.</b> <span class="req-star">✱</span> Требования к доработке</div>
+          <div style="margin-left:14px"><b>2.1</b> <span class="req-star">✱</span> Функциональные требования</div>
+          <div style="margin-left:28px"><b>2.1.1</b> <span class="req-star">✱</span> Сценарии использования</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>История версий</h2>
+        <ul class="versions">
+          <li class="active">№7 · 26.08.2026 · 12 разд. · активна</li>
+          <li>№6 · 20.08.2026 · 12 разд.</li>
+          <li>№5 · 12.08.2026 · 11 разд.</li>
+        </ul>
+        <p class="muted" style="margin:8px 0 0">Отчёты хранят версию, по которой проверяли</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ЭКРАН 3: создание шаблона ═══════════════════════════════ -->
+<section class="screen" id="s3">
+  <div class="phase-note">
+    Создание «с нуля»: карточка «+» ведёт сюда. Пустая структура, поля названия и маркера,
+    первичная кнопка — «Создать шаблон» (первое сохранение = версия №1). До сохранения шаблон
+    не появляется в диалоге проверки.
+  </div>
+
+  <nav class="breadcrumbs"><a href="#">Ревью требований</a> / <a href="#">Шаблоны требований</a> / Новый шаблон</nav>
+  <div class="page-head">
+    <div>
+      <h1><span style="margin-right:6px">🧩</span>Новый шаблон</h1>
+      <div class="page-meta">шаблон появится в диалоге проверки после первого сохранения</div>
+    </div>
+    <div class="head-actions">
+      <button class="btn default">Отмена</button>
+      <button class="btn primary">Создать шаблон</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Название шаблона</h2>
+    <div class="name-row">
+      <div>
+        <label>Название (видно в диалоге проверки)</label>
+        <input type="text" placeholder="например, Шаблон архитектурных решений">
+      </div>
+      <div>
+        <label>Описание (необязательно)</label>
+        <input type="text" placeholder="коротко, для чего этот шаблон">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Название документа</h2>
+    <div class="marker-row">
+      <span class="muted">Название должно содержать маркер</span>
+      <input class="marker-input" type="text" placeholder="например, АРХ">
+      <span class="muted">— можно оставить пустым: подойдёт любое название</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Структура разделов</h2>
+    <p class="muted">Добавьте разделы — они сразу появятся в предпросмотре справа.</p>
+    <div class="add-row" style="margin-top:0"><button class="btn default">+ Добавить раздел</button></div>
+  </div>
+</section>
+
+<!-- ══ ЭКРАН 4: диалог проверки ════════════════════════════════ -->
+<section class="screen" id="s4">
+  <div class="phase-note">
+    Диалог проверки: выбор шаблона — та же горизонтальная лента компакт-карточек со скроллом
+    (вместо вертикального списка). Предвыбран шаблон «по умолчанию» (лозенга); клик по карточке
+    выбирает её без радио-кружка. Архивные шаблоны в выборе не участвуют и не показываются.
+    Остальные зоны диалога не меняются.
+  </div>
+
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2 style="margin:0">Проверка документов</h2>
+      <div class="sub" style="margin:4px 0 0">Будет проверено: <b>3</b></div>
+    </div>
+    <div class="dlg-body">
+      <div class="zone-label">Что проверить</div>
+      <div class="check-row"><input type="checkbox" checked id="chkTpl" onchange="zoneToggle(this, 'tplZone')"><span><span class="t">Соответствие шаблону</span><div class="d">Структура разделов документа сверяется с шаблоном требований</div></span></div>
+      <div class="check-row"><input type="checkbox" checked><span><span class="t">Наполнение (ИИ)</span><div class="d">Полноту и качество содержимого проверяет ИИ по критериям ниже</div></span></div>
+
+      <div id="tplZone">
+        <div class="zone-label">Шаблон требований</div>
+        <div class="dlg-tpl-strip">
+          <div class="dlg-tpl-cards" id="dlgCards">
+            <div class="dlg-tpl selected" onclick="pickCard(this, 'dlgCards')">
+              <div class="name">Шаблон требований <span class="lozenge new">по умолчанию</span></div>
+              <div class="meta">12 разделов · маркер «СТ»</div>
+            </div>
+            <div class="dlg-tpl" onclick="pickCard(this, 'dlgCards')">
+              <div class="name">Шаблон интеграционных доработок</div>
+              <div class="meta">9 разделов · маркер «ИНТ»</div>
+            </div>
+            <div class="dlg-tpl" onclick="pickCard(this, 'dlgCards')">
+              <div class="name">Шаблон маркетинговых страниц</div>
+              <div class="meta">7 разделов · маркер «МКТ»</div>
+            </div>
+            <div class="dlg-tpl" onclick="pickCard(this, 'dlgCards')">
+              <div class="name">Шаблон архитектурных решений</div>
+              <div class="meta">10 разделов · без маркера</div>
+            </div>
+            <div style="flex:0 0 1px"></div>
+          </div>
+        </div>
+        <div class="scroll-hint" style="margin-top:2px">→ листается; архивные шаблоны в выборе не участвуют</div>
+      </div>
+
+      <div class="zone-label">ИИ-критерии и промт</div>
+      <div class="check-row"><input type="checkbox" checked><span><span class="t">Полнота описания</span><div class="d">описаны ли все сценарии использования доработки…</div></span></div>
+      <div class="check-row"><input type="checkbox" checked><span><span class="t">Непротиворечивость требований</span><div class="d">нет ли противоречий между разделами документа…</div></span></div>
+
+      <div class="lockbar">
+        <span class="lbl">🔒 Промт собран из отмеченных критериев</span>
+        <button class="btn default" style="font-size:13px">✏️ Изменить промт</button>
+      </div>
+      <textarea class="locked" readonly>Ты — рецензент системных требований…
+1. «Полнота описания» — описаны ли все сценарии использования…
+2. «Непротиворечивость требований» — нет ли противоречий…</textarea>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn default">Отмена</button>
+      <button class="btn primary">▶ Запустить проверку — 3 док.</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  function show(id, btn) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+    document.querySelectorAll('.mocktab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    history.replaceState(null, '', '#' + id);
+  }
+  function pickCard(card, listId) {
+    document.getElementById(listId).querySelectorAll('.tpl-card, .dlg-tpl').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+  }
+  function zoneToggle(cb, id) {
+    document.getElementById(id).classList.toggle('zone-off', !cb.checked);
+  }
+  if (location.hash) {
+    const id = location.hash.slice(1);
+    const btn = document.querySelector(`.mocktab[data-s="${id}"]`);
+    if (btn) show(id, btn);
+  }
+</script>
+</body>
+</html>

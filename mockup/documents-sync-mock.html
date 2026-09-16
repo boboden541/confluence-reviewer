@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Макет: синхронизация на экране документов аналитика</title>
+<link rel="stylesheet" href="../frontend/src/styles.css">
+<style>
+  /* служебное оформление самого макета — в продукт не попадает */
+  body { background: var(--bg); padding: 24px 28px; }
+  .mock-label {
+    font: 600 12px/1 var(--font);
+    color: var(--text-subtlest);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 28px 0 8px;
+  }
+  .mock-label:first-child { margin-top: 0; }
+  .mock-frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-page);
+    box-shadow: var(--shadow);
+    padding: 20px 24px;
+    max-width: 1080px;
+  }
+</style>
+</head>
+<body>
+
+<div class="mock-label">1 · Обычное состояние</div>
+<div class="mock-frame">
+  <nav class="breadcrumbs">
+    <span class="link">Ревью требований</span>
+    <span class="sep">/</span>
+    <span>Аналитики</span>
+  </nav>
+  <div class="page-head">
+    <div>
+      <h1 class="page-title"><span class="title-icon">📄</span> Иванов Иван</h1>
+      <div class="page-meta">
+        <span class="muted">Всего документов: 42 · Синхронизировано: 31.08, 10:15</span>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button class="btn subtle" title="Подтянуть новые и изменённые страницы аналитика из Confluence">
+        ⟳ Синхронизировать
+      </button>
+      <button class="btn primary" disabled title="Отметьте документы чекбоксами — настройки проверки спросят шаблон и промт ИИ">
+        <span aria-hidden="true">▶</span> Проверить выбранные
+      </button>
+    </div>
+  </div>
+  <table class="cf">
+    <thead>
+      <tr><th class="cb-cell"><input type="checkbox" class="cb"></th><th>Название</th><th>Статус проверки</th><th>Создан</th><th>Изменён</th><th>Проверен</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="cb-cell"><input type="checkbox" class="cb"></td><td><span class="link doc-link">[СТ] GDS-15 Загрузка кино</span></td><td><span class="lozenge ok">Пройдена</span></td><td class="cell-subtle">12.08.2026</td><td class="cell-subtle">28.08.2026</td><td class="cell-subtle">28.08.2026</td></tr>
+      <tr><td class="cb-cell"><input type="checkbox" class="cb"></td><td><span class="link doc-link">[СТ] GDS-22 Подписка</span></td><td><span class="lozenge">Не проверено</span></td><td class="cell-subtle">15.08.2026</td><td class="cell-subtle">30.08.2026</td><td class="cell-subtle">—</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="mock-label">2 · Идёт синхронизация</div>
+<div class="mock-frame">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title"><span class="title-icon">📄</span> Иванов Иван</h1>
+      <div class="page-meta">
+        <span class="muted">Всего документов: 42 · Синхронизировано: 31.08, 10:15</span>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button class="btn subtle" disabled>⟳ Синхронизация…</button>
+      <button class="btn primary" disabled>
+        <span aria-hidden="true">▶</span> Проверить выбранные
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="mock-label">3 · После завершения (итог и обновлённая дата)</div>
+<div class="mock-frame">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title"><span class="title-icon">📄</span> Иванов Иван</h1>
+      <div class="page-meta">
+        <span class="muted">Всего документов: 45 · Синхронизировано: 31.08, 12:40</span>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button class="btn subtle">⟳ Синхронизировать</button>
+      <button class="btn primary" disabled>
+        <span aria-hidden="true">▶</span> Проверить выбранные
+      </button>
+    </div>
+  </div>
+  <div class="alert ok">Синхронизация завершена: новых 3, обновлено 1</div>
+  <div class="alert error" style="margin-top: 8px">Синхронизация завершилась с ошибкой: Confluence недоступен (timeout)</div>
+</div>
+
+</body>
+</html>

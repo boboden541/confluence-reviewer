@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Макет — Лоадеры фоновых задач · Confluence Reviewer</title>
+<style>
+/* МАКЕТ СОБРАН ИЗ РЕАЛЬНЫХ КЛАССОВ styles.css СЕРВИСА (table.cf, selection-bar,
+   progress-line, lozenge, page-head, btn, sidebar) — то, что видите здесь,
+   соответствует вёрстке реализации. Единственный новый элемент — .spinner. */
+
+:root {
+  --nav-bg: #071D49;
+  --blue: #0C66E4;
+  --blue-hover: #0055CC;
+  --blue-subtle-bg: #E9F2FF;
+  --text: #172B4D;
+  --text-subtle: #44546F;
+  --text-subtlest: #626F86;
+  --bg: #F1F2F4;
+  --grey-bg: #DCDFE4;
+  --surface: #FFFFFF;
+  --border: #D0D5DD;
+  --border-subtle: #EBECF0;
+  --row-hover: #F8F9FA;
+  --green-bg: #DCFFF1;
+  --green-text: #216E4E;
+  --yellow-bg: #FFF7D6;
+  --yellow-text: #7A5D00;
+  --red-bg: #FFEBE6;
+  --red-text: #AE2E24;
+  --radius: 4px;
+  --radius-page: 8px;
+  --shadow: 0 1px 1px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.08);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); color: var(--text); background: var(--bg); }
+
+.mockbar { background: var(--nav-bg); color: #BCD0F7; padding: 10px 20px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; z-index: 30; }
+.mockbar .tag { font-size: 11px; letter-spacing: .08em; background: rgba(255,255,255,.12); padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+.mocktab { border: 0; background: transparent; color: #BCD0F7; font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: var(--radius); cursor: pointer; }
+.mocktab.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+
+.screen { display: none; }
+.screen.show { display: block; }
+.phase-note { max-width: 1150px; margin: 16px auto 0; padding: 0 20px; }
+.phase-note span { display: block; font-size: 13px; color: var(--text-subtle); background: var(--blue-subtle-bg); border: 1px solid #CCE0FF; border-radius: var(--radius); padding: 8px 12px; }
+
+/* ═══ РЕАЛЬНЫЕ КЛАССЫ СЕРВИСА (копия из styles.css) ═══ */
+.page { max-width: 1200px; margin: 20px auto 60px; padding: 0 20px; }
+.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.page-title { font-size: 20px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+.title-icon { font-size: 18px; }
+.page-meta { font-size: 13px; color: var(--text-subtlest); }
+.head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.muted { color: var(--text-subtlest, #626f86); }
+
+.btn { border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: var(--blue); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--blue-hover); }
+.btn.subtle { background: transparent; color: var(--text-subtle); }
+.btn.subtle:hover:not(:disabled) { background: var(--row-hover); color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.small { padding: 4px 10px; font-size: 12.5px; }
+
+.panel { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); }
+.panel-head { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 8px; }
+.panel-head h2 { font-size: 14px; margin: 0; flex: 1; }
+.count { font-size: 11.5px; color: var(--text-subtlest); background: var(--bg); border-radius: 10px; padding: 1px 8px; }
+
+.selection-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+  background: var(--blue-subtle-bg); border-radius: var(--radius);
+  padding: 6px 12px; margin-bottom: 12px;
+}
+.selection-bar .count { font-weight: 600; color: var(--blue); background: transparent; }
+.btn.ghost { background: transparent; color: var(--text-subtle); }
+.btn.ghost:hover { color: var(--text); }
+
+.progress-line { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-subtle); margin-bottom: 14px; }
+.progress-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--grey-bg); overflow: hidden; }
+.progress-bar > div { height: 100%; background: var(--blue); border-radius: 3px; transition: width 0.4s; }
+
+.table-wrap { background: var(--surface); border-radius: var(--radius-page); box-shadow: var(--shadow); overflow: hidden; }
+table.cf { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.cf th { text-align: left; font-size: 12px; font-weight: 700; color: var(--text-subtle); padding: 8px 10px; border-bottom: 2px solid var(--border-subtle); }
+table.cf td { padding: 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; overflow-wrap: anywhere; }
+table.cf tbody tr:hover td { background: var(--row-hover); }
+table.cf td.num, table.cf th.num { text-align: right; }
+.cell-subtle { color: var(--text-subtlest); }
+.cb { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; }
+.cb-cell { width: 36px; padding-right: 4px !important; white-space: nowrap; }
+.link { color: var(--blue); background: none; border: none; padding: 0; font: inherit; cursor: pointer; text-align: left; }
+.link:hover { text-decoration: underline; }
+.doc-link { font-size: inherit; text-align: left; font-weight: 500; }
+.actions-cell { white-space: nowrap; text-align: right; }
+.table-empty { padding: 24px; text-align: center; color: var(--text-subtlest); }
+
+.lozenge { font-size: 11px; padding: 2px 9px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+.lozenge.success { background: var(--green-bg); color: var(--green-text); }
+.lozenge.error { background: var(--red-bg); color: var(--red-text); }
+.lozenge.moved { background: var(--red-bg); color: var(--red-text); }
+.lozenge.default { background: var(--bg); color: var(--text-subtlest); }
+.lozenge.new, .lozenge.inprogress { background: var(--blue-subtle-bg); color: var(--blue); }
+
+.badge { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
+.badge-running { background: var(--blue-subtle-bg); color: var(--blue); }
+
+/* sidebar (реальные классы навигации) */
+.sidebar { width: 260px; flex: none; background: var(--surface); border-right: 1px solid var(--border-subtle); padding: 12px 10px; }
+.space-head { display: flex; gap: 8px; align-items: center; padding: 4px 8px 12px; }
+.space-icon { width: 28px; height: 28px; flex: none; border-radius: 6px; background: var(--nav-bg); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.space-name { font-weight: 600; font-size: 14px; }
+.nav-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtlest); padding: 10px 8px 4px; }
+.nav-row { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text-subtle); padding: 6px 8px; border-radius: 5px; cursor: pointer; text-align: left; }
+.nav-branch .nav-row { padding-left: 12px; }
+.nav-row.active { background: var(--blue-subtle-bg); color: var(--blue); font-weight: 600; }
+.t-avatar { width: 20px; height: 20px; flex: none; border-radius: 50%; color: #fff; font-size: 8.5px; font-weight: 700; display: grid; place-items: center; }
+.nav-doc { display: flex; gap: 6px; align-items: center; padding: 4px 8px 4px 28px; font-size: 12.5px; color: var(--text-subtle); }
+
+.act-row { display: flex; gap: 10px; padding: 9px 16px; font-size: 12.5px; align-items: flex-start; }
+.act-row + .act-row { border-top: 1px dashed var(--border-subtle); }
+
+/* ═══ ЕДИНСТВЕННЫЙ НОВЫЙ ЭЛЕМЕНТ — спиннер ═══ */
+.spinner {
+  display: inline-block; width: 14px; height: 14px; flex: none;
+  border: 2px solid var(--border-subtle); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* строка таблицы, обрабатываемая в данный момент */
+tr.processing td { background: var(--blue-subtle-bg); }
+tr.processing:hover td { background: #DDEBFF; }
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">МАКЕТ</span>
+  <button class="mocktab active" data-s="s-docs">1. Документы · массовая проверка</button>
+  <button class="mocktab" data-s="s-analysts">2. Аналитики · синхронизация</button>
+  <button class="mocktab" data-s="s-sidebar">3. Дерево сайдбара</button>
+  <button class="mocktab" data-s="s-home">4. Главная · «Сейчас происходит»</button>
+</div>
+
+<!-- ═══ 1. ДОКУМЕНТЫ: МАССОВАЯ ПРОВЕРКА (реальная таблица cf) ═══ -->
+<div class="screen show" id="s-docs">
+  <div class="phase-note"><span>Экран «Документы» в реальной вёрстке (table.cf). Во время массовой проверки: в колонке «Статус» — канонический лозенг «проверяется», у проверяемой строки подсветка, в «действиях» — спиннер вместо кнопки. Кнопка «Проверить выбранные» заблокирована, «Синхронизировать» — активна (другая задача). Прогресс-бар — существующий элемент экрана.</span></div>
+
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title"><span class="title-icon">📄</span>Документы</h1>
+        <div class="page-meta muted">Всего документов: 7 · <span>Синхронизировано: 09.09, 16:42</span></div>
+      </div>
+      <div class="head-actions">
+        <span class="badge badge-running">⟳ Синхронизация: Алиев Рустам</span>
+        <button class="btn subtle" disabled title="Синхронизация уже идёт">⟳ Синхронизировать</button>
+        <button class="btn primary">🧪 Проверить выбранные</button>
+      </div>
+    </div>
+
+    <div class="selection-bar">
+      <span class="count">Выбрано: 3</span>
+      <button class="btn ghost small">Выбрать все загруженные</button>
+      <button class="btn ghost small">Снять выбор</button>
+    </div>
+
+    <div class="progress-line">
+      <span>Массовая проверка: <b>2 из 7</b></span>
+      <div class="progress-bar"><div style="width:29%"></div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="cf">
+        <thead>
+          <tr>
+            <th class="cb-cell"></th>
+            <th>Название</th>
+            <th>Статус</th>
+            <th>Создан</th>
+            <th>Изменён</th>
+            <th>Проверен</th>
+            <th title="Заметка руководителя">📝</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cb-cell"><input type="checkbox" class="cb" checked></td>
+            <td><button type="button" class="link doc-link">Системные требования СМЭ</button></td>
+            <td><span class="lozenge inprogress">проверяется</span></td>
+            <td class="cell-subtle">01.09.2026</td>
+            <td class="cell-subtle">09.09.2026</td>
+            <td class="cell-subtle">09.09.2026</td>
+            <td title="Есть заметка руководителя">📝</td>
+            <td class="actions-cell"><span class="spinner"></span></td>
+          </tr>
+          <tr>
+            <td class="cb-cell"><input type="checkbox" class="cb" checked></td>
+            <td><button type="button" class="link doc-link">Интеграция с платёжным шлюзом</button></td>
+            <td><span class="lozenge error">не пройдено</span></td>
+            <td class="cell-subtle">28.08.2026</td>
+            <td class="cell-subtle">08.09.2026</td>
+            <td class="cell-subtle">09.09.2026</td>
+            <td>—</td>
+            <td class="actions-cell"></td>
+          </tr>
+          <tr>
+            <td class="cb-cell"><input type="checkbox" class="cb" checked></td>
+            <td><button type="button" class="link doc-link">Главная страница витрины</button></td>
+            <td><span class="lozenge default">в очереди</span></td>
+            <td class="cell-subtle">20.08.2026</td>
+            <td class="cell-subtle">05.09.2026</td>
+            <td class="cell-subtle">—</td>
+            <td>—</td>
+            <td class="actions-cell"></td>
+          </tr>
+          <tr>
+            <td class="cb-cell"><input type="checkbox" class="cb" checked></td>
+            <td><button type="button" class="link doc-link">Личный кабинет покупателя</button></td>
+            <td><span class="lozenge default">в очереди</span></td>
+            <td class="cell-subtle">18.08.2026</td>
+            <td class="cell-subtle">02.09.2026</td>
+            <td class="cell-subtle">—</td>
+            <td>📝</td>
+            <td class="actions-cell"></td>
+          </tr>
+          <tr>
+            <td class="cb-cell"><input type="checkbox" class="cb"></td>
+            <td><button type="button" class="link doc-link">Регламент публикации метатегов</button></td>
+            <td><span class="lozenge success">пройдено</span></td>
+            <td class="cell-subtle">01.08.2026</td>
+            <td class="cell-subtle">30.08.2026</td>
+            <td class="cell-subtle">01.09.2026</td>
+            <td>📝</td>
+            <td class="actions-cell">
+              <button class="btn small subtle"><span aria-hidden="true">⟳</span> Актуализировать</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rem-note" style="background:var(--bg);border-radius:8px;padding:10px 14px;font-size:12.5px;color:var(--text-subtle);margin-top:14px">
+      Лоадер «вращается» в колонке действий проверяемой строки; лозенг «проверяется» — существующий статус in_progress. Клик по названию открывает панель просмотра — не блокируется. Кнопка «Проверить» у строки вне прогона — активна: точечная блокировка вместо общей.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2. АНАЛИТИКИ: СИНХРОНИЗАЦИЯ (реальная таблица cf) ═══ -->
+<div class="screen" id="s-analysts">
+  <div class="phase-note"><span>Экран «Аналитики» в реальной вёрстке. Во время синхронизации всех: в строках — спиннер/итог «+2 новых, 5 обновлёнο» в колонке «Последняя синхронизация», кнопка строки — «…»; шапка показывает счётчик «2 из 5» и блокирует кнопку «всех». Кнопки строк необрабатываемых аналитиков активны (точечная синхронизация возможна параллельно не запускается — кнопка активна после прохода).</span></div>
+
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title"><span class="title-icon">👥</span>Аналитики</h1>
+        <div class="page-meta">12 карточек · 10 в командах · 2 без команды</div>
+      </div>
+      <div class="head-actions">
+        <span class="badge badge-running">⟳ Синхронизация всех: 2 из 5</span>
+        <button class="btn subtle" disabled title="Синхронизация уже идёт">⟳ Синхронизировать всех</button>
+        <button class="btn primary">＋ Добавить аналитика</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="cf">
+        <thead>
+          <tr>
+            <th>ФИО</th>
+            <th>Email</th>
+            <th>Username в Confluence</th>
+            <th class="num">Документов</th>
+            <th>Последняя синхронизация</th>
+            <th>Ошибки</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="processing">
+            <td><button type="button" class="link">Грудинин Александр</button></td>
+            <td class="cell-subtle">grudinin@company.ru</td>
+            <td class="cell-subtle">a.grudinin</td>
+            <td class="num">6</td>
+            <td class="cell-subtle"><span class="spinner"></span> синхронизируется…</td>
+            <td class="cell-subtle">—</td>
+            <td class="actions-cell"><button class="btn small subtle" disabled>…</button></td>
+          </tr>
+          <tr>
+            <td><button type="button" class="link">Алиев Рустам Азадович</button></td>
+            <td class="cell-subtle">aliev@company.ru</td>
+            <td class="cell-subtle">r.aliev</td>
+            <td class="num">14</td>
+            <td class="cell-subtle">✓ сегодня, 12:41: <span class="kudo" style="color:var(--blue)">+2 новых, 5 обновлено</span></td>
+            <td class="cell-subtle">—</td>
+            <td class="actions-cell"><button class="btn small subtle">⟳ Синхронизировать</button></td>
+          </tr>
+          <tr>
+            <td><button type="button" class="link">Белышева Жанна</button></td>
+            <td class="cell-subtle">belysheva@company.ru</td>
+            <td class="cell-subtle">z.belysheva</td>
+            <td class="num">9</td>
+            <td class="cell-subtle">⏳ в очереди</td>
+            <td class="cell-subtle">—</td>
+            <td class="actions-cell"><button class="btn small subtle" disabled>⟳ Синхронизировать</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rem-note" style="background:var(--bg);border-radius:8px;padding:10px 14px;font-size:12.5px;color:var(--text-subtle);margin-top:14px">
+      По-аналитикный прогресс появляется из новых событий синхронизации (после каждого аналитика сервер публикует «обошёл N из M, итоги»). Тот же индикатор в дереве сайдбара и в панели «Сейчас происходит» на главной.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 3. ДЕРЕВО САЙДБАРА ═══ -->
+<div class="screen" id="s-sidebar">
+  <div class="phase-note"><span>Реальные классы дерева (nav-branch/nav-row/nav-doc): спиннер у аналитика при его синхронизации, спиннер у документа при его проверке, «в очереди» — приглушённо. Всё видно из любой страницы.</span></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="space-head"><span class="space-icon">РТ</span><span class="space-name">Ревью требований</span></div>
+      <div class="nav-label">Обзор</div>
+      <button class="nav-row active">🏠 Главная</button>
+      <div class="nav-label">Структура</div>
+      <button class="nav-row">🗂 Кластеры</button>
+      <button class="nav-row">👥 Все аналитики</button>
+      <div class="nav-label">Билетный бизнес / GDS</div>
+      <div class="nav-row"><span class="t-avatar" style="background:var(--blue)">АР</span> Алиев Рустам <span class="spinner" style="margin-left:auto"></span></div>
+      <div class="nav-doc" style="background:var(--blue-subtle-bg);border-radius:5px"><span class="spinner" style="width:11px;height:11px"></span> Системные требования СМЭ</div>
+      <div class="nav-doc"><span style="color:var(--green-text)">✓</span> Интеграция с шлюзом</div>
+      <div class="nav-doc" style="color:var(--text-subtlest)">⏳ Главная страница витрины</div>
+      <div class="nav-label">Настройка</div>
+      <button class="nav-row">🧩 Шаблоны требований</button>
+    </aside>
+    <main class="content" style="flex:1;display:grid;place-items:center;color:var(--text-subtlest);font-size:13px;min-height:300px">
+      контент страницы…
+    </main>
+  </div>
+</div>
+
+<!-- ═══ 4. ГЛАВНАЯ: ПАНЕЛЬ «СЕЙЧАС ПРОИСХОДИТ» ═══ -->
+<div class="screen" id="s-home">
+  <div class="phase-note"><span>Панель «Сейчас происходит» — реальная панель главной, строки становятся именованными: какой аналитик в синхронизации (и какой по счёту), какой документ проверяется прямо сейчас в массовой проверке. Данные — из по-аналитикных событий синхронизации и событий проверки.</span></div>
+
+  <div class="page">
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:16px">
+      <div class="panel" style="min-height:120px">
+        <div class="panel-head"><h2>🎯 Требует внимания</h2><span class="count">общая</span></div>
+        <div style="padding:20px;text-align:center;color:var(--text-subtle);font-size:13px">…без изменений…</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel">
+          <div class="panel-head"><h2>⏳ Сейчас происходит</h2></div>
+          <div class="act-row">
+            <span class="spinner"></span>
+            <span style="flex:1"><b>Синхронизация всех аналитиков</b><br><span style="color:var(--text-subtlest)">сейчас: Грудинин Александр · 2 из 5</span></span>
+          </div>
+          <div class="act-row">
+            <span class="spinner" style="border-top-color:var(--blue)"></span>
+            <span style="flex:1"><b>Массовая проверка GDS</b><br><span style="color:var(--text-subtlest)">3 из 7 · сейчас: Системные требования СМЭ (ИИ)</span></span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>🏃 Моя активность</h2></div>
+          <div style="padding:20px;text-align:center;color:var(--text-subtle);font-size:13px">…как сейчас…</div>
+        </div>
+      </div>
+    </div>
+    <div class="rem-note" style="background:var(--bg);border-radius:8px;padding:10px 14px;font-size:12.5px;color:var(--text-subtle);margin-top:14px">
+      Строки панели уходят/появляются по событиям задач. По завершении синхронизации аналитика — его итог «+2 / ~5» ещё 5 секунд виден в строке, затем строка исчезает.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
